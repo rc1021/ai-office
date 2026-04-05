@@ -4,9 +4,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRouter } from "./routes.js";
 import { handleSSE } from "./sse.js";
+import { seedActiveRoles } from "./seed.js";
+import { resolveDbPath } from "./db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PIXEL_OFFICE_PORT ?? "3847");
+
+// Seed active roles into coordination DB before starting
+try {
+  seedActiveRoles(resolveDbPath());
+} catch {
+  console.log("[Seed] Could not locate DB, skipping seed");
+}
 
 const app = express();
 app.use(cors());

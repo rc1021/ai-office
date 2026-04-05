@@ -4,19 +4,36 @@ import fs from "node:fs";
 
 let db: Database.Database | null = null;
 
+export function resolveDbPath(): string {
+  // 1. Explicit env var
+  const workspace = process.env.AI_OFFICE_WORKSPACE?.replace("~", process.env.HOME ?? "");
+  if (workspace) {
+    return path.join(workspace, "state", "coordination.db");
+  }
+
+  // 2. Walk up from cwd to find project root (has config/office.yaml),
+  //    then read the paths.state from office.yaml or fall back to .ai-office/state
+  let dir = process.cwd();
+  for (let i = 0; i < 5; i++) {
+    if (fs.existsSync(path.join(dir, "config", "office.yaml"))) {
+      // Check ~/.ai-office first (standard location)
+      const homePath = path.join(process.env.HOME ?? "", ".ai-office", "state", "coordination.db");
+      if (fs.existsSync(homePath)) return homePath;
+
+      // Then check project-local .ai-office
+      const localPath = path.join(dir, ".ai-office", "state", "coordination.db");
+      if (fs.existsSync(localPath)) return localPath;
+    }
+    dir = path.dirname(dir);
+  }
+
+  throw new Error("Coordination DB not found. Set AI_OFFICE_WORKSPACE or run setup first.");
+}
+
 export function getDb(): Database.Database {
   if (db) return db;
 
-  const workspace = process.env.AI_OFFICE_WORKSPACE?.replace("~", process.env.HOME ?? "");
-  if (!workspace) {
-    throw new Error("AI_OFFICE_WORKSPACE env var not set");
-  }
-
-  const dbPath = path.join(workspace, "state", "coordination.db");
-  if (!fs.existsSync(dbPath)) {
-    throw new Error(`Coordination DB not found: ${dbPath}`);
-  }
-
+  const dbPath = resolveDbPath();
   db = new Database(dbPath, { readonly: true });
   db.pragma("journal_mode = WAL");
   console.log(`[DB] Opened read-only: ${dbPath}`);

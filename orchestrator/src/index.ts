@@ -3,6 +3,7 @@
 import { getOfficeConfig } from "./config-reader.js";
 import { generateSessionKey, issueToken, validateToken } from "./identity.js";
 import { prepareWorker, stopWorker, listWorkers, canSpawn, cleanupStaleWorkers } from "./lifecycle.js";
+import { syncActiveRolesToDb } from "./sync-agents.js";
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
@@ -26,12 +27,14 @@ async function main(): Promise<void> {
       const sessionId = generateSessionKey();
       const stale = cleanupStaleWorkers();
       const config = getOfficeConfig();
+      const synced = syncActiveRolesToDb();
       output({
         session_id: sessionId,
         office_name: config.office.name,
         language: config.office.language,
         max_workers: config.agents.workers.max_concurrent,
         stale_workers_cleaned: stale,
+        agents_synced: synced,
       });
       break;
     }
