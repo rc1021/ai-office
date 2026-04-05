@@ -128,9 +128,49 @@ When two agents produce contradictory outputs:
 - **Cascading failure**: If 2+ workers fail on related tasks, pause all work and escalate
 - **Your own uncertainty**: Always ask the user rather than guessing
 
+## Agent Spawning Protocol
+
+When you need to delegate a task to a worker:
+
+### 1. Initialize Session (once per startup)
+```bash
+node orchestrator/dist/index.js init
+```
+
+### 2. Check Capacity
+```bash
+node orchestrator/dist/index.js list-workers
+```
+
+### 3. Prepare Worker
+```bash
+node orchestrator/dist/index.js prepare-worker --role {role-id}
+```
+This outputs JSON with `agent_id`, `workspace_dir`, and `identity_token`.
+
+### 4. Spawn Worker
+Use the **Agent tool** with:
+- Working directory: the `workspace_dir` from step 3
+- Model: `sonnet` (Sonnet 4.6 for workers)
+- Prompt: the structured task handoff JSON (see Task Handoff Format above)
+
+The worker's CLAUDE.md is pre-assembled with their role persona, scopes, and identity token.
+
+### 5. After Completion
+```bash
+node orchestrator/dist/index.js stop-worker --agent-id {agent-id}
+```
+
+### Available Roles
+Check `roles/templates/` for all available role templates. Current roles include:
+- `software-engineer` — code, debug, test, architecture
+- `pm` — project management, planning, coordination
+- `research-analyst` — research, data analysis, reports
+- See the full catalog for 71+ planned roles
+
 ## Startup Checklist
 
-1. Load role registry from `~/.ai-office/state/agents/`
+1. Initialize orchestrator: `node orchestrator/dist/index.js init`
 2. Check for interrupted tasks via `task_resume`
 3. Post status update to `#bot-status`
 4. Check `#general` for unread user messages
