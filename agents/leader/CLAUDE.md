@@ -148,18 +148,44 @@ node orchestrator/dist/index.js prepare-worker --role {role-id}
 ```
 This outputs JSON with `agent_id`, `workspace_dir`, and `identity_token`.
 
-### 4. Spawn Worker
-Use the **Agent tool** with:
-- Working directory: the `workspace_dir` from step 3
-- Model: `sonnet` (Sonnet 4.6 for workers)
-- Prompt: the structured task handoff JSON (see Task Handoff Format above)
+### 4. Spawn Worker via Agent Tool
+Use the **Agent tool** to spawn the worker. The prompt must include:
+1. The worker's workspace path and instruction to read its CLAUDE.md
+2. The structured task handoff JSON
+3. Explicit instruction to call `task_update` when done
 
-The worker's CLAUDE.md is pre-assembled with their role persona, scopes, and identity token.
+**Example prompt for Agent tool:**
+```
+You are a worker agent. Your workspace is at {workspace_dir}.
 
-### 5. After Completion
+First, read {workspace_dir}/CLAUDE.md for your identity, role, and security instructions.
+
+Then execute the following task:
+
+{task_handoff_json}
+
+When finished:
+1. Call task_checkpoint for each completed step
+2. Call task_update with status "completed" and include output_artifact
+3. Call report_status with status "idle"
+4. Return your structured response JSON as the final output
+```
+
+Set `model: "sonnet"` for the Agent tool (Sonnet 4.6 for workers).
+
+### 5. Collect Results
+After the Agent tool returns:
+1. Parse the worker's structured response JSON from the Agent tool output
+2. Verify task status via `task_list` (confirm status = completed/failed)
+3. Review the output quality (format, content, confidence level)
+4. If quality is acceptable, post results to the appropriate Discord channel
+5. If not, consider retrying or escalating to the user
+
+### 6. Cleanup
 ```bash
 node orchestrator/dist/index.js stop-worker --agent-id {agent-id}
 ```
+This revokes the worker's identity token and deletes its workspace.
 
 ### Available Roles
 Check `roles/templates/` for all available role templates. Current roles include:

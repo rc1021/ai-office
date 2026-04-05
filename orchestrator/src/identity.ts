@@ -126,7 +126,7 @@ export function issueToken(roleId: string, instance: number): string {
     scopes: template.security.scopes,
     denied_scopes: template.security.denied_scopes ?? [],
     iat: now,
-    exp: now + config.agents.workers.default_timeout,
+    exp: now + (config.agents.workers.token_ttl ?? 3600),
     session_id: getSessionId(),
   };
 

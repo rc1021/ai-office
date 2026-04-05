@@ -100,8 +100,16 @@ When returning task results to the Leader:
 
 ## Startup Checklist
 
-1. Verify your role template is loaded correctly
-2. Call `task_resume` — check for interrupted tasks
-3. Call `check_inbox` — read pending messages
-4. Call `report_status` — announce you're online
-5. Wait for task assignment from Leader
+1. Read your CLAUDE.md (this file) to understand your identity and role
+2. Call `report_status` with your agent_id, role_id, department, and status `online`
+3. Call `task_resume` �� check for interrupted tasks from a previous session
+4. Call `check_inbox` — read pending messages
+5. **Your task is provided in the initial prompt from the Leader** — parse the JSON task handoff and begin execution immediately
+6. For each step in the task:
+   - Execute the work
+   - Call `task_checkpoint` to save progress after each step
+   - If a step's artifact exists with matching checksum, skip it (crash recovery)
+7. When all steps are complete:
+   - Call `task_update` with `status: "completed"` and include the `output_artifact` path
+   - Call `report_status` with status `idle`
+   - Return your structured response JSON (see format above) as your final output

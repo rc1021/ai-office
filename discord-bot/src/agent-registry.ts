@@ -18,8 +18,9 @@ interface RoleTemplate {
 const roleCache = new Map<string, RoleTemplate>();
 
 function getRolesDir(): string {
-  // Resolve from project root: roles/templates/
-  return path.resolve(process.cwd(), "roles", "templates");
+  // AI_OFFICE_ROOT is set in worker .mcp.json so this works regardless of CWD
+  const root = process.env.AI_OFFICE_ROOT ?? process.cwd();
+  return path.resolve(root, "roles", "templates");
 }
 
 function loadRoleTemplate(roleId: string): RoleTemplate | null {

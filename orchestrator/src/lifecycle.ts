@@ -50,15 +50,51 @@ function createWorkerWorkspace(agentId: string): string {
   return dir;
 }
 
+/**
+ * Read Discord credentials from project-root .mcp.json or discord-bot/.env
+ * (process.env won't have them when running orchestrator CLI directly)
+ */
+function readDiscordCredentials(): { token: string; guildId: string } {
+  const root = getProjectRootPath();
+
+  // Try .mcp.json first
+  const mcpPath = path.join(root, ".mcp.json");
+  if (fs.existsSync(mcpPath)) {
+    try {
+      const mcp = JSON.parse(fs.readFileSync(mcpPath, "utf-8"));
+      const discordEnv = mcp?.mcpServers?.["ai-office-discord"]?.env;
+      if (discordEnv?.DISCORD_BOT_TOKEN && discordEnv?.DISCORD_GUILD_ID) {
+        return { token: discordEnv.DISCORD_BOT_TOKEN, guildId: discordEnv.DISCORD_GUILD_ID };
+      }
+    } catch { /* fall through */ }
+  }
+
+  // Try discord-bot/.env
+  const envPath = path.join(root, "discord-bot", ".env");
+  if (fs.existsSync(envPath)) {
+    const content = fs.readFileSync(envPath, "utf-8");
+    const tokenMatch = content.match(/^DISCORD_BOT_TOKEN=(.+)$/m);
+    const guildMatch = content.match(/^DISCORD_GUILD_ID=(.+)$/m);
+    if (tokenMatch && guildMatch) {
+      return { token: tokenMatch[1].trim(), guildId: guildMatch[1].trim() };
+    }
+  }
+
+  return { token: "", guildId: "" };
+}
+
 function generateWorkerMcpJson(roleId: string): object {
   const root = getProjectRootPath();
+  const nodeCmd = process.execPath; // Use the same Node binary as the current process
+
   // All workers get coordination server. Discord is optional based on role.
   const servers: Record<string, object> = {
     "ai-office-coordination": {
-      command: "/opt/homebrew/bin/node",
+      command: nodeCmd,
       args: [path.join(root, "coordination", "dist", "index.js")],
       env: {
         AI_OFFICE_WORKSPACE: "~/.ai-office",
+        AI_OFFICE_ROOT: root,
       },
     },
   };
@@ -77,12 +113,14 @@ function generateWorkerMcpJson(roleId: string): object {
   ];
 
   if (allTools.includes("ai-office-discord")) {
+    const discord = readDiscordCredentials();
     servers["ai-office-discord"] = {
-      command: "/opt/homebrew/bin/node",
+      command: nodeCmd,
       args: [path.join(root, "discord-bot", "dist", "index.js")],
       env: {
-        DISCORD_BOT_TOKEN: process.env.DISCORD_BOT_TOKEN ?? "",
-        DISCORD_GUILD_ID: process.env.DISCORD_GUILD_ID ?? "",
+        DISCORD_BOT_TOKEN: discord.token,
+        DISCORD_GUILD_ID: discord.guildId,
+        AI_OFFICE_ROOT: root,
       },
     };
   }

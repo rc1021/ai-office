@@ -12,6 +12,7 @@ export interface OfficeConfig {
       model: string;
       max_concurrent: number;
       default_timeout: number;
+      token_ttl?: number; // Token TTL in seconds (default: 3600)
     };
   };
   execution: {
