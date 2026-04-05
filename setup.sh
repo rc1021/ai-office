@@ -154,6 +154,7 @@ set -u
 # Brief pause to detect immediate crash
 sleep 2
 if kill -0 "$LISTENER_PID" 2>/dev/null; then
+  echo "$LISTENER_PID" > "$PROJECT_DIR/discord-bot/listener.pid"
   echo "  [OK] Discord Listener started (PID $LISTENER_PID)"
   echo "  Log: $LISTENER_LOG"
 else
@@ -182,7 +183,7 @@ echo "  • View listener logs:"
 echo "     tail -f $LISTENER_LOG"
 echo ""
 echo "  • Stop the listener:"
-echo "     pkill -f 'node discord-bot/dist/listener.js'"
+echo "     kill $LISTENER_PID"
 echo ""
 if [ -f "$PROJECT_DIR/pixel-office/.env" ] && grep -q "NGROK_ENABLED=true" "$PROJECT_DIR/pixel-office/.env" 2>/dev/null; then
 echo "  • Pixel Office will start automatically with ngrok"
