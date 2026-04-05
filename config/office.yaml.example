@@ -2,7 +2,7 @@
 # This file defines the office identity, defaults, and operational parameters.
 
 office:
-  name: "Charles智囊團"
+  name: "My AI Office"
   language: "zh-TW"  # Primary language for agent responses
   timezone: "Asia/Taipei"
 

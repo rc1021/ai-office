@@ -1,9 +1,0 @@
-# Active roles for this AI Office instance
-# Starter pack: startup-mvp
-# Leader is always active (default role)
-
-active_roles:
-  - leader
-  - pm
-  - software-engineer
-  - research-analyst
