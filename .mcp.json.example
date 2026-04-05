@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ai-office-discord": {
+      "command": "node",
+      "args": ["./discord-bot/dist/index.js"],
+      "env": {
+        "DISCORD_BOT_TOKEN": "your-bot-token-here",
+        "DISCORD_GUILD_ID": "your-guild-id-here"
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+*.js.map
+
+# MCP config contains secrets (bot tokens)
+.mcp.json
+
+# AI Office runtime data
+.ai-office/

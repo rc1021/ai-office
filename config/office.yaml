@@ -1,0 +1,50 @@
+# AI Office Core Configuration
+# This file defines the office identity, defaults, and operational parameters.
+
+office:
+  name: "My AI Office"
+  language: "zh-TW"  # Primary language for agent responses
+  timezone: "Asia/Taipei"
+
+# Agent defaults
+agents:
+  leader:
+    model: "opus"       # Opus 4.6 for Leader
+  workers:
+    model: "sonnet"     # Sonnet 4.6 for Workers
+    max_concurrent: 3   # Max workers running simultaneously
+    default_timeout: 300 # Seconds before a worker task times out
+
+# Execution mode
+execution:
+  mode: "sequential"    # sequential | parallel (v1 default: sequential)
+  human_in_the_loop: true
+  auto_approve_risk: "GREEN"  # GREEN actions execute without approval
+
+# Startup behavior
+startup:
+  greet_user: true
+  resume_pending_tasks: true
+  post_status_to_discord: true
+
+# Working hours (for night-mode throttling)
+working_hours:
+  enabled: false
+  start: "09:00"
+  end: "18:00"
+  # Outside working hours: batch messages, suppress non-critical alerts
+
+# Observability
+logging:
+  level: "INFO"         # DEBUG | INFO | WARN | ERROR
+  structured: true      # JSONL format
+  audit_trail: true     # Hash-chained audit log
+  trace_enabled: true   # Distributed tracing with trace_id
+
+# Data paths (relative to workspace root)
+paths:
+  state: ".ai-office/state"
+  artifacts: ".ai-office/artifacts"
+  events: ".ai-office/events"
+  logs: ".ai-office/logs"
+  memory: ".ai-office/memory"

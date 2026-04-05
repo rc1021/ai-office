@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-office.dev/schemas/role-template.json",
+  "title": "AI Office Role Template",
+  "description": "Schema for defining AI agent roles in the AI Office system",
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "name",
+    "category",
+    "department",
+    "persona",
+    "capabilities",
+    "security"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Unique role identifier (kebab-case)",
+      "examples": ["software-engineer", "financial-analyst"]
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of this template",
+      "examples": ["1.0.0"]
+    },
+    "name": {
+      "type": "object",
+      "required": ["en"],
+      "properties": {
+        "en": { "type": "string" },
+        "zh-TW": { "type": "string" },
+        "ja": { "type": "string" }
+      },
+      "additionalProperties": { "type": "string" },
+      "description": "Localized display name"
+    },
+    "category": {
+      "type": "string",
+      "enum": ["default", "general", "industry", "emerging"],
+      "description": "Role category: default (Leader only), general, industry-specific, or emerging/cross-domain"
+    },
+    "industry": {
+      "type": "string",
+      "description": "Industry classification (required for category=industry)",
+      "examples": ["tech", "finance", "ecommerce", "healthcare", "legal", "education"]
+    },
+    "department": {
+      "type": "string",
+      "enum": [
+        "management",
+        "engineering",
+        "finance",
+        "marketing",
+        "hr",
+        "legal",
+        "research",
+        "design",
+        "operations",
+        "sales",
+        "support"
+      ],
+      "description": "Department this role belongs to (determines dynamic channel)"
+    },
+    "persona": {
+      "type": "object",
+      "required": ["role_description", "communication_style"],
+      "properties": {
+        "role_description": {
+          "type": "string",
+          "description": "One-paragraph description of who this agent is and what they do"
+        },
+        "communication_style": {
+          "type": "string",
+          "enum": ["formal", "professional", "casual", "technical"],
+          "description": "How this agent communicates"
+        },
+        "emoji": {
+          "type": "string",
+          "description": "Display emoji for Discord messages",
+          "examples": ["\ud83d\udc68\u200d\ud83d\udcbb", "\ud83d\udcca", "\ud83d\udcdd"]
+        },
+        "expertise_areas": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Domains of expertise",
+          "examples": [["TypeScript", "React", "Node.js", "system design"]]
+        },
+        "personality_traits": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Behavioral traits that shape responses",
+          "examples": [["detail-oriented", "pragmatic", "collaborative"]]
+        }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "required": ["primary_tasks", "output_formats"],
+      "properties": {
+        "primary_tasks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Core tasks this role can perform"
+        },
+        "secondary_tasks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Tasks this role can assist with but are not primary"
+        },
+        "output_formats": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "code",
+              "document",
+              "spreadsheet",
+              "report",
+              "analysis",
+              "plan",
+              "review",
+              "design-spec",
+              "email-draft",
+              "presentation",
+              "checklist",
+              "data-json",
+              "data-csv"
+            ]
+          },
+          "minItems": 1,
+          "description": "Types of artifacts this role produces"
+        },
+        "tools_required": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "MCP tools this role needs access to",
+          "examples": [["filesystem", "github", "web-search"]]
+        },
+        "tools_optional": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "MCP tools that enhance this role but are not required"
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "required": ["clearance_level", "scopes"],
+      "properties": {
+        "clearance_level": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "description": "Data access level: 0=PUBLIC, 1=INTERNAL, 2=CONFIDENTIAL, 3=RESTRICTED"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(read|write|execute|approve):[a-z][a-z0-9-:]*$"
+          },
+          "description": "Permitted action scopes",
+          "examples": [
+            ["read:filesystem", "write:filesystem", "read:discord:ai-internal", "write:discord:general"]
+          ]
+        },
+        "denied_scopes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Explicitly denied scopes (override grants)",
+          "examples": [["write:discord:audit-log", "execute:shell:rm"]]
+        },
+        "requires_approval": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["external-api", "file-delete", "send-email", "financial-transaction", "deploy", "data-export"]
+          },
+          "description": "Actions that require human approval before execution"
+        },
+        "max_autonomous_risk": {
+          "type": "string",
+          "enum": ["GREEN", "YELLOW", "RED"],
+          "default": "GREEN",
+          "description": "Maximum risk level this role can act on without approval"
+        }
+      }
+    },
+    "collaboration": {
+      "type": "object",
+      "properties": {
+        "reports_to": {
+          "type": "string",
+          "description": "Role ID this agent reports to (default: leader)",
+          "default": "leader"
+        },
+        "works_with": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Role IDs this agent commonly collaborates with"
+        },
+        "can_delegate_to": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Role IDs this agent can assign sub-tasks to"
+        },
+        "handoff_schema": {
+          "type": "string",
+          "description": "JSON Schema ID for structured task handoff format"
+        }
+      }
+    },
+    "context": {
+      "type": "object",
+      "properties": {
+        "knowledge_files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "File paths (relative to workspace) loaded into agent context at startup"
+        },
+        "memory_dir": {
+          "type": "string",
+          "description": "Directory for this agent's persistent memory files"
+        },
+        "max_context_summary_tokens": {
+          "type": "integer",
+          "default": 2000,
+          "description": "Max tokens for context summary when resuming from checkpoint"
+        }
+      }
+    },
+    "starter_packs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Which starter packs include this role",
+      "examples": [["startup-mvp", "dev-team"]]
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "author": { "type": "string" },
+        "license": { "type": "string", "default": "MIT" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "created": { "type": "string", "format": "date" },
+        "updated": { "type": "string", "format": "date" }
+      }
+    }
+  },
+  "if": {
+    "properties": { "category": { "const": "industry" } }
+  },
+  "then": {
+    "required": ["industry"]
+  }
+}
