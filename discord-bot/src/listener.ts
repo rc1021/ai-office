@@ -287,7 +287,6 @@ async function main(): Promise<void> {
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
-      GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessageReactions,
     ],
     partials: [Partials.Channel, Partials.Message, Partials.Reaction],
