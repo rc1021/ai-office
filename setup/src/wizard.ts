@@ -80,7 +80,7 @@ function t(key: string): string {
 
 // ─── Readline Helpers ────────────────────────────────────────────────────────
 
-const rl = readline.createInterface({ input: stdin, output: stdout });
+let rl = readline.createInterface({ input: stdin, output: stdout });
 
 function getProjectRoot(): string {
   let dir = process.cwd();
@@ -160,6 +160,10 @@ async function main(): Promise<void> {
   const timezone = await ask("Timezone", detectedTz);
 
   // 4. Discord credentials — detailed step-by-step guide
+  // Recreate readline before Discord section to ensure clean state
+  rl.close();
+  rl = readline.createInterface({ input: stdin, output: stdout });
+
   console.log(`\n  ${t("section.discord")}\n`);
   console.log(`  ${t("discord.step1")}`);
   console.log("     https://discord.com/developers/applications\n");
