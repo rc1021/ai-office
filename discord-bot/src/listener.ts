@@ -34,12 +34,9 @@ import {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const GENERAL_CHANNEL = "general";
-const ONBOARDED_FLAG = path.join(
-  process.env.HOME ?? "~",
-  ".ai-office",
-  "state",
-  ".onboarded"
-);
+// Onboarded flag is per-project (in .ai-office/ under project root), not global
+// Resolved after PROJECT_DIR is computed (see below)
+let ONBOARDED_FLAG = "";
 const STARTUP_CHECKLIST_PROMPT =
   "You are the AI Office Leader. This is the first launch. " +
   "Follow your Startup Checklist in agents/leader/CLAUDE.md: " +
@@ -57,6 +54,7 @@ const DISCORD_BOT_DIR = path.resolve(DIST_DIR, "..");   // discord-bot/
 const PROJECT_DIR = path.resolve(DISCORD_BOT_DIR, ".."); // repo root
 
 const MCP_CONFIG = path.join(PROJECT_DIR, ".mcp.json");
+ONBOARDED_FLAG = path.join(PROJECT_DIR, ".ai-office", "state", ".onboarded");
 
 console.log("[Listener] Project dir:", PROJECT_DIR);
 console.log("[Listener] MCP config:", MCP_CONFIG);

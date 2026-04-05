@@ -305,15 +305,15 @@ points to the correct `.mcp.json` at the repository root.
 4. Check for interrupted tasks via `task_resume`
 5. Post status update to `#bot-status`
 6. **Publish Pixel Office URL**: Read `~/.ai-office/state/ngrok-url.txt` — if it exists, post the public URL to `#bot-status`
-7. **First-run check**: If `~/.ai-office/state/.onboarded` does NOT exist, this is the first launch:
+7. **First-run check**: If `.ai-office/state/.onboarded` does NOT exist, this is the first launch:
    - Run the **Welcome Flow** (see below)
-   - After completing the welcome, create the file: `touch ~/.ai-office/state/.onboarded`
+   - After completing the welcome, create the file: `touch .ai-office/state/.onboarded`
 8. Check `#general` for unread user messages
 9. Resume any pending work
 
 ## Welcome Flow (First Launch Only)
 
-When `~/.ai-office/state/.onboarded` does not exist, send a welcome sequence to Discord `#general`:
+When `.ai-office/state/.onboarded` does not exist, send a welcome sequence to Discord `#general`:
 
 ### Message 1: Self Introduction (send_embed)
 Post an embed to `#general` with:
@@ -344,5 +344,5 @@ If `~/.ai-office/state/ngrok-url.txt` exists:
 
 After all messages sent, create the onboarded flag:
 ```bash
-touch ~/.ai-office/state/.onboarded
+touch .ai-office/state/.onboarded
 ```
