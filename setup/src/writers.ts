@@ -10,6 +10,10 @@ export interface SetupConfig {
   maxWorkers: number;
   starterPack: string;
   starterRoles: string[];
+  ngrokEnabled?: boolean;
+  ngrokAuthToken?: string;
+  pixelAuthUser?: string;
+  pixelAuthPass?: string;
 }
 
 /**
@@ -113,4 +117,21 @@ export function writeActiveRoles(projectRoot: string, config: SetupConfig): void
   const filePath = path.join(projectRoot, "config", "active-roles.yaml");
   fs.writeFileSync(filePath, lines.join("\n") + "\n", "utf-8");
   console.log("  [OK] config/active-roles.yaml");
+}
+
+/**
+ * Write pixel-office/.env with ngrok and auth settings.
+ */
+export function writePixelOfficeEnv(projectRoot: string, config: SetupConfig): void {
+  if (!config.ngrokEnabled) return;
+
+  const envPath = path.join(projectRoot, "pixel-office", ".env");
+  const lines = [
+    `NGROK_ENABLED=true`,
+    `NGROK_AUTHTOKEN=${config.ngrokAuthToken ?? ""}`,
+    `PIXEL_AUTH_USER=${config.pixelAuthUser ?? "admin"}`,
+    `PIXEL_AUTH_PASS=${config.pixelAuthPass ?? ""}`,
+  ];
+  fs.writeFileSync(envPath, lines.join("\n") + "\n", "utf-8");
+  console.log("  [OK] pixel-office/.env (ngrok)");
 }

@@ -38,6 +38,13 @@ else
   echo "  [SKIP] Docker not found (optional — for containerized deployment)"
 fi
 
+# ngrok (optional — for remote Pixel Office access)
+if command -v ngrok &>/dev/null; then
+  echo "  [OK] ngrok $(ngrok version | awk '{print $3}')"
+else
+  echo "  [SKIP] ngrok not found (optional — for remote Pixel Office access)"
+fi
+
 # ── Install Dependencies ─────────────────────────────────────────────────────
 
 echo ""

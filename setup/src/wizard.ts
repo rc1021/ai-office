@@ -12,6 +12,7 @@ import {
   writeMcpJson,
   createWorkspaceDirs,
   writeActiveRoles,
+  writePixelOfficeEnv,
 } from "./writers.js";
 
 const rl = readline.createInterface({ input: stdin, output: stdout });
@@ -118,7 +119,24 @@ async function main(): Promise<void> {
   const packIdx = packOptions.indexOf(packChoice);
   const [packId, packData] = packEntries[packIdx >= 0 ? packIdx : 0];
 
-  // 6. Max workers
+  // 6. Remote access (ngrok)
+  console.log("\n  -- Remote Access (Pixel Office) --\n");
+  const enableNgrok = await ask("Enable remote access via ngrok? (y/N)", "N");
+  let ngrokAuthToken = "";
+  let pixelAuthUser = "";
+  let pixelAuthPass = "";
+
+  if (enableNgrok.toLowerCase() === "y") {
+    console.log("\n  Get your auth token at https://dashboard.ngrok.com/get-started/your-authtoken\n");
+    ngrokAuthToken = await ask("ngrok auth token");
+    pixelAuthUser = await ask("Pixel Office username", "admin");
+    pixelAuthPass = await ask("Pixel Office password");
+    if (!pixelAuthPass) {
+      console.log("  [WARN] No password set. Remote access will be unprotected.\n");
+    }
+  }
+
+  // 7. Max workers
   console.log("\n  -- Performance --\n");
   const maxWorkersStr = await ask("Max concurrent workers", "3");
   const maxWorkers = parseInt(maxWorkersStr) || 3;
@@ -133,6 +151,10 @@ async function main(): Promise<void> {
     maxWorkers,
     starterPack: packId,
     starterRoles: packData.roles,
+    ngrokEnabled: enableNgrok.toLowerCase() === "y",
+    ngrokAuthToken,
+    pixelAuthUser,
+    pixelAuthPass,
   };
 
   console.log("\n  -- Summary --\n");
@@ -143,6 +165,7 @@ async function main(): Promise<void> {
   console.log(`  Guild ID:     ${guildId || "Not set (configure later)"}`);
   console.log(`  Starter Pack: ${packData.name} (${packData.roles.length > 0 ? packData.roles.join(", ") : "Leader only"})`);
   console.log(`  Max Workers:  ${config.maxWorkers}`);
+  console.log(`  ngrok:        ${config.ngrokEnabled ? `Enabled (user: ${config.pixelAuthUser})` : "Disabled"}`);
 
   const confirm = await ask("\nProceed with setup? (Y/n)", "Y");
   if (confirm.toLowerCase() === "n") {
@@ -158,6 +181,7 @@ async function main(): Promise<void> {
   writeMcpJson(projectRoot, config);
   createWorkspaceDirs(projectRoot);
   writeActiveRoles(projectRoot, config);
+  writePixelOfficeEnv(projectRoot, config);
 
   console.log("\n  ===================================");
   console.log("    Setup Complete!");
