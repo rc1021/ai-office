@@ -7,6 +7,13 @@
         "DISCORD_BOT_TOKEN": "your-bot-token-here",
         "DISCORD_GUILD_ID": "your-guild-id-here"
       }
+    },
+    "ai-office-coordination": {
+      "command": "node",
+      "args": ["./coordination/dist/index.js"],
+      "env": {
+        "AI_OFFICE_WORKSPACE": "~/.ai-office"
+      }
     }
   }
 }

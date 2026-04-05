@@ -1,0 +1,22 @@
+{
+  "name": "ai-office-coordination",
+  "version": "1.0.0",
+  "description": "AI Office Coordination MCP Server — shared state, task management, event bus, observability",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "npx tsc",
+    "start": "node dist/index.js",
+    "dev": "npx tsc && node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "better-sqlite3": "^11.7.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3"
+  }
+}
