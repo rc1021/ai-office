@@ -331,23 +331,45 @@ async function main(): Promise<void> {
 
   // Start Pixel Office server in background (for ngrok + visualization)
   const pixelServerPath = path.join(PROJECT_DIR, "pixel-office", "server", "index.ts");
+  const pixelPidFile = path.join(PROJECT_DIR, "pixel-office", "pixel.pid");
   if (fs.existsSync(pixelServerPath)) {
-    console.log("[Listener] Starting Pixel Office server...");
-    const pixelProc = spawn("npx", ["tsx", pixelServerPath], {
-      cwd: path.join(PROJECT_DIR, "pixel-office"),
-      env: { ...process.env },
-      stdio: ["ignore", "ignore", "pipe"],
-      detached: true,
-    });
-    pixelProc.stderr?.on("data", (data: Buffer) => {
-      const line = data.toString().trim();
-      if (line.includes("Public URL") || line.includes("running at")) {
-        console.log("[PixelOffice]", line);
+    // Check if already running (via PID file)
+    let alreadyRunning = false;
+    if (fs.existsSync(pixelPidFile)) {
+      try {
+        const oldPid = parseInt(fs.readFileSync(pixelPidFile, "utf-8").trim(), 10);
+        process.kill(oldPid, 0); // Test if process exists
+        alreadyRunning = true;
+        console.log(`[Listener] Pixel Office already running (PID ${oldPid})`);
+      } catch {
+        // PID file stale — process not running
       }
-    });
-    pixelProc.unref();
-    // Give it a moment to start + open ngrok tunnel
-    await new Promise((r) => setTimeout(r, 3000));
+    }
+
+    if (!alreadyRunning) {
+      console.log("[Listener] Starting Pixel Office server...");
+      const npxPath = path.join(PROJECT_DIR, "pixel-office", "node_modules", ".bin", "tsx");
+      const pixelProc = spawn(npxPath, [pixelServerPath], {
+        cwd: path.join(PROJECT_DIR, "pixel-office"),
+        env: { ...process.env },
+        stdio: ["ignore", "ignore", "pipe"],
+        detached: true,
+      });
+      pixelProc.stderr?.on("data", (data: Buffer) => {
+        const line = data.toString().trim();
+        if (line) console.log("[PixelOffice]", line);
+      });
+      pixelProc.unref();
+
+      // Save PID for cleanup
+      if (pixelProc.pid) {
+        fs.writeFileSync(pixelPidFile, String(pixelProc.pid), "utf-8");
+        console.log(`[Listener] Pixel Office started (PID ${pixelProc.pid})`);
+      }
+
+      // Give it a moment to start + open ngrok tunnel
+      await new Promise((r) => setTimeout(r, 4000));
+    }
   }
 
   const client = new Client({
