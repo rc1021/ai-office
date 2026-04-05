@@ -131,27 +131,56 @@ stty sane 2>/dev/null || true
 
 node setup/dist/wizard.js
 
-# ── Done ─────────────────────────────────────────────────────────────────────
+# ── Start Discord Listener ────────────────────────────────────────────────────
 
 PROJECT_DIR="$(pwd)"
+
+echo ""
+echo "[5/5] Starting Discord Listener daemon..."
+
+LISTENER_LOG="$PROJECT_DIR/discord-bot/listener.log"
+
+# Start listener in background, redirect all output to log file
+(cd "$PROJECT_DIR" && node discord-bot/dist/listener.js >>"$LISTENER_LOG" 2>&1 &)
+LISTENER_PID=$!
+
+# Brief pause to detect immediate crash
+sleep 2
+if kill -0 "$LISTENER_PID" 2>/dev/null; then
+  echo "  [OK] Discord Listener started (PID $LISTENER_PID)"
+  echo "  Log: $LISTENER_LOG"
+else
+  echo "  [WARN] Discord Listener may have failed to start."
+  echo "         Check log: $LISTENER_LOG"
+  echo "         You can start it manually: cd $PROJECT_DIR && node discord-bot/dist/listener.js"
+fi
+
+# ── Done ─────────────────────────────────────────────────────────────────────
 
 echo ""
 echo "  ==================================="
 echo "    Setup Complete!"
 echo "  ==================================="
 echo ""
-echo "  Next steps:"
+echo "  Discord Listener is running in the background."
+echo "  Send a message in Discord #general — the bot will respond via claude -p."
 echo ""
-echo "  1. Start the Leader agent:"
+echo "  Other options:"
+echo ""
+echo "  • Start the Leader interactively (Claude Code session):"
 echo "     cd $PROJECT_DIR && claude"
 echo ""
-echo "  2. The Leader will greet you in Discord #general"
+echo "  • View listener logs:"
+echo "     tail -f $LISTENER_LOG"
+echo ""
+echo "  • Stop the listener:"
+echo "     pkill -f 'node discord-bot/dist/listener.js'"
 echo ""
 if [ -f "$PROJECT_DIR/pixel-office/.env" ] && grep -q "NGROK_ENABLED=true" "$PROJECT_DIR/pixel-office/.env" 2>/dev/null; then
-echo "  3. Pixel Office will start automatically with ngrok"
-echo "     (public URL will be posted to Discord #bot-status)"
+echo "  • Pixel Office will start automatically with ngrok"
+echo "    (public URL will be posted to Discord #bot-status)"
 else
-echo "  3. Start Pixel Office (optional):"
-echo "     cd $PROJECT_DIR/pixel-office && npm run dev"
+echo "  • Start Pixel Office (optional):"
+echo "    cd $PROJECT_DIR/pixel-office && npm run dev"
 fi
 echo ""
