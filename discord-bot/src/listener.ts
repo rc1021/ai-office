@@ -12,10 +12,15 @@
  * (from the project root directory)
  */
 
-import "dotenv/config";
+import dotenv from "dotenv";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+
+// Load .env from discord-bot/ directory (not cwd)
+const __listener_file = fileURLToPath(import.meta.url);
+const __discord_bot_dir = path.resolve(path.dirname(__listener_file), "..");
+dotenv.config({ path: path.join(__discord_bot_dir, ".env") });
 import { spawn } from "node:child_process";
 import {
   Client,
