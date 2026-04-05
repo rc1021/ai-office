@@ -12,6 +12,7 @@ import {
 import {
   validateNumeric, crossVerify, reportAnomaly, pipelineGate,
 } from "./tools/validation-tools.js";
+import { initAuth, enforceIdentity, enforceClearance } from "./auth.js";
 
 // ── Resolve workspace path ──
 
@@ -23,6 +24,9 @@ const WORKSPACE = process.env.AI_OFFICE_WORKSPACE ?? path.join(
 
 const db = initDatabase(WORKSPACE);
 initAuditChain(db);
+
+// ── Authenticate agent (if token provided) ──
+initAuth();
 
 // ── MCP Server ──
 
@@ -49,7 +53,10 @@ server.tool(
     steps: z.array(z.object({ description: z.string() })).optional().describe("Task steps"),
     input_artifacts: z.array(z.string()).optional().describe("Input artifact paths"),
   },
-  async (params) => ({ content: [{ type: "text" as const, text: JSON.stringify(taskCreate(params), null, 2) }] })
+  async (params) => {
+    enforceIdentity(params.created_by);
+    return { content: [{ type: "text" as const, text: JSON.stringify(taskCreate(params), null, 2) }] };
+  }
 );
 
 server.tool(
@@ -63,7 +70,10 @@ server.tool(
     context_summary: z.string().optional().describe("Updated context summary for resume"),
     output_artifact: z.string().optional(),
   },
-  async (params) => ({ content: [{ type: "text" as const, text: JSON.stringify(taskUpdate(params), null, 2) }] })
+  async (params) => {
+    enforceIdentity(params.agent_id);
+    return { content: [{ type: "text" as const, text: JSON.stringify(taskUpdate(params), null, 2) }] };
+  }
 );
 
 server.tool(
@@ -77,7 +87,10 @@ server.tool(
     checksum: z.string().optional().describe("Checksum for skip-on-match logic"),
     context_summary: z.string().optional().describe("Summary for context rebuilding on resume"),
   },
-  async (params) => ({ content: [{ type: "text" as const, text: JSON.stringify(taskCheckpoint(params), null, 2) }] })
+  async (params) => {
+    enforceIdentity(params.agent_id);
+    return { content: [{ type: "text" as const, text: JSON.stringify(taskCheckpoint(params), null, 2) }] };
+  }
 );
 
 server.tool(
@@ -87,7 +100,10 @@ server.tool(
     agent_id: z.string(),
     task_id: z.string().optional().describe("Specific task to resume, or auto-find latest"),
   },
-  async (params) => ({ content: [{ type: "text" as const, text: JSON.stringify(taskResume(params), null, 2) }] })
+  async (params) => {
+    enforceIdentity(params.agent_id);
+    return { content: [{ type: "text" as const, text: JSON.stringify(taskResume(params), null, 2) }] };
+  }
 );
 
 server.tool(
@@ -117,7 +133,10 @@ server.tool(
     trace_id: z.string(),
     version: z.number().optional(),
   },
-  async (params) => ({ content: [{ type: "text" as const, text: JSON.stringify(publishArtifact(params), null, 2) }] })
+  async (params) => {
+    enforceIdentity(params.agent_id);
+    return { content: [{ type: "text" as const, text: JSON.stringify(publishArtifact(params), null, 2) }] };
+  }
 );
 
 server.tool(
@@ -128,7 +147,10 @@ server.tool(
     mark_read: z.boolean().optional().describe("Mark messages as read (default: true)"),
     limit: z.number().optional().describe("Max messages to return (default: 20)"),
   },
-  async (params) => ({ content: [{ type: "text" as const, text: JSON.stringify(checkInbox(params), null, 2) }] })
+  async (params) => {
+    enforceIdentity(params.agent_id);
+    return { content: [{ type: "text" as const, text: JSON.stringify(checkInbox(params), null, 2) }] };
+  }
 );
 
 server.tool(
@@ -164,7 +186,10 @@ server.tool(
     current_task_id: z.string().optional(),
     clearance_level: z.number().optional(),
   },
-  async (params) => ({ content: [{ type: "text" as const, text: JSON.stringify(reportStatus(params), null, 2) }] })
+  async (params) => {
+    enforceIdentity(params.agent_id);
+    return { content: [{ type: "text" as const, text: JSON.stringify(reportStatus(params), null, 2) }] };
+  }
 );
 
 server.tool(
@@ -226,14 +251,20 @@ server.tool(
     agent_id: z.string().optional(),
     limit: z.number().optional(),
   },
-  async (params) => ({ content: [{ type: "text" as const, text: JSON.stringify(readAuditLog(params), null, 2) }] })
+  async (params) => {
+    enforceClearance(3); // Audit log requires RESTRICTED clearance
+    return { content: [{ type: "text" as const, text: JSON.stringify(readAuditLog(params), null, 2) }] };
+  }
 );
 
 server.tool(
   "verify_audit_chain",
   "Verify the integrity of the hash-chained audit log (#33)",
   { limit: z.number().optional() },
-  async (params) => ({ content: [{ type: "text" as const, text: JSON.stringify(verifyAuditChain(params), null, 2) }] })
+  async (params) => {
+    enforceClearance(3); // Audit chain verification requires RESTRICTED clearance
+    return { content: [{ type: "text" as const, text: JSON.stringify(verifyAuditChain(params), null, 2) }] };
+  }
 );
 
 // ════════════════════════════════════════

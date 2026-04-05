@@ -88,6 +88,7 @@ function generateWorkerMcpJson(roleId: string): object {
   const nodeCmd = process.execPath; // Use the same Node binary as the current process
 
   // All workers get coordination server. Discord is optional based on role.
+  // Token is injected later by prepareWorker() after issueToken()
   const servers: Record<string, object> = {
     "ai-office-coordination": {
       command: nodeCmd,
@@ -95,6 +96,7 @@ function generateWorkerMcpJson(roleId: string): object {
       env: {
         AI_OFFICE_WORKSPACE: "~/.ai-office",
         AI_OFFICE_ROOT: root,
+        // AI_OFFICE_AGENT_TOKEN is set by prepareWorker()
       },
     },
   };
@@ -170,8 +172,11 @@ export function prepareWorker(roleId: string): WorkerRecord {
   const claudeMd = assembleWorkerClaude(roleId, instance, config, token);
   fs.writeFileSync(path.join(workspaceDir, "CLAUDE.md"), claudeMd, "utf-8");
 
-  // Generate .mcp.json
-  const mcpJson = generateWorkerMcpJson(roleId);
+  // Generate .mcp.json and inject agent token for coordination server auth
+  const mcpJson = generateWorkerMcpJson(roleId) as { mcpServers: Record<string, { env?: Record<string, string> }> };
+  if (mcpJson.mcpServers["ai-office-coordination"]?.env) {
+    mcpJson.mcpServers["ai-office-coordination"].env.AI_OFFICE_AGENT_TOKEN = token;
+  }
   fs.writeFileSync(
     path.join(workspaceDir, ".mcp.json"),
     JSON.stringify(mcpJson, null, 2),
