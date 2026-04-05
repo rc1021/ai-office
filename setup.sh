@@ -26,6 +26,9 @@ else
   echo ""
 fi
 
+# Save project directory (must be after clone/cd)
+PROJECT_DIR="$(pwd)"
+
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 
 echo "[1/4] Checking prerequisites..."
@@ -137,8 +140,6 @@ node setup/dist/wizard.js || {
 }
 
 # ── Start Discord Listener ────────────────────────────────────────────────────
-
-PROJECT_DIR="$(pwd)"
 
 echo ""
 echo "[5/5] Starting Discord Listener daemon..."
