@@ -1,0 +1,18 @@
+{
+  "rooms": [
+    { "id": "management", "label": "Leadership", "x": 16, "y": 16, "w": 180, "h": 140, "desks": [{"x": 70, "y": 60}] },
+    { "id": "engineering", "label": "Engineering", "x": 212, "y": 16, "w": 280, "h": 180, "desks": [{"x": 40, "y": 60}, {"x": 110, "y": 60}, {"x": 180, "y": 60}, {"x": 40, "y": 120}, {"x": 110, "y": 120}, {"x": 180, "y": 120}] },
+    { "id": "finance", "label": "Finance", "x": 508, "y": 16, "w": 200, "h": 140, "desks": [{"x": 50, "y": 60}, {"x": 130, "y": 60}, {"x": 50, "y": 100}] },
+    { "id": "marketing", "label": "Marketing", "x": 724, "y": 16, "w": 220, "h": 140, "desks": [{"x": 50, "y": 60}, {"x": 130, "y": 60}, {"x": 50, "y": 100}] },
+    { "id": "research", "label": "Research", "x": 16, "y": 212, "w": 200, "h": 160, "desks": [{"x": 50, "y": 60}, {"x": 130, "y": 60}, {"x": 50, "y": 120}] },
+    { "id": "operations", "label": "Operations", "x": 232, "y": 212, "w": 200, "h": 160, "desks": [{"x": 50, "y": 60}, {"x": 130, "y": 60}] },
+    { "id": "hr", "label": "HR", "x": 448, "y": 212, "w": 160, "h": 160, "desks": [{"x": 50, "y": 60}, {"x": 50, "y": 120}] },
+    { "id": "legal", "label": "Legal", "x": 624, "y": 212, "w": 160, "h": 160, "desks": [{"x": 50, "y": 60}, {"x": 50, "y": 120}] },
+    { "id": "design", "label": "Design", "x": 800, "y": 212, "w": 144, "h": 160, "desks": [{"x": 56, "y": 60}, {"x": 56, "y": 120}] },
+    { "id": "sales", "label": "Sales", "x": 16, "y": 388, "w": 200, "h": 160, "desks": [{"x": 50, "y": 60}, {"x": 130, "y": 60}] },
+    { "id": "support", "label": "Support", "x": 232, "y": 388, "w": 200, "h": 160, "desks": [{"x": 50, "y": 60}, {"x": 130, "y": 60}] },
+    { "id": "common", "label": "Lounge", "x": 448, "y": 388, "w": 496, "h": 160, "desks": [] }
+  ],
+  "hallway_color": "#1e1e2e",
+  "wall_color": "#2a2a3e"
+}
