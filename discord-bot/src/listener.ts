@@ -63,9 +63,49 @@ console.log("[Listener] MCP config:", MCP_CONFIG);
 
 // ── Spawn claude -p ───────────────────────────────────────────────────────────
 
+// Tools the Leader needs access to (pre-approved for non-interactive mode)
+const ALLOWED_TOOLS = [
+  "Bash",
+  "Read",
+  "Write",
+  "Edit",
+  "Glob",
+  "Grep",
+  "mcp__ai-office-coordination__report_status",
+  "mcp__ai-office-coordination__task_create",
+  "mcp__ai-office-coordination__task_update",
+  "mcp__ai-office-coordination__task_checkpoint",
+  "mcp__ai-office-coordination__task_resume",
+  "mcp__ai-office-coordination__task_list",
+  "mcp__ai-office-coordination__list_agents",
+  "mcp__ai-office-coordination__publish_event",
+  "mcp__ai-office-coordination__publish_artifact",
+  "mcp__ai-office-coordination__check_inbox",
+  "mcp__ai-office-coordination__start_trace",
+  "mcp__ai-office-coordination__end_trace",
+  "mcp__ai-office-coordination__report_anomaly",
+  "mcp__ai-office-coordination__validate_numeric",
+  "mcp__ai-office-coordination__cross_verify",
+  "mcp__ai-office-coordination__pipeline_gate",
+  "mcp__ai-office-discord__setup_server",
+  "mcp__ai-office-discord__send_message",
+  "mcp__ai-office-discord__send_embed",
+  "mcp__ai-office-discord__read_messages",
+  "mcp__ai-office-discord__read_new_messages",
+  "mcp__ai-office-discord__create_thread",
+  "mcp__ai-office-discord__send_thread_message",
+  "mcp__ai-office-discord__create_approval",
+  "mcp__ai-office-discord__check_approval",
+  "mcp__ai-office-discord__register_agent",
+  "mcp__ai-office-discord__list_channels",
+];
+
 function runClaude(prompt: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const args: string[] = ["-p", prompt];
+    const args: string[] = [
+      "-p", prompt,
+      "--allowedTools", ...ALLOWED_TOOLS,
+    ];
 
     // Only pass --mcp-config if the file actually exists (avoids confusing errors)
     if (fs.existsSync(MCP_CONFIG)) {
