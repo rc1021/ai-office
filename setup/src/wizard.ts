@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 
 import readline from "node:readline/promises";
+import { createInterface as createRlSync } from "node:readline";
 import { stdin, stdout } from "node:process";
 import path from "node:path";
 import fs from "node:fs";
+import { Writable } from "node:stream";
 import { loadStarterPacks, StarterPack } from "./starter-packs.js";
 import {
   SetupConfig,
@@ -20,7 +22,6 @@ import {
 type Lang = "zh-TW" | "en" | "ja";
 
 const i18n: Record<string, Record<Lang, string>> = {
-  // Section headers
   "section.discord":    { "zh-TW": "-- Discord Bot 設定 --",      en: "-- Discord Bot Setup --",       ja: "-- Discord Bot 設定 --" },
   "section.starter":    { "zh-TW": "-- 入門組合包 --",             en: "-- Starter Pack --",            ja: "-- スターターパック --" },
   "section.ngrok":      { "zh-TW": "-- 遠端存取（Pixel Office）--", en: "-- Remote Access (Pixel Office) --", ja: "-- リモートアクセス（Pixel Office）--" },
@@ -28,7 +29,6 @@ const i18n: Record<string, Record<Lang, string>> = {
   "section.summary":    { "zh-TW": "-- 摘要 --",                   en: "-- Summary --",                 ja: "-- サマリー --" },
   "section.writing":    { "zh-TW": "-- 寫入設定 --",                en: "-- Writing configuration --",   ja: "-- 設定書き込み --" },
 
-  // Discord guide
   "discord.step1":      { "zh-TW": "1. 打開 Discord Developer Portal：",              en: "1. Open the Discord Developer Portal:",              ja: "1. Discord Developer Portal を開く：" },
   "discord.step2":      { "zh-TW": "2. 點「New Application」建立應用 → 進入「Bot」頁籤", en: "2. Click 'New Application' → go to the 'Bot' tab",    ja: "2.「New Application」→「Bot」タブへ" },
   "discord.step3":      { "zh-TW": "3. 開啟「MESSAGE CONTENT INTENT」開關",             en: "3. Enable 'MESSAGE CONTENT INTENT' toggle",           ja: "3.「MESSAGE CONTENT INTENT」を有効にする" },
@@ -41,7 +41,6 @@ const i18n: Record<string, Record<Lang, string>> = {
                           en: "(Enable 'Developer Mode' in Discord settings, right-click server name → Copy Server ID)",
                           ja: "（Discord設定で「開発者モード」→ サーバー名を右クリック → IDをコピー）" },
 
-  // Prompts
   "prompt.token":       { "zh-TW": "Discord Bot Token",       en: "Discord Bot Token",        ja: "Discord Bot Token" },
   "prompt.guild":       { "zh-TW": "Discord Server ID",       en: "Discord Guild (Server) ID", ja: "Discord Server ID" },
   "prompt.starter":     { "zh-TW": "選擇入門組合包：",         en: "Choose a starter pack:",    ja: "スターターパックを選択：" },
@@ -52,18 +51,15 @@ const i18n: Record<string, Record<Lang, string>> = {
   "prompt.max_workers": { "zh-TW": "最大同時運行 Worker 數",   en: "Max concurrent workers",    ja: "最大同時ワーカー数" },
   "prompt.proceed":     { "zh-TW": "確認開始安裝？(Y/n)",      en: "Proceed with setup? (Y/n)", ja: "セットアップを開始しますか？(Y/n)" },
 
-  // Hints
   "hint.ngrok_auth":    { "zh-TW": "這組帳密用來保護你的 Pixel Office 儀表板，\n  當別人透過公開 URL 訪問時需要輸入。",
                           en: "These credentials protect your Pixel Office dashboard.\n  Anyone accessing the public URL will need to enter them.",
                           ja: "この認証情報はPixel Officeダッシュボードを保護します。\n  公開URLにアクセスする際に入力が必要です。" },
   "hint.ngrok_get":     { "zh-TW": "取得 auth token：",       en: "Get your auth token at:",    ja: "auth tokenの取得：" },
 
-  // Warnings
   "warn.no_token":      { "zh-TW": "[提示] 未提供 Token，稍後可在 discord-bot/.env 設定", en: "[INFO] No token provided. Set it later in discord-bot/.env", ja: "[情報] トークン未入力。後で discord-bot/.env に設定できます" },
   "warn.no_guild":      { "zh-TW": "[提示] 未提供 Server ID，稍後可在 discord-bot/.env 設定", en: "[INFO] No guild ID provided. Set it later in discord-bot/.env", ja: "[情報] サーバーID未入力。後で設定できます" },
   "warn.no_pass":       { "zh-TW": "[提示] 未設定密碼，遠端存取將無保護", en: "[WARN] No password set. Remote access will be unprotected.", ja: "[警告] パスワード未設定。リモートアクセスは保護されません" },
 
-  // Summary labels
   "sum.office":         { "zh-TW": "辦公室",    en: "Office",       ja: "オフィス" },
   "sum.language":       { "zh-TW": "語言",      en: "Language",     ja: "言語" },
   "sum.timezone":       { "zh-TW": "時區",      en: "Timezone",     ja: "タイムゾーン" },
@@ -86,7 +82,7 @@ function t(key: string): string {
 
 // ─── Readline Helpers ────────────────────────────────────────────────────────
 
-const rl = readline.createInterface({ input: stdin, output: stdout });
+let rl = readline.createInterface({ input: stdin, output: stdout });
 
 function getProjectRoot(): string {
   let dir = process.cwd();
@@ -105,40 +101,43 @@ async function ask(question: string, defaultVal?: string): Promise<string> {
   return answer.trim() || defaultVal || "";
 }
 
-/** Prompt for sensitive input — echoes * characters */
+/**
+ * Prompt for sensitive input — echoes * characters.
+ * Uses a muted output stream so readline doesn't echo plaintext,
+ * then manually writes * for each character.
+ */
 async function askSecret(question: string): Promise<string> {
+  // Close current rl to avoid conflicts
+  rl.close();
+
   return new Promise((resolve) => {
-    const query = `  ${question}: `;
-    let secret = "";
-    process.stdout.write(query);
+    // Create a muted output stream
+    let muted = false;
+    const mutedOut = new Writable({
+      write(chunk, _encoding, callback) {
+        if (!muted) stdout.write(chunk);
+        callback();
+      },
+    });
 
-    const onData = (ch: Buffer) => {
-      const c = ch.toString();
-      if (c === "\n" || c === "\r") {
-        stdin.removeListener("data", onData);
-        stdin.setRawMode?.(false);
-        stdin.pause();
-        process.stdout.write("\n");
-        // Re-create readline since we stole stdin
-        resolve(secret);
-      } else if (c === "\u007f" || c === "\b") {
-        // Backspace
-        if (secret.length > 0) {
-          secret = secret.slice(0, -1);
-          process.stdout.write("\b \b");
-        }
-      } else if (c === "\u0003") {
-        // Ctrl+C
-        process.exit(0);
-      } else {
-        secret += c;
-        process.stdout.write("*");
-      }
-    };
+    const secretRl = createRlSync({
+      input: stdin,
+      output: mutedOut,
+      terminal: true,
+    });
 
-    stdin.setRawMode?.(true);
-    stdin.resume();
-    stdin.on("data", onData);
+    // Write prompt ourselves
+    stdout.write(`  ${question}: `);
+    muted = true;
+
+    secretRl.on("line", (line: string) => {
+      muted = false;
+      secretRl.close();
+      stdout.write("\n");
+      // Recreate the main rl for subsequent prompts
+      rl = readline.createInterface({ input: stdin, output: stdout });
+      resolve(line.trim());
+    });
   });
 }
 
@@ -213,51 +212,13 @@ async function main(): Promise<void> {
   console.log(`  ${t("discord.step6")}`);
   console.log("");
 
-  // Re-create readline after askSecret steals stdin
   const discordToken = await askSecret(t("prompt.token"));
-  // Recreate rl since askSecret used raw mode
-  const rl2 = readline.createInterface({ input: stdin, output: stdout });
-  const ask2 = async (q: string, d?: string) => {
-    const suffix = d ? ` [${d}]` : "";
-    const a = await rl2.question(`  ${q}${suffix}: `);
-    return a.trim() || d || "";
-  };
-  const choose2 = async (q: string, opts: string[], di: number = 0) => {
-    console.log(`  ${q}`);
-    opts.forEach((o, i) => { console.log(`  ${i === di ? ">" : " "} ${i + 1}. ${o}`); });
-    const a = await rl2.question(`  Choose [${di + 1}]: `);
-    const idx = parseInt(a.trim()) - 1;
-    return (idx >= 0 && idx < opts.length) ? opts[idx] : opts[di];
-  };
-  const askSecret2 = async (q: string): Promise<string> => {
-    return new Promise((resolve) => {
-      let s = "";
-      process.stdout.write(`  ${q}: `);
-      const onData = (ch: Buffer) => {
-        const c = ch.toString();
-        if (c === "\n" || c === "\r") {
-          stdin.removeListener("data", onData);
-          stdin.setRawMode?.(false);
-          stdin.pause();
-          process.stdout.write("\n");
-          resolve(s);
-        } else if (c === "\u007f" || c === "\b") {
-          if (s.length > 0) { s = s.slice(0, -1); process.stdout.write("\b \b"); }
-        } else if (c === "\u0003") { process.exit(0); }
-        else { s += c; process.stdout.write("*"); }
-      };
-      stdin.setRawMode?.(true);
-      stdin.resume();
-      stdin.on("data", onData);
-    });
-  };
-
   if (!discordToken) {
     console.log(`\n  ${t("warn.no_token")}\n`);
   }
 
   console.log(`\n  ${t("discord.guild_hint")}\n`);
-  const guildId = await ask2(t("prompt.guild"));
+  const guildId = await ask(t("prompt.guild"));
   if (!guildId) {
     console.log(`  ${t("warn.no_guild")}\n`);
   }
@@ -271,13 +232,13 @@ async function main(): Promise<void> {
     return `${p.name}${roles} — ${p.description}`;
   });
 
-  const packChoice = await choose2(t("prompt.starter"), packOptions, 0);
+  const packChoice = await choose(t("prompt.starter"), packOptions, 0);
   const packIdx = packOptions.indexOf(packChoice);
   const [packId, packData] = packEntries[packIdx >= 0 ? packIdx : 0];
 
   // 6. Remote access (ngrok)
   console.log(`\n  ${t("section.ngrok")}\n`);
-  const enableNgrok = await ask2(t("prompt.ngrok_enable"), "N");
+  const enableNgrok = await ask(t("prompt.ngrok_enable"), "N");
   let ngrokAuthToken = "";
   let pixelAuthUser = "";
   let pixelAuthPass = "";
@@ -285,35 +246,19 @@ async function main(): Promise<void> {
   if (enableNgrok.toLowerCase() === "y") {
     console.log(`\n  ${t("hint.ngrok_get")}`);
     console.log("     https://dashboard.ngrok.com/get-started/your-authtoken\n");
-    ngrokAuthToken = await askSecret2(t("prompt.ngrok_token"));
-    // Re-create readline again
-    const rl3 = readline.createInterface({ input: stdin, output: stdout });
-    const ask3 = async (q: string, d?: string) => {
-      const suffix = d ? ` [${d}]` : "";
-      const a = await rl3.question(`  ${q}${suffix}: `);
-      return a.trim() || d || "";
-    };
+    ngrokAuthToken = await askSecret(t("prompt.ngrok_token"));
 
     console.log(`\n  ${t("hint.ngrok_auth")}\n`);
-    pixelAuthUser = await ask3(t("prompt.pixel_user"), "admin");
-    pixelAuthPass = await askSecret2(t("prompt.pixel_pass"));
+    pixelAuthUser = await ask(t("prompt.pixel_user"), "admin");
+    pixelAuthPass = await askSecret(t("prompt.pixel_pass"));
     if (!pixelAuthPass) {
       console.log(`  ${t("warn.no_pass")}\n`);
     }
-    rl3.close();
   }
 
   // 7. Max workers
-  // Re-create readline for remaining prompts
-  const rl4 = readline.createInterface({ input: stdin, output: stdout });
-  const ask4 = async (q: string, d?: string) => {
-    const suffix = d ? ` [${d}]` : "";
-    const a = await rl4.question(`  ${q}${suffix}: `);
-    return a.trim() || d || "";
-  };
-
   console.log(`\n  ${t("section.perf")}\n`);
-  const maxWorkersStr = await ask4(t("prompt.max_workers"), "3");
+  const maxWorkersStr = await ask(t("prompt.max_workers"), "3");
   const maxWorkers = parseInt(maxWorkersStr) || 3;
 
   // Summary
@@ -342,10 +287,10 @@ async function main(): Promise<void> {
   console.log(`  ${t("sum.workers")}:      ${config.maxWorkers}`);
   console.log(`  ${t("sum.ngrok")}:        ${config.ngrokEnabled ? `${t("sum.enabled")} (user: ${config.pixelAuthUser})` : t("sum.disabled")}`);
 
-  const confirm = await ask4(`\n${t("prompt.proceed")}`, "Y");
+  const confirm = await ask(`\n${t("prompt.proceed")}`, "Y");
   if (confirm.toLowerCase() === "n") {
     console.log("\n  Setup cancelled.\n");
-    rl4.close();
+    rl.close();
     return;
   }
 
@@ -363,8 +308,6 @@ async function main(): Promise<void> {
   console.log("  ===================================\n");
 
   rl.close();
-  rl2.close();
-  rl4.close();
 }
 
 main().catch((err) => {
