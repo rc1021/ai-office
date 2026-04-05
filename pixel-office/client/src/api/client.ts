@@ -36,9 +36,20 @@ export interface TaskData {
   updated_at: string;
 }
 
+export interface EventData {
+  id: string;
+  type: string;
+  source_agent: string;
+  target_agents: string;
+  payload: Record<string, unknown>;
+  trace_id: string;
+  created_at: string;
+}
+
 export type SSEHandlers = {
   onAgents: (agents: AgentData[]) => void;
   onTasks: (tasks: TaskData[]) => void;
+  onEvents?: (events: EventData[]) => void;
 };
 
 export class OfficeAPI {
@@ -68,6 +79,10 @@ export class OfficeAPI {
 
     this.eventSource.addEventListener("tasks", (e) => {
       handlers.onTasks(JSON.parse((e as MessageEvent).data));
+    });
+
+    this.eventSource.addEventListener("events", (e) => {
+      handlers.onEvents?.(JSON.parse((e as MessageEvent).data));
     });
 
     this.eventSource.onerror = () => {

@@ -121,6 +121,59 @@ When two agents produce contradictory outputs:
 4. If both are plausible, present both to the user with your analysis
 5. Never silently pick one — transparency is mandatory
 
+## Brainstorming Protocol
+
+When the user requests brainstorming, group discussion, or multiple perspectives on a topic:
+
+### 1. Initialize Session
+- Create a shared trace via `start_trace` with operation `brainstorm:{topic}`
+- Note the `trace_id` — all workers will share it
+
+### 2. Spawn Perspective Workers
+- Spawn 2-4 workers in parallel using the Agent tool
+- Each worker receives a DIFFERENT perspective assignment. Examples:
+  - "Optimistic / growth-focused"
+  - "Risk-averse / conservative"
+  - "Technical feasibility"
+  - "User experience impact"
+  - "Cost and resource analysis"
+- All workers share the same trace_id
+- Task handoff includes:
+  ```json
+  {
+    "task_id": "...",
+    "trace_id": "{shared_trace}",
+    "objective": "Brainstorm: {topic}",
+    "perspective": "{perspective_name}",
+    "perspective_description": "{what angle to analyze from}",
+    "constraints": ["Analyze ONLY from your assigned perspective", "Under 500 words"],
+    "expected_output": { "format": "analysis" }
+  }
+  ```
+
+### 3. Worker Prompt Template
+```
+You are participating in a brainstorm session.
+Topic: {topic}
+Your perspective: {perspective_name} — {perspective_description}
+
+1. Analyze the topic from your assigned perspective
+2. Publish your analysis via publish_event (type: "brainstorm.perspective", target: "role:_leader")
+3. Check your inbox for other workers' perspectives
+4. If you have a meaningful response, publish a "brainstorm.response" event
+5. Call task_update with status "completed"
+```
+
+### 4. Synthesize Results
+After all workers complete:
+1. Collect all `brainstorm.perspective` events for the shared trace_id
+2. Identify: common themes, key disagreements, unique insights
+3. Present a structured synthesis to the user:
+   - **Consensus points** across perspectives
+   - **Key disagreements** with reasoning from each side
+   - **Recommended direction** with confidence level
+   - **Raw perspectives** available on request
+
 ## Error Handling
 
 - **Worker fails**: Log the error, attempt retry once, then escalate to user

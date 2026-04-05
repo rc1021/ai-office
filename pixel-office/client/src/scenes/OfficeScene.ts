@@ -3,6 +3,7 @@ import { OfficeAPI, AgentData, TaskData } from "../api/client.js";
 import { AgentSprite } from "../sprites/AgentSprite.js";
 import { TaskBoard } from "../ui/TaskBoard.js";
 import { AgentPanel } from "../ui/AgentPanel.js";
+import { MessageFeed } from "../ui/MessageFeed.js";
 import { CANVAS_WIDTH, CANVAS_HEIGHT, DEPT_COLORS, SPRITE_SIZE } from "../config.js";
 import layout from "../assets/office-layout.json";
 
@@ -21,6 +22,7 @@ export class OfficeScene extends Phaser.Scene {
   private agentSprites = new Map<string, AgentSprite>();
   private taskBoard!: TaskBoard;
   private agentPanel!: AgentPanel;
+  private messageFeed!: MessageFeed;
   private rooms: Room[] = layout.rooms as Room[];
   private agents: AgentData[] = [];
   private tasks: TaskData[] = [];
@@ -34,6 +36,7 @@ export class OfficeScene extends Phaser.Scene {
     this.api = new OfficeAPI();
     this.taskBoard = new TaskBoard();
     this.agentPanel = new AgentPanel();
+    this.messageFeed = new MessageFeed();
 
     // Draw office
     this.drawOffice();
@@ -54,6 +57,9 @@ export class OfficeScene extends Phaser.Scene {
         this.taskBoard.updateTasks(tasks);
         this.drawTaskLines();
         this.updateHUD();
+      },
+      onEvents: (events) => {
+        this.messageFeed.updateEvents(events);
       },
     });
   }

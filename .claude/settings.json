@@ -1,0 +1,24 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__ai-office-coordination__task_update",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/on-task-update.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__ai-office-coordination__report_status",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/on-status-change.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
