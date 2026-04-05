@@ -64,10 +64,18 @@ app.listen(PORT, "0.0.0.0", async () => {
         basic_auth: basicAuth,
       });
 
-      console.log(`[PixelOffice] 🌐 Public URL: ${listener.url()}`);
+      const publicUrl = listener.url();
+      console.log(`[PixelOffice] 🌐 Public URL: ${publicUrl}`);
       if (basicAuth) {
         console.log(`[PixelOffice] 🔒 Protected with Basic Auth (user: ${authUser})`);
       }
+
+      // Write URL to state file so Leader can share it
+      try {
+        const stateDir = path.join(process.env.HOME ?? "", ".ai-office", "state");
+        fs.mkdirSync(stateDir, { recursive: true });
+        fs.writeFileSync(path.join(stateDir, "ngrok-url.txt"), publicUrl ?? "", "utf-8");
+      } catch { /* non-critical */ }
     } catch (err) {
       console.error(`[PixelOffice] ngrok failed:`, (err as Error).message);
       console.log(`[PixelOffice] Pixel Office is still running locally at http://localhost:${PORT}`);
