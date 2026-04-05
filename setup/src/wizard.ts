@@ -137,7 +137,7 @@ async function main(): Promise<void> {
     if (overwrite.toLowerCase() !== "y") {
       console.log("\n  Setup cancelled. Existing config preserved.\n");
       rl.close();
-      return;
+      process.exit(2);
     }
     console.log("");
   }
@@ -251,7 +251,7 @@ async function main(): Promise<void> {
   if (confirm.toLowerCase() === "n") {
     console.log("\n  Setup cancelled.\n");
     rl.close();
-    return;
+    process.exit(2);
   }
 
   // Write files

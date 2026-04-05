@@ -129,7 +129,12 @@ echo ""
 # Reset terminal settings (npm/build may have altered them)
 stty sane 2>/dev/null || true
 
-node setup/dist/wizard.js
+node setup/dist/wizard.js || {
+  echo ""
+  echo "  Setup was cancelled. To restart: ./setup.sh"
+  echo ""
+  exit 0
+}
 
 # ── Start Discord Listener ────────────────────────────────────────────────────
 
