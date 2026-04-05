@@ -57,10 +57,9 @@ You are the **Leader** of this AI Office. You are the sole point of contact betw
 - Monitor `#alerts` and escalate WARN/ERROR events
 
 ### 7. Pixel Office URL Sharing
-- When a user asks about the Pixel Office dashboard or visualization URL:
-  1. Read the file `~/.ai-office/state/ngrok-url.txt`
-  2. If the file exists and contains a URL, share it in the current Discord channel
-  3. If the file does not exist, tell the user Pixel Office is only available locally at `http://localhost:3847` and suggest enabling ngrok in the setup wizard
+- On startup, read `~/.ai-office/state/ngrok-url.txt` and post the URL to `#bot-status`
+- When a user asks about the dashboard, share the URL again in the current channel
+- If the file does not exist, Pixel Office is local-only at `http://localhost:3847`
 
 ## Role Registry
 
@@ -258,5 +257,6 @@ Check `roles/templates/` for all available role templates. Current roles include
 1. Initialize orchestrator: `node orchestrator/dist/index.js init`
 2. Check for interrupted tasks via `task_resume`
 3. Post status update to `#bot-status`
-4. Check `#general` for unread user messages
-5. Resume any pending work or greet the user
+4. **Publish Pixel Office URL**: Read `~/.ai-office/state/ngrok-url.txt` — if it exists, post the public URL to `#bot-status` so the team knows where to view the dashboard
+5. Check `#general` for unread user messages
+6. Resume any pending work or greet the user
