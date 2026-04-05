@@ -12,15 +12,15 @@ cd ai-office
 ./setup.sh
 ```
 
-The setup script checks prerequisites, installs dependencies, builds TypeScript, and runs the configuration wizard.
+That's it. The setup script will:
+1. Check prerequisites (Node.js, npm, ngrok)
+2. Install all dependencies
+3. Build TypeScript
+4. Run the configuration wizard (office name, Discord bot, ngrok, starter pack)
+5. Start Pixel Office in the background
+6. Launch the Leader agent — who greets you in Discord `#general`
 
-After setup:
-
-```bash
-claude
-```
-
-The Leader agent initializes and greets you in Discord `#general`.
+The Leader introduces the team, explains what the office can do, and suggests your first task — all in Discord.
 
 ## Prerequisites
 
@@ -29,6 +29,7 @@ The Leader agent initializes and greets you in Discord `#general`.
 - **Discord Bot** — [create one here](https://discord.com/developers/applications)
   - Enable **MESSAGE CONTENT** intent
   - Invite the bot to your server with admin permissions
+- **ngrok** (optional) — for remote Pixel Office access. [Install](https://ngrok.com/download)
 
 ## Architecture
 
@@ -82,11 +83,13 @@ See [docs/role-catalog.md](docs/role-catalog.md) for the complete catalog.
 
 ## Pixel Office UI
 
+Pixel Office starts automatically after setup. Or run manually:
+
 ```bash
 cd pixel-office && npm run dev
 ```
 
-Open `http://localhost:3848` — pixel art office with real-time agent visualization.
+Open `http://localhost:3848` locally, or use the ngrok public URL (shown in Discord `#bot-status`).
 
 Features:
 - **Agent sprites** with spawn/despawn animations, idle bobbing, busy typing indicator
@@ -95,6 +98,14 @@ Features:
 - **Task Board** — toggle with `T` key, shows in-progress/pending/completed tasks with progress bars
 - **Message Feed** — toggle with `M` key, streams all agent-to-agent events with agent/type filters
 - **Speech bubbles** — agents show status change messages ("Working...", "Done!", "Online")
+
+## Remote Access (ngrok)
+
+Enable during setup to access Pixel Office from anywhere:
+
+- **ngrok tunnel** with Basic Auth — browser prompts for username/password
+- Leader auto-publishes the public URL to Discord `#bot-status` on startup
+- Configure ngrok auth token at [dashboard.ngrok.com](https://dashboard.ngrok.com/get-started/your-authtoken)
 
 ## Brainstorming Mode
 
