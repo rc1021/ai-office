@@ -86,7 +86,37 @@ See [docs/role-catalog.md](docs/role-catalog.md) for the complete catalog.
 cd pixel-office && npm run dev
 ```
 
-Open `http://localhost:3848` — pixel art office with real-time agent visualization, task assignment lines, speech bubbles, and interactive panels.
+Open `http://localhost:3848` — pixel art office with real-time agent visualization.
+
+Features:
+- **Agent sprites** with spawn/despawn animations, idle bobbing, busy typing indicator
+- **Task assignment lines** — dashed lines from Leader to workers for active tasks
+- **Agent panel** — click any agent to see details, active tasks, stats (or press `Escape` to close)
+- **Task Board** — toggle with `T` key, shows in-progress/pending/completed tasks with progress bars
+- **Message Feed** — toggle with `M` key, streams all agent-to-agent events with agent/type filters
+- **Speech bubbles** — agents show status change messages ("Working...", "Done!", "Online")
+
+## Brainstorming Mode
+
+The Leader can spawn multiple workers to analyze a topic from different perspectives simultaneously:
+
+1. User asks for brainstorming → Leader creates a shared trace
+2. Leader spawns 2-4 workers, each with a different perspective (e.g., growth, risk, technical, UX)
+3. Workers publish analyses via coordination events, can read and respond to each other
+4. Leader synthesizes all perspectives and presents a structured summary
+
+See the Brainstorming Protocol in [agents/leader/CLAUDE.md](agents/leader/CLAUDE.md).
+
+## Hooks
+
+Claude Code hooks automate responses to agent events:
+
+| Hook | Trigger | Action |
+|------|---------|--------|
+| `on-task-update.sh` | Task completed/failed | Log to `.ai-office/logs/hooks.log` |
+| `on-status-change.sh` | Agent online/offline/busy | Log to `.ai-office/logs/hooks.log` |
+
+Hooks are configured in `.claude/settings.json` and can be extended with custom scripts (e.g., Discord webhook notifications, Slack alerts).
 
 ## Security
 
