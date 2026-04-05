@@ -22,3 +22,28 @@ starter_packs:
     name: "Research Lab"
     description: "Research Analyst for deep research and data analysis."
     roles: [research-analyst]
+
+  full-dev-team:
+    name: "Full Dev Team"
+    description: "Complete software development team with QA and DevOps."
+    roles: [pm, software-engineer, qa-engineer, devops-engineer, ui-ux-designer]
+
+  marketing-team:
+    name: "Marketing Team"
+    description: "Marketing Manager + Content Writer + Community Manager."
+    roles: [marketing-manager, content-writer, community-manager]
+
+  finance-office:
+    name: "Finance Office"
+    description: "Accountant + Financial Analyst for bookkeeping and forecasting."
+    roles: [accountant, financial-analyst]
+
+  ecommerce-shop:
+    name: "E-Commerce Shop"
+    description: "Product Manager + Marketing + Content + Customer Service."
+    roles: [product-manager, marketing-manager, content-writer, customer-service-rep]
+
+  legal-firm:
+    name: "Legal Firm"
+    description: "Legal Advisor + Admin Assistant for legal operations."
+    roles: [legal-advisor, admin-assistant]
