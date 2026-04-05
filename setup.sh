@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+REPO_URL="https://github.com/rc1021/ai-office.git"
+INSTALL_DIR="${AI_OFFICE_DIR:-ai-office}"
+
 echo ""
 echo "  ==================================="
 echo "    AI Office — Setup"
@@ -9,7 +12,7 @@ echo ""
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
 
-echo "[1/4] Checking prerequisites..."
+echo "[1/5] Checking prerequisites..."
 
 # Node.js
 if ! command -v node &>/dev/null; then
@@ -31,24 +34,56 @@ if ! command -v npm &>/dev/null; then
 fi
 echo "  [OK] npm $(npm -v)"
 
+# git
+if ! command -v git &>/dev/null; then
+  echo "  [FAIL] git not found."
+  exit 1
+fi
+echo "  [OK] git $(git --version | awk '{print $3}')"
+
+# Claude Code
+if command -v claude &>/dev/null; then
+  echo "  [OK] Claude Code installed"
+else
+  echo "  [WARN] Claude Code not found. Install: https://docs.anthropic.com/en/docs/claude-code"
+fi
+
 # Docker (optional)
 if command -v docker &>/dev/null; then
   echo "  [OK] Docker $(docker --version | awk '{print $3}' | tr -d ',')"
 else
-  echo "  [SKIP] Docker not found (optional — for containerized deployment)"
+  echo "  [SKIP] Docker not found (optional)"
 fi
 
-# ngrok (optional — for remote Pixel Office access)
+# ngrok (optional)
 if command -v ngrok &>/dev/null; then
   echo "  [OK] ngrok $(ngrok version | awk '{print $3}')"
 else
   echo "  [SKIP] ngrok not found (optional — for remote Pixel Office access)"
 fi
 
+# ── Clone or Update ──────────────────────────────────────────────────────────
+
+echo ""
+echo "[2/5] Getting AI Office..."
+
+if [ -f "CLAUDE.md" ] && [ -d "config" ] && [ -d "discord-bot" ]; then
+  # Already inside the repo
+  echo "  [OK] Already in AI Office directory"
+elif [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/CLAUDE.md" ]; then
+  echo "  [OK] Found existing installation at $INSTALL_DIR"
+  cd "$INSTALL_DIR"
+else
+  echo "  Cloning $REPO_URL..."
+  git clone "$REPO_URL" "$INSTALL_DIR" 2>&1 | sed 's/^/  /'
+  cd "$INSTALL_DIR"
+  echo "  [OK] Cloned to $(pwd)"
+fi
+
 # ── Install Dependencies ─────────────────────────────────────────────────────
 
 echo ""
-echo "[2/4] Installing dependencies..."
+echo "[3/5] Installing dependencies..."
 
 for dir in discord-bot coordination orchestrator pixel-office setup; do
   if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
@@ -64,7 +99,7 @@ echo "  [OK] All dependencies installed"
 # ── Build ─────────────────────────────────────────────────────────────────────
 
 echo ""
-echo "[3/4] Building TypeScript..."
+echo "[4/5] Building TypeScript..."
 
 for dir in discord-bot coordination orchestrator setup; do
   if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
@@ -90,7 +125,7 @@ echo "  [OK] All builds successful"
 # ── Configuration Wizard ──────────────────────────────────────────────────────
 
 echo ""
-echo "[4/5] Running configuration wizard..."
+echo "[5/5] Running configuration wizard..."
 echo ""
 
 node setup/dist/wizard.js
@@ -98,7 +133,7 @@ node setup/dist/wizard.js
 # ── Start Services ───────────────────────────────────────────────────────────
 
 echo ""
-echo "[5/5] Starting AI Office..."
+echo "  Starting AI Office..."
 echo ""
 
 # Start Pixel Office in background

@@ -7,20 +7,26 @@ A multi-agent virtual office powered by Claude Code. "Hire" AI agents with speci
 ## Quick Start
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/rc1021/ai-office/main/setup.sh | bash
+```
+
+Or clone manually:
+
+```bash
 git clone https://github.com/rc1021/ai-office.git
 cd ai-office
 ./setup.sh
 ```
 
-That's it. The setup script will:
-1. Check prerequisites (Node.js, npm, ngrok)
-2. Install all dependencies
-3. Build TypeScript
-4. Run the configuration wizard (office name, Discord bot, ngrok, starter pack)
-5. Start Pixel Office in the background
-6. Launch the Leader agent — who greets you in Discord `#general`
+The setup script will:
+1. Check prerequisites (Node.js, npm, git, Claude Code, ngrok)
+2. Clone the repo (if running via `curl | bash`)
+3. Install all dependencies
+4. Build TypeScript
+5. Run the configuration wizard (office name, Discord bot, ngrok, starter pack)
+6. Start Pixel Office + launch the Leader agent
 
-The Leader introduces the team, explains what the office can do, and suggests your first task — all in Discord.
+The Leader greets you in Discord `#general`, introduces the team, and suggests your first task.
 
 ## Prerequisites
 
