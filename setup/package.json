@@ -1,0 +1,19 @@
+{
+  "name": "ai-office-setup",
+  "version": "1.0.0",
+  "description": "AI Office setup wizard",
+  "type": "module",
+  "main": "dist/wizard.js",
+  "scripts": {
+    "build": "npx tsc",
+    "start": "node dist/wizard.js"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3"
+  }
+}

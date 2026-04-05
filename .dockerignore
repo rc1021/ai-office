@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.ai-office/
+.git/
+.env
+*.db
+*.db-wal
+*.db-shm

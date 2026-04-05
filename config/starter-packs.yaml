@@ -1,0 +1,24 @@
+# AI Office Starter Packs
+# Pre-configured role combinations for common use cases.
+# Leader is always present — these packs define additional worker roles.
+
+starter_packs:
+  solo-creator:
+    name: "Solo Creator"
+    description: "Just you and the Leader. Great for exploring AI Office."
+    roles: []
+
+  dev-team:
+    name: "Dev Team"
+    description: "PM + Software Engineer for building software projects."
+    roles: [pm, software-engineer]
+
+  startup-mvp:
+    name: "Startup MVP"
+    description: "PM + Engineer + Research Analyst for rapid prototyping."
+    roles: [pm, software-engineer, research-analyst]
+
+  research-lab:
+    name: "Research Lab"
+    description: "Research Analyst for deep research and data analysis."
+    roles: [research-analyst]
