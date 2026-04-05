@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 
 import readline from "node:readline/promises";
-import { createInterface as createRlSync } from "node:readline";
 import { stdin, stdout } from "node:process";
 import path from "node:path";
 import fs from "node:fs";
-import { Writable } from "node:stream";
 import { loadStarterPacks, StarterPack } from "./starter-packs.js";
 import {
   SetupConfig,
@@ -82,7 +80,7 @@ function t(key: string): string {
 
 // ─── Readline Helpers ────────────────────────────────────────────────────────
 
-let rl = readline.createInterface({ input: stdin, output: stdout });
+const rl = readline.createInterface({ input: stdin, output: stdout });
 
 function getProjectRoot(): string {
   let dir = process.cwd();
@@ -99,46 +97,6 @@ async function ask(question: string, defaultVal?: string): Promise<string> {
   const suffix = defaultVal ? ` [${defaultVal}]` : "";
   const answer = await rl.question(`  ${question}${suffix}: `);
   return answer.trim() || defaultVal || "";
-}
-
-/**
- * Prompt for sensitive input — echoes * characters.
- * Uses a muted output stream so readline doesn't echo plaintext,
- * then manually writes * for each character.
- */
-async function askSecret(question: string): Promise<string> {
-  // Close current rl to avoid conflicts
-  rl.close();
-
-  return new Promise((resolve) => {
-    // Create a muted output stream
-    let muted = false;
-    const mutedOut = new Writable({
-      write(chunk, _encoding, callback) {
-        if (!muted) stdout.write(chunk);
-        callback();
-      },
-    });
-
-    const secretRl = createRlSync({
-      input: stdin,
-      output: mutedOut,
-      terminal: true,
-    });
-
-    // Write prompt ourselves
-    stdout.write(`  ${question}: `);
-    muted = true;
-
-    secretRl.on("line", (line: string) => {
-      muted = false;
-      secretRl.close();
-      stdout.write("\n");
-      // Recreate the main rl for subsequent prompts
-      rl = readline.createInterface({ input: stdin, output: stdout });
-      resolve(line.trim());
-    });
-  });
 }
 
 async function choose(question: string, options: string[], defaultIdx: number = 0): Promise<string> {
@@ -212,7 +170,7 @@ async function main(): Promise<void> {
   console.log(`  ${t("discord.step6")}`);
   console.log("");
 
-  const discordToken = await askSecret(t("prompt.token"));
+  const discordToken = await ask(t("prompt.token"));
   if (!discordToken) {
     console.log(`\n  ${t("warn.no_token")}\n`);
   }
@@ -246,11 +204,11 @@ async function main(): Promise<void> {
   if (enableNgrok.toLowerCase() === "y") {
     console.log(`\n  ${t("hint.ngrok_get")}`);
     console.log("     https://dashboard.ngrok.com/get-started/your-authtoken\n");
-    ngrokAuthToken = await askSecret(t("prompt.ngrok_token"));
+    ngrokAuthToken = await ask(t("prompt.ngrok_token"));
 
     console.log(`\n  ${t("hint.ngrok_auth")}\n`);
     pixelAuthUser = await ask(t("prompt.pixel_user"), "admin");
-    pixelAuthPass = await askSecret(t("prompt.pixel_pass"));
+    pixelAuthPass = await ask(t("prompt.pixel_pass"));
     if (!pixelAuthPass) {
       console.log(`  ${t("warn.no_pass")}\n`);
     }
