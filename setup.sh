@@ -140,10 +140,11 @@ echo ""
 # Start Pixel Office in background
 if [ -d "pixel-office" ]; then
   echo "  Starting Pixel Office server..."
-  (cd pixel-office && npx tsx server/index.ts &>/dev/null &)
-  PIXEL_PID=$!
+  cd pixel-office && npx tsx server/index.ts &>/dev/null &
+  PIXEL_PID="$!"
+  cd ..
   sleep 2
-  if kill -0 "$PIXEL_PID" 2>/dev/null; then
+  if [ -n "$PIXEL_PID" ] && kill -0 "$PIXEL_PID" 2>/dev/null; then
     echo "  [OK] Pixel Office running at http://localhost:${PIXEL_OFFICE_PORT:-3847}"
   else
     echo "  [WARN] Pixel Office failed to start (non-critical)"

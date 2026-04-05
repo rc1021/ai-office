@@ -4,7 +4,7 @@ import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import path from "node:path";
 import fs from "node:fs";
-import { loadStarterPacks, StarterPack } from "./starter-packs.js";
+import { loadStarterPacks, localize, StarterPack } from "./starter-packs.js";
 import {
   SetupConfig,
   writeOfficeYaml,
@@ -186,8 +186,10 @@ async function main(): Promise<void> {
   const packs = loadStarterPacks(projectRoot);
   const packEntries = Object.entries(packs);
   const packOptions = packEntries.map(([id, p]) => {
-    const roles = p.roles.length > 0 ? ` (${p.roles.join(", ")})` : " (Leader only)";
-    return `${p.name}${roles} — ${p.description}`;
+    const name = localize(p.name, currentLang);
+    const desc = localize(p.description, currentLang);
+    const roles = p.roles.length > 0 ? ` (${p.roles.join(", ")})` : "";
+    return `${name}${roles} — ${desc}`;
   });
 
   const packChoice = await choose(t("prompt.starter"), packOptions, 0);
@@ -241,7 +243,7 @@ async function main(): Promise<void> {
   console.log(`  ${t("sum.timezone")}:     ${config.timezone}`);
   console.log(`  ${t("sum.discord")}:      ${discordToken ? t("sum.token_ok") : t("sum.token_later")}`);
   console.log(`  ${t("sum.guild")}:        ${guildId || t("sum.token_later")}`);
-  console.log(`  ${t("sum.starter")}:      ${packData.name} (${packData.roles.length > 0 ? packData.roles.join(", ") : "Leader only"})`);
+  console.log(`  ${t("sum.starter")}:      ${localize(packData.name, currentLang)} (${packData.roles.length > 0 ? packData.roles.join(", ") : "Leader only"})`);
   console.log(`  ${t("sum.workers")}:      ${config.maxWorkers}`);
   console.log(`  ${t("sum.ngrok")}:        ${config.ngrokEnabled ? `${t("sum.enabled")} (user: ${config.pixelAuthUser})` : t("sum.disabled")}`);
 

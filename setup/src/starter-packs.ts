@@ -3,9 +3,15 @@ import path from "node:path";
 import yaml from "js-yaml";
 
 export interface StarterPack {
-  name: string;
-  description: string;
+  name: string | Record<string, string>;
+  description: string | Record<string, string>;
   roles: string[];
+}
+
+/** Resolve a localized string — supports both plain string and {en, zh-TW, ja} object */
+export function localize(value: string | Record<string, string>, lang: string): string {
+  if (typeof value === "string") return value;
+  return value[lang] ?? value["en"] ?? Object.values(value)[0] ?? "";
 }
 
 export function loadStarterPacks(projectRoot: string): Record<string, StarterPack> {

@@ -4,46 +4,100 @@
 
 starter_packs:
   solo-creator:
-    name: "Solo Creator"
-    description: "Just you and the Leader. Great for exploring AI Office."
+    name:
+      en: "Solo Creator"
+      zh-TW: "獨立創作者"
+      ja: "ソロクリエイター"
+    description:
+      en: "Just you and the Leader. Great for exploring AI Office."
+      zh-TW: "只有你和 Leader。適合初次探索 AI Office。"
+      ja: "あなたとLeaderだけ。AI Officeの探索に最適。"
     roles: []
 
   dev-team:
-    name: "Dev Team"
-    description: "PM + Software Engineer for building software projects."
+    name:
+      en: "Dev Team"
+      zh-TW: "開發團隊"
+      ja: "開発チーム"
+    description:
+      en: "PM + Software Engineer for building software projects."
+      zh-TW: "PM + 軟體工程師，適合軟體開發專案。"
+      ja: "PM + ソフトウェアエンジニア。ソフトウェア開発向け。"
     roles: [pm, software-engineer]
 
   startup-mvp:
-    name: "Startup MVP"
-    description: "PM + Engineer + Research Analyst for rapid prototyping."
+    name:
+      en: "Startup MVP"
+      zh-TW: "新創 MVP"
+      ja: "スタートアップMVP"
+    description:
+      en: "PM + Engineer + Research Analyst for rapid prototyping."
+      zh-TW: "PM + 工程師 + 研究分析師，適合快速原型開發。"
+      ja: "PM + エンジニア + リサーチアナリスト。高速プロトタイピング向け。"
     roles: [pm, software-engineer, research-analyst]
 
   research-lab:
-    name: "Research Lab"
-    description: "Research Analyst for deep research and data analysis."
+    name:
+      en: "Research Lab"
+      zh-TW: "研究室"
+      ja: "リサーチラボ"
+    description:
+      en: "Research Analyst for deep research and data analysis."
+      zh-TW: "研究分析師，適合深度研究與資料分析。"
+      ja: "リサーチアナリスト。深い研究とデータ分析向け。"
     roles: [research-analyst]
 
   full-dev-team:
-    name: "Full Dev Team"
-    description: "Complete software development team with QA and DevOps."
+    name:
+      en: "Full Dev Team"
+      zh-TW: "完整開發團隊"
+      ja: "フル開発チーム"
+    description:
+      en: "Complete software development team with QA and DevOps."
+      zh-TW: "含 QA 和 DevOps 的完整開發團隊。"
+      ja: "QAとDevOpsを含む完全な開発チーム。"
     roles: [pm, software-engineer, qa-engineer, devops-engineer, ui-ux-designer]
 
   marketing-team:
-    name: "Marketing Team"
-    description: "Marketing Manager + Content Writer + Community Manager."
+    name:
+      en: "Marketing Team"
+      zh-TW: "行銷團隊"
+      ja: "マーケティングチーム"
+    description:
+      en: "Marketing Manager + Content Writer + Community Manager."
+      zh-TW: "行銷經理 + 內容寫手 + 社群經理。"
+      ja: "マーケティングマネージャー + コンテンツライター + コミュニティマネージャー。"
     roles: [marketing-manager, content-writer, community-manager]
 
   finance-office:
-    name: "Finance Office"
-    description: "Accountant + Financial Analyst for bookkeeping and forecasting."
+    name:
+      en: "Finance Office"
+      zh-TW: "財務辦公室"
+      ja: "ファイナンスオフィス"
+    description:
+      en: "Accountant + Financial Analyst for bookkeeping and forecasting."
+      zh-TW: "會計 + 財務分析師，適合記帳與預測。"
+      ja: "会計 + 財務アナリスト。簿記と予測向け。"
     roles: [accountant, financial-analyst]
 
   ecommerce-shop:
-    name: "E-Commerce Shop"
-    description: "Product Manager + Marketing + Content + Customer Service."
+    name:
+      en: "E-Commerce Shop"
+      zh-TW: "電商團隊"
+      ja: "ECショップ"
+    description:
+      en: "Product Manager + Marketing + Content + Customer Service."
+      zh-TW: "產品經理 + 行銷 + 內容 + 客服。"
+      ja: "プロダクトマネージャー + マーケティング + コンテンツ + カスタマーサービス。"
     roles: [product-manager, marketing-manager, content-writer, customer-service-rep]
 
   legal-firm:
-    name: "Legal Firm"
-    description: "Legal Advisor + Admin Assistant for legal operations."
+    name:
+      en: "Legal Firm"
+      zh-TW: "法律事務所"
+      ja: "法律事務所"
+    description:
+      en: "Legal Advisor + Admin Assistant for legal operations."
+      zh-TW: "法務顧問 + 行政助理，適合法律事務。"
+      ja: "法務アドバイザー + アシスタント。法務オペレーション向け。"
     roles: [legal-advisor, admin-assistant]
