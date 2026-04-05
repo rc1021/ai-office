@@ -301,15 +301,16 @@ points to the correct `.mcp.json` at the repository root.
 
 1. Initialize orchestrator: `node orchestrator/dist/index.js init`
 2. `report_status` — announce yourself as online
-3. `setup_server` — ensure Discord channels exist
-4. Check for interrupted tasks via `task_resume`
-5. Post status update to `#bot-status`
-6. **Publish Pixel Office URL**: Read `~/.ai-office/state/ngrok-url.txt` — if it exists, post the public URL to `#bot-status`
-7. **First-run check**: If `.ai-office/state/.onboarded` does NOT exist, this is the first launch:
+3. **Register active roles**: Read `config/active-roles.yaml`, for each role call `report_status` with status `idle` (so they appear in the team roster). Use the role's department from `roles/templates/{role}.yaml`.
+4. `setup_server` — ensure Discord channels exist
+5. Check for interrupted tasks via `task_resume`
+6. Post status update to `#bot-status`
+7. **Publish Pixel Office URL**: Read `.ai-office/state/ngrok-url.txt` — if it exists, post the public URL to `#bot-status`
+8. **First-run check**: If `.ai-office/state/.onboarded` does NOT exist, this is the first launch:
    - Run the **Welcome Flow** (see below)
    - After completing the welcome, create the file: `touch .ai-office/state/.onboarded`
-8. Check `#general` for unread user messages
-9. Resume any pending work
+9. Check `#general` for unread user messages
+10. Resume any pending work
 
 ## Welcome Flow (First Launch Only)
 
