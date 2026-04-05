@@ -44,11 +44,20 @@ app.use("/api", createRouter());
 // SSE stream
 app.get("/api/stream", handleSSE);
 
-// Serve built client in production
-const clientDist = path.join(__dirname, "..", "client");
+// Serve built client — check tsx and compiled paths
+const clientCandidates = [
+  path.join(__dirname, "..", "client", "dist"),   // tsx: server/ → pixel-office/client/dist/
+  path.join(__dirname, "..", "client"),            // compiled: dist/server/ → dist/client/ (legacy)
+];
+const clientDist = clientCandidates.find((p) => fs.existsSync(path.join(p, "index.html"))) ?? clientCandidates[0];
 app.use(express.static(clientDist));
 app.get("*", (_req, res) => {
-  res.sendFile(path.join(clientDist, "index.html"));
+  const indexPath = path.join(clientDist, "index.html");
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(503).send("Pixel Office client not built. Run: cd pixel-office && npm run build:client");
+  }
 });
 
 app.listen(PORT, "0.0.0.0", async () => {

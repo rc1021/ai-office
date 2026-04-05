@@ -62,7 +62,12 @@ done
 if [ -d "pixel-office" ]; then
   echo "  Building pixel-office (server)..."
   (cd pixel-office && npm run build:server --silent 2>&1) || {
-    echo "  [FAIL] Build failed in pixel-office"
+    echo "  [FAIL] Build failed in pixel-office (server)"
+    exit 1
+  }
+  echo "  Building pixel-office (client)..."
+  (cd pixel-office && npm run build:client --silent 2>&1) || {
+    echo "  [FAIL] Build failed in pixel-office (client)"
     exit 1
   }
 fi
