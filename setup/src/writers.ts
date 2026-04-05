@@ -21,6 +21,13 @@ export interface SetupConfig {
  */
 export function writeOfficeYaml(projectRoot: string, config: SetupConfig): void {
   const filePath = path.join(projectRoot, "config", "office.yaml");
+  const examplePath = path.join(projectRoot, "config", "office.yaml.example");
+
+  // If office.yaml doesn't exist (fresh clone), copy from .example
+  if (!fs.existsSync(filePath) && fs.existsSync(examplePath)) {
+    fs.copyFileSync(examplePath, filePath);
+  }
+
   let content = fs.readFileSync(filePath, "utf-8");
 
   content = content.replace(
