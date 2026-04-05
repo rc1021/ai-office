@@ -126,6 +126,9 @@ echo ""
 echo "[4/4] Running configuration wizard..."
 echo ""
 
+# Reset terminal settings (npm/build may have altered them)
+stty sane 2>/dev/null || true
+
 node setup/dist/wizard.js
 
 # ── Start Services ───────────────────────────────────────────────────────────
