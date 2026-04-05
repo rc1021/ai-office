@@ -137,12 +137,14 @@ echo ""
 echo "  Starting AI Office..."
 echo ""
 
+# Ensure we're in the project root
+PROJECT_DIR="$(pwd)"
+
 # Start Pixel Office in background
 if [ -d "pixel-office" ]; then
   echo "  Starting Pixel Office server..."
-  cd pixel-office && npx tsx server/index.ts &>/dev/null &
+  (cd "$PROJECT_DIR/pixel-office" && npx tsx server/index.ts) &>/dev/null &
   PIXEL_PID="$!"
-  cd ..
   sleep 2
   if [ -n "$PIXEL_PID" ] && kill -0 "$PIXEL_PID" 2>/dev/null; then
     echo "  [OK] Pixel Office running at http://localhost:${PIXEL_OFFICE_PORT:-3847}"
@@ -160,5 +162,6 @@ echo "  Launching Leader agent..."
 echo "  (The Leader will greet you in Discord #general)"
 echo ""
 
-# Launch Claude Code with Leader — interactive session
+# Launch Claude Code in the project directory
+cd "$PROJECT_DIR"
 exec claude "Execute your Startup Checklist. This may be the first launch — check for the onboarded flag and run the Welcome Flow if needed."
