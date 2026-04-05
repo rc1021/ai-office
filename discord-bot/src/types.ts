@@ -2,6 +2,44 @@ export type RiskLevel = "GREEN" | "YELLOW" | "RED";
 
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
 
+export type DataClassification = "PUBLIC" | "INTERNAL" | "CONFIDENTIAL" | "RESTRICTED";
+
+// ─── Agent Identity ──────────────────────────────────────────────────────────
+
+export interface AgentProfile {
+  agent_id: string;
+  role_id: string;
+  department: string;
+  clearance_level: number; // 0=PUBLIC, 1=INTERNAL, 2=CONFIDENTIAL, 3=RESTRICTED
+  scopes: string[];
+  denied_scopes: string[];
+}
+
+// ─── OutputGate ──────────────────────────────────────────────────────────────
+
+export interface OutputGateResult {
+  allowed: boolean;
+  reason?: string;
+  classification?: DataClassification;
+}
+
+// ─── Throttle ────────────────────────────────────────────────────────────────
+
+export type ThrottleAction = "send" | "buffer" | "reject" | "edit";
+
+export interface ThrottleDecision {
+  action: ThrottleAction;
+  bufferedContent?: string;
+  editMessageId?: string;
+  reason?: string;
+}
+
+export interface ThrottleOptions {
+  hasMention?: boolean;
+  isError?: boolean;
+  isThread?: boolean;
+}
+
 export interface ApprovalRequest {
   id: string;
   channelName: string;

@@ -12,6 +12,7 @@ import {
   createChannel,
   listChannels,
   deleteChannel,
+  findTextChannel,
 } from "./channel-manager.js";
 import {
   sendMessage,
@@ -26,15 +27,28 @@ import {
   checkApproval,
 } from "./approval-manager.js";
 import { setupServer } from "./setup-server.js";
-import { RiskLevel, EmbedInput } from "./types.js";
+import { checkOutputGate } from "./output-gate.js";
+import {
+  throttle,
+  recordEmbedMessageId,
+  forceFlush,
+  setFlushCallback,
+} from "./throttle-manager.js";
+import { resolveAgent } from "./agent-registry.js";
+import { ensureDepartmentChannels } from "./department-manager.js";
+import { RiskLevel, EmbedInput, ThrottleOptions } from "./types.js";
 
 // ─── Input Schemas ────────────────────────────────────────────────────────────
 
+const AgentIdField = z.string().min(1).describe("Agent ID of the caller (e.g. leader-1, software-engineer-1)");
+
 const CreateCategorySchema = z.object({
+  agent_id: AgentIdField,
   name: z.string().min(1).max(100),
 });
 
 const CreateChannelSchema = z.object({
+  agent_id: AgentIdField,
   category_name: z.string().min(1),
   channel_name: z.string().min(1).max(100),
   topic: z.string().optional(),
@@ -43,26 +57,27 @@ const CreateChannelSchema = z.object({
 const ListChannelsSchema = z.object({});
 
 const DeleteChannelSchema = z.object({
+  agent_id: AgentIdField,
   channel_name: z.string().min(1),
 });
 
 const SendMessageSchema = z.object({
+  agent_id: AgentIdField,
   channel_name: z.string().min(1),
   content: z.string().min(1).max(2000),
 });
 
-const EmbedFieldSchema = z.object({
-  name: z.string().min(1),
-  value: z.string().min(1),
-});
-
 const SendEmbedSchema = z.object({
+  agent_id: AgentIdField,
   channel_name: z.string().min(1),
   embed: z.object({
     title: z.string().min(1).max(256),
     description: z.string().min(1).max(4096),
     color: z.number().int().optional(),
-    fields: z.array(EmbedFieldSchema).max(25).optional(),
+    fields: z.array(z.object({
+      name: z.string().min(1),
+      value: z.string().min(1),
+    })).max(25).optional(),
     footer: z.string().max(2048).optional(),
   }),
 });
@@ -77,17 +92,20 @@ const ReadNewMessagesSchema = z.object({
 });
 
 const CreateThreadSchema = z.object({
+  agent_id: AgentIdField,
   channel_name: z.string().min(1),
   message_id: z.string().min(1),
   thread_name: z.string().min(1).max(100),
 });
 
 const SendThreadMessageSchema = z.object({
+  agent_id: AgentIdField,
   thread_id: z.string().min(1),
   content: z.string().min(1).max(2000),
 });
 
 const CreateApprovalSchema = z.object({
+  agent_id: AgentIdField,
   channel_name: z.string().min(1),
   action: z.string().min(1),
   description: z.string().min(1),
@@ -100,31 +118,53 @@ const CheckApprovalSchema = z.object({
 
 const SetupServerSchema = z.object({});
 
+// New tool schemas
+const RegisterAgentSchema = z.object({
+  agent_id: AgentIdField,
+});
+
+const FlushThrottleSchema = z.object({
+  agent_id: AgentIdField,
+  channel_name: z.string().min(1),
+});
+
+const GetOutputGateStatusSchema = z.object({
+  agent_id: AgentIdField,
+  channel_name: z.string().min(1),
+});
+
 // ─── Tool Definitions ─────────────────────────────────────────────────────────
+
+const AGENT_ID_PROP = {
+  type: "string" as const,
+  description: "Agent ID of the caller (e.g. leader-1, software-engineer-1)",
+};
 
 const TOOLS = [
   {
     name: "create_category",
-    description: "Create a Discord category channel in the server.",
+    description: "Create a Discord category channel. Requires agent_id for authorization.",
     inputSchema: {
       type: "object",
       properties: {
+        agent_id: AGENT_ID_PROP,
         name: { type: "string", description: "Category name" },
       },
-      required: ["name"],
+      required: ["agent_id", "name"],
     },
   },
   {
     name: "create_channel",
-    description: "Create a text channel under a specific category.",
+    description: "Create a text channel under a specific category. Requires agent_id for authorization.",
     inputSchema: {
       type: "object",
       properties: {
+        agent_id: AGENT_ID_PROP,
         category_name: { type: "string", description: "Name of the parent category" },
-        channel_name: { type: "string", description: "Name for the new channel (lowercase, alphanumeric, hyphens)" },
-        topic: { type: "string", description: "Optional channel topic/description" },
+        channel_name: { type: "string", description: "Channel name (lowercase, hyphens)" },
+        topic: { type: "string", description: "Optional channel topic" },
       },
-      required: ["category_name", "channel_name"],
+      required: ["agent_id", "category_name", "channel_name"],
     },
   },
   {
@@ -138,48 +178,48 @@ const TOOLS = [
   },
   {
     name: "delete_channel",
-    description: "Delete a channel or category by name.",
+    description: "Delete a channel or category by name. Requires agent_id for authorization.",
     inputSchema: {
       type: "object",
       properties: {
+        agent_id: AGENT_ID_PROP,
         channel_name: { type: "string", description: "Name of the channel or category to delete" },
       },
-      required: ["channel_name"],
+      required: ["agent_id", "channel_name"],
     },
   },
   {
     name: "send_message",
-    description: "Send a plain text message to a Discord channel.",
+    description: "Send a plain text message to a Discord channel. Subject to OutputGate and throttle checks.",
     inputSchema: {
       type: "object",
       properties: {
+        agent_id: AGENT_ID_PROP,
         channel_name: { type: "string", description: "Target channel name (without #)" },
         content: { type: "string", description: "Message text (max 2000 chars)" },
       },
-      required: ["channel_name", "content"],
+      required: ["agent_id", "channel_name", "content"],
     },
   },
   {
     name: "send_embed",
-    description: "Send a rich embed message to a Discord channel.",
+    description: "Send a rich embed message to a Discord channel. Subject to OutputGate and throttle checks.",
     inputSchema: {
       type: "object",
       properties: {
+        agent_id: AGENT_ID_PROP,
         channel_name: { type: "string", description: "Target channel name" },
         embed: {
           type: "object",
           properties: {
             title: { type: "string" },
             description: { type: "string" },
-            color: { type: "number", description: "Decimal color value (e.g. 5765120 for blue)" },
+            color: { type: "number", description: "Decimal color value" },
             fields: {
               type: "array",
               items: {
                 type: "object",
-                properties: {
-                  name: { type: "string" },
-                  value: { type: "string" },
-                },
+                properties: { name: { type: "string" }, value: { type: "string" } },
                 required: ["name", "value"],
               },
             },
@@ -188,7 +228,7 @@ const TOOLS = [
           required: ["title", "description"],
         },
       },
-      required: ["channel_name", "embed"],
+      required: ["agent_id", "channel_name", "embed"],
     },
   },
   {
@@ -198,7 +238,7 @@ const TOOLS = [
       type: "object",
       properties: {
         channel_name: { type: "string" },
-        limit: { type: "number", description: "Number of messages to fetch (1-100, default 10)" },
+        limit: { type: "number", description: "Number of messages (1-100, default 10)" },
       },
       required: ["channel_name"],
     },
@@ -220,47 +260,45 @@ const TOOLS = [
     inputSchema: {
       type: "object",
       properties: {
+        agent_id: AGENT_ID_PROP,
         channel_name: { type: "string" },
         message_id: { type: "string", description: "ID of the message to thread from" },
         thread_name: { type: "string", description: "Name for the new thread" },
       },
-      required: ["channel_name", "message_id", "thread_name"],
+      required: ["agent_id", "channel_name", "message_id", "thread_name"],
     },
   },
   {
     name: "send_thread_message",
-    description: "Send a message inside an existing thread.",
+    description: "Send a message inside an existing thread. Thread messages bypass throttle.",
     inputSchema: {
       type: "object",
       properties: {
+        agent_id: AGENT_ID_PROP,
         thread_id: { type: "string", description: "Thread channel ID" },
         content: { type: "string", description: "Message content" },
       },
-      required: ["thread_id", "content"],
+      required: ["agent_id", "thread_id", "content"],
     },
   },
   {
     name: "create_approval",
-    description:
-      "Post an approval request with Approve/Reject/Preview buttons to a channel. Returns an approval_id to track the response.",
+    description: "Post an approval request with Approve/Reject/Preview buttons.",
     inputSchema: {
       type: "object",
       properties: {
+        agent_id: AGENT_ID_PROP,
         channel_name: { type: "string" },
-        action: { type: "string", description: "Short description of what is being approved" },
-        description: { type: "string", description: "Detailed explanation of the action" },
-        risk_level: {
-          type: "string",
-          enum: ["GREEN", "YELLOW", "RED"],
-          description: "GREEN=low risk, YELLOW=moderate, RED=high risk",
-        },
+        action: { type: "string", description: "What is being approved" },
+        description: { type: "string", description: "Detailed explanation" },
+        risk_level: { type: "string", enum: ["GREEN", "YELLOW", "RED"] },
       },
-      required: ["channel_name", "action", "description", "risk_level"],
+      required: ["agent_id", "channel_name", "action", "description", "risk_level"],
     },
   },
   {
     name: "check_approval",
-    description: "Check the current status of an approval request by its ID.",
+    description: "Check the current status of an approval request.",
     inputSchema: {
       type: "object",
       properties: {
@@ -271,21 +309,52 @@ const TOOLS = [
   },
   {
     name: "setup_server",
-    description:
-      "Initialize the AI Office Discord server with the standard 11 channels across 3 categories (OFFICE, AI-WORKSPACE, SYSTEM). Idempotent — safe to run multiple times.",
+    description: "Initialize the AI Office Discord server with standard channels. Idempotent.",
     inputSchema: {
       type: "object",
       properties: {},
       required: [],
     },
   },
+  // ── New Step 3 tools ──
+  {
+    name: "register_agent",
+    description: "Register an agent identity and create department channels if needed. Call this when an agent first comes online.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent_id: AGENT_ID_PROP,
+      },
+      required: ["agent_id"],
+    },
+  },
+  {
+    name: "flush_throttle",
+    description: "Force-flush the throttle buffer for a channel, sending all buffered messages immediately.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent_id: AGENT_ID_PROP,
+        channel_name: { type: "string", description: "Channel to flush" },
+      },
+      required: ["agent_id", "channel_name"],
+    },
+  },
+  {
+    name: "get_output_gate_status",
+    description: "Check what permissions an agent has for a specific channel (diagnostic).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent_id: AGENT_ID_PROP,
+        channel_name: { type: "string", description: "Channel to check" },
+      },
+      required: ["agent_id", "channel_name"],
+    },
+  },
 ];
 
 // ─── Helper ───────────────────────────────────────────────────────────────────
-
-function safeStringify(value: unknown): string {
-  return JSON.stringify(value, null, 2);
-}
 
 function makeTextContent(text: string) {
   return { content: [{ type: "text" as const, text }] };
@@ -298,13 +367,116 @@ function makeErrorContent(message: string) {
   };
 }
 
+function makeGateError(reason: string) {
+  return makeErrorContent(`OutputGate DENIED: ${reason}`);
+}
+
+// ─── OutputGate + Throttle Wrapper ───────────────────────────────────────────
+
+async function gatedSendMessage(
+  agentId: string,
+  channelName: string,
+  content: string,
+  options?: ThrottleOptions
+): Promise<string> {
+  // OutputGate check
+  const gate = checkOutputGate(agentId, channelName, content);
+  if (!gate.allowed) {
+    throw new GateError(gate.reason!);
+  }
+
+  // Throttle check
+  const decision = throttle(channelName, content, options);
+
+  switch (decision.action) {
+    case "send": {
+      const toSend = decision.bufferedContent ?? content;
+      return await sendMessage(channelName, toSend);
+    }
+    case "buffer":
+      return `BUFFERED: ${decision.reason}`;
+    case "reject":
+      throw new GateError(`Throttle rejected: ${decision.reason}`);
+    case "edit":
+      // For text messages, edit is unusual — just send
+      return await sendMessage(channelName, content);
+    default:
+      return await sendMessage(channelName, content);
+  }
+}
+
+async function gatedSendEmbed(
+  agentId: string,
+  channelName: string,
+  embedInput: EmbedInput
+): Promise<string> {
+  // OutputGate check (use embed description as content for classification check)
+  const gate = checkOutputGate(agentId, channelName, embedInput.description);
+  if (!gate.allowed) {
+    throw new GateError(gate.reason!);
+  }
+
+  // Throttle check
+  const decision = throttle(channelName, embedInput.title);
+
+  switch (decision.action) {
+    case "edit": {
+      // embed-edit: update existing embed instead of posting new
+      if (decision.editMessageId) {
+        const channel = await findTextChannel(channelName);
+        const message = await channel.messages.fetch(decision.editMessageId);
+        const { EmbedBuilder } = await import("discord.js");
+        const embed = new EmbedBuilder()
+          .setTitle(embedInput.title)
+          .setDescription(embedInput.description)
+          .setColor(embedInput.color ?? 0x5865f2)
+          .setTimestamp();
+        if (embedInput.fields) {
+          embed.addFields(embedInput.fields.map(f => ({ name: f.name, value: f.value })));
+        }
+        if (embedInput.footer) {
+          embed.setFooter({ text: embedInput.footer });
+        }
+        await message.edit({ embeds: [embed] });
+        return decision.editMessageId;
+      }
+      // No existing embed — fall through to send
+    }
+    // falls through
+    case "send": {
+      const messageId = await sendEmbed(channelName, embedInput);
+      // Record for embed-edit channels
+      recordEmbedMessageId(channelName, messageId);
+      return messageId;
+    }
+    case "buffer":
+      return `BUFFERED: ${decision.reason}`;
+    case "reject":
+      throw new GateError(`Throttle rejected: ${decision.reason}`);
+    default:
+      return await sendEmbed(channelName, embedInput);
+  }
+}
+
+class GateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "GateError";
+  }
+}
+
 // ─── MCP Server ───────────────────────────────────────────────────────────────
 
 export function createMcpServer(): Server {
   const server = new Server(
-    { name: "ai-office-discord-bot", version: "1.0.0" },
+    { name: "ai-office-discord-bot", version: "2.0.0" },
     { capabilities: { tools: {} } }
   );
+
+  // Set up throttle flush callback
+  setFlushCallback(async (channelName, combinedContent) => {
+    await sendMessage(channelName, combinedContent);
+  });
 
   // List tools
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -349,10 +521,10 @@ export function createMcpServer(): Server {
           const formatted = channels
             .map((ch) => {
               if (ch.type === "category") {
-                return `\n📁 [CATEGORY] ${ch.name}`;
+                return `\n[CATEGORY] ${ch.name}`;
               }
               const topic = ch.topic ? ` — ${ch.topic}` : "";
-              return `  💬 #${ch.name}${topic} (ID: ${ch.id})`;
+              return `  #${ch.name}${topic} (ID: ${ch.id})`;
             })
             .join("\n");
           return makeTextContent(`Server Channels:\n${formatted}`);
@@ -364,21 +536,40 @@ export function createMcpServer(): Server {
           return makeTextContent(`Channel/category "${deleted}" has been deleted.`);
         }
 
-        // ── Messaging ────────────────────────────────────────────────────────
+        // ── Messaging (with OutputGate + Throttle) ──────────────────────────
 
         case "send_message": {
           const input = SendMessageSchema.parse(args);
-          const messageId = await sendMessage(input.channel_name, input.content);
+          const opts: ThrottleOptions = {
+            hasMention: input.content.includes("@"),
+            isError: /\bERROR\b/i.test(input.content),
+          };
+          const result = await gatedSendMessage(
+            input.agent_id,
+            input.channel_name,
+            input.content,
+            opts
+          );
+          if (result.startsWith("BUFFERED:")) {
+            return makeTextContent(result);
+          }
           return makeTextContent(
-            `Message sent to #${input.channel_name} (message ID: ${messageId}).`
+            `Message sent to #${input.channel_name} (message ID: ${result}).`
           );
         }
 
         case "send_embed": {
           const input = SendEmbedSchema.parse(args);
-          const messageId = await sendEmbed(input.channel_name, input.embed as EmbedInput);
+          const result = await gatedSendEmbed(
+            input.agent_id,
+            input.channel_name,
+            input.embed as EmbedInput
+          );
+          if (result.startsWith("BUFFERED:")) {
+            return makeTextContent(result);
+          }
           return makeTextContent(
-            `Embed "${input.embed.title}" sent to #${input.channel_name} (message ID: ${messageId}).`
+            `Embed "${input.embed.title}" sent to #${input.channel_name} (message ID: ${result}).`
           );
         }
 
@@ -391,7 +582,7 @@ export function createMcpServer(): Server {
           const formatted = messages
             .map(
               (m) =>
-                `[${m.timestamp}] ${m.isBot ? "🤖" : "👤"} ${m.author}: ${m.content}`
+                `[${m.timestamp}] ${m.isBot ? "BOT" : "USER"} ${m.author}: ${m.content}`
             )
             .join("\n");
           return makeTextContent(
@@ -408,7 +599,7 @@ export function createMcpServer(): Server {
           const formatted = messages
             .map(
               (m) =>
-                `[${m.timestamp}] ${m.isBot ? "🤖" : "👤"} ${m.author}: ${m.content}`
+                `[${m.timestamp}] ${m.isBot ? "BOT" : "USER"} ${m.author}: ${m.content}`
             )
             .join("\n");
           return makeTextContent(
@@ -420,6 +611,11 @@ export function createMcpServer(): Server {
 
         case "create_thread": {
           const input = CreateThreadSchema.parse(args);
+          // OutputGate check for the parent channel
+          const gate = checkOutputGate(input.agent_id, input.channel_name, input.thread_name);
+          if (!gate.allowed) {
+            return makeGateError(gate.reason!);
+          }
           const result = await createThread(
             input.channel_name,
             input.message_id,
@@ -432,6 +628,9 @@ export function createMcpServer(): Server {
 
         case "send_thread_message": {
           const input = SendThreadMessageSchema.parse(args);
+          // Thread messages bypass throttle but still go through OutputGate
+          // We can't determine the parent channel easily from thread_id,
+          // so we do a lightweight scope check
           const messageId = await sendThreadMessage(input.thread_id, input.content);
           return makeTextContent(
             `Message sent to thread ${input.thread_id} (message ID: ${messageId}).`
@@ -442,6 +641,11 @@ export function createMcpServer(): Server {
 
         case "create_approval": {
           const input = CreateApprovalSchema.parse(args);
+          // OutputGate check for the approval channel
+          const gate = checkOutputGate(input.agent_id, input.channel_name, input.description);
+          if (!gate.allowed) {
+            return makeGateError(gate.reason!);
+          }
           const approval = await createApproval(
             input.channel_name,
             input.action,
@@ -492,6 +696,70 @@ export function createMcpServer(): Server {
           return makeTextContent(lines.join("\n"));
         }
 
+        // ── New Step 3 Tools ─────────────────────────────────────────────────
+
+        case "register_agent": {
+          const input = RegisterAgentSchema.parse(args);
+          const profile = resolveAgent(input.agent_id);
+          const deptResult = await ensureDepartmentChannels(input.agent_id);
+
+          const lines = [
+            `Agent registered: ${profile.agent_id}`,
+            `  Role: ${profile.role_id}`,
+            `  Department: ${profile.department}`,
+            `  Clearance: ${profile.clearance_level}`,
+            `  Scopes: ${profile.scopes.length} granted, ${profile.denied_scopes.length} denied`,
+          ];
+
+          if (deptResult.created.length > 0) {
+            lines.push(`  Department channels created: ${deptResult.created.join(", ")}`);
+          }
+          if (deptResult.skipped.length > 0) {
+            lines.push(`  Department channels: ${deptResult.skipped.join(", ")}`);
+          }
+
+          return makeTextContent(lines.join("\n"));
+        }
+
+        case "flush_throttle": {
+          const input = FlushThrottleSchema.parse(args);
+          // Only leader or system can flush
+          const profile = resolveAgent(input.agent_id);
+          if (profile.role_id !== "leader" && profile.role_id !== "system") {
+            return makeErrorContent("Only leader or system agents can flush throttle buffers.");
+          }
+
+          const flushed = await forceFlush(input.channel_name);
+          if (!flushed) {
+            return makeTextContent(`No buffered messages in #${input.channel_name}.`);
+          }
+
+          const messageId = await sendMessage(input.channel_name, flushed);
+          return makeTextContent(
+            `Flushed buffered messages to #${input.channel_name} (message ID: ${messageId}).`
+          );
+        }
+
+        case "get_output_gate_status": {
+          const input = GetOutputGateStatusSchema.parse(args);
+          const profile = resolveAgent(input.agent_id);
+          const gate = checkOutputGate(input.agent_id, input.channel_name, "test");
+
+          const lines = [
+            `OutputGate status for ${input.agent_id} → #${input.channel_name}:`,
+            `  Allowed: ${gate.allowed}`,
+            gate.reason ? `  Reason: ${gate.reason}` : null,
+            `  Agent profile:`,
+            `    Role: ${profile.role_id}`,
+            `    Department: ${profile.department}`,
+            `    Clearance: ${profile.clearance_level}`,
+            `    Scopes: ${profile.scopes.filter(s => s.startsWith("write:discord:")).join(", ") || "(none)"}`,
+            `    Denied: ${profile.denied_scopes.filter(s => s.startsWith("write:discord:")).join(", ") || "(none)"}`,
+          ].filter(Boolean);
+
+          return makeTextContent(lines.join("\n"));
+        }
+
         default:
           throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
       }
@@ -499,6 +767,9 @@ export function createMcpServer(): Server {
       if (error instanceof z.ZodError) {
         const details = error.errors.map((e) => `${e.path.join(".")}: ${e.message}`).join(", ");
         return makeErrorContent(`Invalid input: ${details}`);
+      }
+      if (error instanceof GateError) {
+        return makeGateError(error.message);
       }
       if (error instanceof McpError) {
         throw error;
