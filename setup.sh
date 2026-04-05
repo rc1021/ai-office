@@ -90,11 +90,38 @@ echo "  [OK] All builds successful"
 # ── Configuration Wizard ──────────────────────────────────────────────────────
 
 echo ""
-echo "[4/4] Running configuration wizard..."
+echo "[4/5] Running configuration wizard..."
 echo ""
 
 node setup/dist/wizard.js
 
+# ── Start Services ───────────────────────────────────────────────────────────
+
 echo ""
-echo "  Setup complete. Enjoy your AI Office!"
+echo "[5/5] Starting AI Office..."
 echo ""
+
+# Start Pixel Office in background
+if [ -d "pixel-office" ]; then
+  echo "  Starting Pixel Office server..."
+  (cd pixel-office && npx tsx server/index.ts &>/dev/null &)
+  PIXEL_PID=$!
+  sleep 2
+  if kill -0 "$PIXEL_PID" 2>/dev/null; then
+    echo "  [OK] Pixel Office running at http://localhost:${PIXEL_OFFICE_PORT:-3847}"
+  else
+    echo "  [WARN] Pixel Office failed to start (non-critical)"
+  fi
+fi
+
+echo ""
+echo "  ==================================="
+echo "    Setup Complete!"
+echo "  ==================================="
+echo ""
+echo "  Launching Leader agent..."
+echo "  (The Leader will greet you in Discord #general)"
+echo ""
+
+# Launch Claude Code with Leader — interactive session
+exec claude "Execute your Startup Checklist. This may be the first launch — check for the onboarded flag and run the Welcome Flow if needed."

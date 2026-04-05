@@ -94,6 +94,13 @@ export function createWorkspaceDirs(projectRoot: string): void {
   for (const dir of dirs) {
     fs.mkdirSync(path.join(base, dir), { recursive: true });
   }
+
+  // Remove onboarded flag so the Leader runs the Welcome Flow on next launch
+  const onboardedFlag = path.join(base, "state", ".onboarded");
+  if (fs.existsSync(onboardedFlag)) {
+    fs.unlinkSync(onboardedFlag);
+  }
+
   console.log("  [OK] .ai-office/ directories");
 }
 

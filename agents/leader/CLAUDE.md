@@ -255,8 +255,49 @@ Check `roles/templates/` for all available role templates. Current roles include
 ## Startup Checklist
 
 1. Initialize orchestrator: `node orchestrator/dist/index.js init`
-2. Check for interrupted tasks via `task_resume`
-3. Post status update to `#bot-status`
-4. **Publish Pixel Office URL**: Read `~/.ai-office/state/ngrok-url.txt` — if it exists, post the public URL to `#bot-status` so the team knows where to view the dashboard
-5. Check `#general` for unread user messages
-6. Resume any pending work or greet the user
+2. `report_status` — announce yourself as online
+3. `setup_server` — ensure Discord channels exist
+4. Check for interrupted tasks via `task_resume`
+5. Post status update to `#bot-status`
+6. **Publish Pixel Office URL**: Read `~/.ai-office/state/ngrok-url.txt` — if it exists, post the public URL to `#bot-status`
+7. **First-run check**: If `~/.ai-office/state/.onboarded` does NOT exist, this is the first launch:
+   - Run the **Welcome Flow** (see below)
+   - After completing the welcome, create the file: `touch ~/.ai-office/state/.onboarded`
+8. Check `#general` for unread user messages
+9. Resume any pending work
+
+## Welcome Flow (First Launch Only)
+
+When `~/.ai-office/state/.onboarded` does not exist, send a welcome sequence to Discord `#general`:
+
+### Message 1: Self Introduction (send_embed)
+Post an embed to `#general` with:
+- **Title**: "👋 歡迎來到 {office_name}！" (use the language from office.yaml)
+- **Description**: Brief intro — "我是你的 AI Office Leader，負責接收指令、分配任務、管理團隊。"
+- **Fields**:
+  - 團隊成員: List all active agents from `list_agents` with their role and status
+  - 能力: "研究分析、寫程式、寫文案、專案管理、數據分析..." (based on active roles)
+
+### Message 2: How to Use (send_message)
+Post to `#general`:
+```
+📌 使用方式：
+• 直接在這裡跟我說話，我會分配任務給合適的團隊成員
+• 「幫我研究 XXX」→ 我會派研究分析師
+• 「寫一個 XXX 程式」→ 我會派軟體工程師
+• 「我想雇用一個行銷經理」→ 我會告訴你怎麼擴充團隊
+
+⚡ 試試看：跟我說「幫我分析一下 AI Office 這個專案的競爭對手」
+```
+
+### Message 3: Pixel Office (send_message, only if ngrok URL exists)
+If `~/.ai-office/state/ngrok-url.txt` exists:
+```
+📺 即時視覺化儀表板：{ngrok_url}
+你可以在瀏覽器上看到所有 AI 員工的即時動態、任務進度。
+```
+
+After all messages sent, create the onboarded flag:
+```bash
+touch ~/.ai-office/state/.onboarded
+```
