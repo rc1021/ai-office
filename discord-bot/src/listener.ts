@@ -114,27 +114,24 @@ function runClaude(prompt: string): Promise<string> {
 
 // ── First-run check ───────────────────────────────────────────────────────────
 
-async function checkFirstRun(generalChannel: TextChannel): Promise<void> {
+async function checkFirstRun(): Promise<void> {
   if (fs.existsSync(ONBOARDED_FLAG)) {
     console.log("[Listener] Already onboarded, skipping first-run flow.");
     return;
   }
 
   console.log("[Listener] First run detected — triggering startup checklist via claude -p...");
+  console.log("[Listener] This will create Discord channels, post welcome messages, etc.");
 
   try {
     const response = await runClaude(STARTUP_CHECKLIST_PROMPT);
     if (response) {
-      // The Leader should have already posted to Discord via MCP tools,
-      // but if there's leftover stdout, log it (don't double-post).
-      console.log("[Listener] Startup checklist result:", response.substring(0, 200));
+      console.log("[Listener] Startup checklist result:", response.substring(0, 500));
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[Listener] First-run startup failed:", msg);
-    await generalChannel
-      .send(`⚠️ First-run startup encountered an error: ${msg.substring(0, 500)}`)
-      .catch((e) => console.error("[Listener] Failed to send error message:", e));
+    console.error("[Listener] You can retry by deleting ~/.ai-office/state/.onboarded and restarting.");
   }
 }
 
@@ -297,22 +294,8 @@ async function main(): Promise<void> {
     console.log(`[Listener] Serving ${readyClient.guilds.cache.size} guild(s)`);
     console.log(`[Listener] Listening for messages in #${GENERAL_CHANNEL}`);
 
-    // Locate #general for first-run flow
-    const guild = readyClient.guilds.cache.first();
-    if (guild) {
-      const generalChannel = guild.channels.cache.find(
-        (ch) => ch instanceof TextChannel && ch.name === GENERAL_CHANNEL
-      ) as TextChannel | undefined;
-
-      if (generalChannel) {
-        await checkFirstRun(generalChannel);
-      } else {
-        console.warn(
-          "[Listener] #general channel not found — skipping first-run check. " +
-            "Run the Leader's setup_server tool first."
-        );
-      }
-    }
+    // First-run: Leader will create channels + post welcome via claude -p
+    await checkFirstRun();
   });
 
   client.on(Events.MessageCreate, (message) => {
