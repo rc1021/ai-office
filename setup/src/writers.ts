@@ -66,11 +66,12 @@ export function writeDiscordEnv(projectRoot: string, config: SetupConfig): void 
  */
 export function writeMcpJson(projectRoot: string, config: SetupConfig): void {
   const nodePath = process.execPath;
+  const absRoot = path.resolve(projectRoot);
   const mcpConfig = {
     mcpServers: {
       "ai-office-discord": {
         command: nodePath,
-        args: ["./discord-bot/dist/index.js"],
+        args: [path.join(absRoot, "discord-bot", "dist", "index.js")],
         env: {
           DISCORD_BOT_TOKEN: config.discordToken,
           DISCORD_GUILD_ID: config.guildId,
@@ -78,9 +79,10 @@ export function writeMcpJson(projectRoot: string, config: SetupConfig): void {
       },
       "ai-office-coordination": {
         command: nodePath,
-        args: ["./coordination/dist/index.js"],
+        args: [path.join(absRoot, "coordination", "dist", "index.js")],
         env: {
           AI_OFFICE_WORKSPACE: "~/.ai-office",
+          AI_OFFICE_ROOT: absRoot,
         },
       },
     },
