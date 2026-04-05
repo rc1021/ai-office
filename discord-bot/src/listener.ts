@@ -331,6 +331,27 @@ async function main(): Promise<void> {
 
   console.log("[Listener] Starting AI Office Discord Listener...");
 
+  // Start Pixel Office server in background (for ngrok + visualization)
+  const pixelServerPath = path.join(PROJECT_DIR, "pixel-office", "server", "index.ts");
+  if (fs.existsSync(pixelServerPath)) {
+    console.log("[Listener] Starting Pixel Office server...");
+    const pixelProc = spawn("npx", ["tsx", pixelServerPath], {
+      cwd: path.join(PROJECT_DIR, "pixel-office"),
+      env: { ...process.env },
+      stdio: ["ignore", "ignore", "pipe"],
+      detached: true,
+    });
+    pixelProc.stderr?.on("data", (data: Buffer) => {
+      const line = data.toString().trim();
+      if (line.includes("Public URL") || line.includes("running at")) {
+        console.log("[PixelOffice]", line);
+      }
+    });
+    pixelProc.unref();
+    // Give it a moment to start + open ngrok tunnel
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
