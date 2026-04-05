@@ -161,18 +161,29 @@ async function checkFirstRun(): Promise<void> {
     return;
   }
 
-  console.log("[Listener] First run detected — triggering startup checklist via claude -p...");
-  console.log("[Listener] This will create Discord channels, post welcome messages, etc.");
+  console.log("");
+  console.log("[Listener] 🚀 First run detected!");
+  console.log("[Listener] Setting up your AI Office — this takes 1-2 minutes...");
+  console.log("[Listener]   • Creating Discord channels");
+  console.log("[Listener]   • Registering Leader agent");
+  console.log("[Listener]   • Sending welcome message to #general");
+  console.log("");
 
   try {
     const response = await runClaude(STARTUP_CHECKLIST_PROMPT);
+    console.log("");
+    console.log("[Listener] ✅ Setup complete! Check Discord #general for the welcome message.");
+    console.log("[Listener] You can now send messages in Discord — the bot will respond.");
+    console.log("");
     if (response) {
-      console.log("[Listener] Startup checklist result:", response.substring(0, 500));
+      console.log("[Listener] Leader output:", response.substring(0, 300));
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[Listener] First-run startup failed:", msg);
-    console.error("[Listener] You can retry by deleting ~/.ai-office/state/.onboarded and restarting.");
+    console.error("");
+    console.error("[Listener] ❌ First-run setup failed:", msg);
+    console.error("[Listener] To retry: delete ~/.ai-office/state/.onboarded and restart the listener.");
+    console.error("");
   }
 }
 
