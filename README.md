@@ -19,11 +19,13 @@ cd ai-office
 ```
 
 The setup script will:
-1. Check prerequisites (Node.js, npm, git, Claude Code, ngrok)
-2. Clone the repo (if not already inside)
-3. Install all dependencies and build TypeScript
+1. Clone the repo (if needed)
+2. Check prerequisites (Node.js, npm, git, Claude Code, ngrok)
+3. Install dependencies and build (server + client)
 4. Run the configuration wizard (office name, Discord bot, ngrok, starter pack)
-5. Start Pixel Office + launch the Leader agent
+5. Start the **Discord Listener daemon** in the background
+
+After setup, the bot is online in Discord. Send a message in `#general` — the Leader responds automatically. No need to open Claude Code.
 
 ### Updating
 
@@ -32,8 +34,6 @@ The setup script will:
 ```
 
 Pulls latest code, reinstalls dependencies, rebuilds — preserves your configuration.
-
-The Leader greets you in Discord `#general`, introduces the team, and suggests your first task.
 
 ## Prerequisites
 
@@ -47,26 +47,26 @@ The Leader greets you in Discord `#general`, introduces the team, and suggests y
 ## Architecture
 
 ```
-User ──→ Discord ──→ Leader (Opus)
-                        │
-                ┌───────┼───────┐
-                ▼       ▼       ▼
-            Worker   Worker   Worker  (Sonnet)
-                ▲       ▲       ▲
-                └───────┼───────┘
-                        │
-              Coordination MCP (SQLite)
-                        │
-                   Pixel Office UI
+User ──→ Discord #general
+              ↓
+         Listener Daemon (always online)
+              ↓
+         claude -p (per message)
+              ↓
+         Leader (Opus) ──→ Orchestrator ──→ Workers (Sonnet)
+              ↓                                  ↓
+         Coordination MCP (SQLite) ←─────────────┘
+              ↓
+         Pixel Office UI (ngrok)
 ```
 
 | Module | Purpose | Tools |
 |--------|---------|-------|
-| `discord-bot/` | Discord Bot + MCP Server | 16 tools |
+| `discord-bot/` | Discord Bot + MCP Server + **Listener Daemon** | 16 tools |
 | `coordination/` | Shared state, tasks, events, audit | 18 tools |
 | `orchestrator/` | Agent lifecycle CLI | 6 commands |
-| `pixel-office/` | Real-time visualization (Phaser.js) | — |
-| `setup/` | Configuration wizard | — |
+| `pixel-office/` | Real-time visualization (Phaser.js + ngrok) | — |
+| `setup/` | Configuration wizard (i18n) | — |
 | `roles/` | 71 role templates (YAML) | — |
 
 ## Starter Packs
@@ -94,15 +94,32 @@ User ──→ Discord ──→ Leader (Opus)
 
 See [docs/role-catalog.md](docs/role-catalog.md) for the complete catalog.
 
-## Pixel Office UI
+## Discord Listener Daemon
 
-Pixel Office starts automatically after setup. Or run manually:
+The listener is the core runtime — a standalone process that keeps the bot online:
 
-```bash
-cd pixel-office && npm run dev
+```
+User sends message in #general
+  → Listener receives it, adds ⏳ reaction
+  → Spawns claude -p with the message
+  → Leader processes, delegates to workers if needed
+  → Response posted back to Discord, ⏳ → ✅
 ```
 
-Open `http://localhost:3848` locally, or use the ngrok public URL (shown in Discord `#bot-status`).
+Management commands (printed after setup):
+- **View logs**: `tail -f discord-bot/listener.log`
+- **Stop**: `kill <PID>` (PID shown in setup output)
+- **Restart**: `node discord-bot/dist/listener.js`
+
+## Pixel Office UI
+
+Pixel Office starts automatically with the listener. Or run manually:
+
+```bash
+cd pixel-office && npx tsx server/index.ts
+```
+
+Open via ngrok public URL (shown in Discord `#bot-status`), or `http://localhost:3847` locally.
 
 Features:
 - **Agent sprites** with spawn/despawn animations, idle bobbing, busy typing indicator
