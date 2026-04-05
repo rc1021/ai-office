@@ -131,37 +131,27 @@ stty sane 2>/dev/null || true
 
 node setup/dist/wizard.js
 
-# ── Start Services ───────────────────────────────────────────────────────────
+# ── Done ─────────────────────────────────────────────────────────────────────
 
-echo ""
-echo "  Starting AI Office..."
-echo ""
-
-# Ensure we're in the project root
 PROJECT_DIR="$(pwd)"
-
-# Start Pixel Office in background
-if [ -d "pixel-office" ]; then
-  echo "  Starting Pixel Office server..."
-  (cd "$PROJECT_DIR/pixel-office" && npx tsx server/index.ts) &>/dev/null &
-  PIXEL_PID="$!"
-  sleep 2
-  if [ -n "$PIXEL_PID" ] && kill -0 "$PIXEL_PID" 2>/dev/null; then
-    echo "  [OK] Pixel Office running at http://localhost:${PIXEL_OFFICE_PORT:-3847}"
-  else
-    echo "  [WARN] Pixel Office failed to start (non-critical)"
-  fi
-fi
 
 echo ""
 echo "  ==================================="
 echo "    Setup Complete!"
 echo "  ==================================="
 echo ""
-echo "  Launching Leader agent..."
-echo "  (The Leader will greet you in Discord #general)"
+echo "  Next steps:"
 echo ""
-
-# Launch Claude Code in the project directory
-cd "$PROJECT_DIR"
-exec claude "Execute your Startup Checklist. This may be the first launch — check for the onboarded flag and run the Welcome Flow if needed."
+echo "  1. Start the Leader agent:"
+echo "     cd $PROJECT_DIR && claude"
+echo ""
+echo "  2. The Leader will greet you in Discord #general"
+echo ""
+if [ -f "$PROJECT_DIR/pixel-office/.env" ] && grep -q "NGROK_ENABLED=true" "$PROJECT_DIR/pixel-office/.env" 2>/dev/null; then
+echo "  3. Pixel Office will start automatically with ngrok"
+echo "     (public URL will be posted to Discord #bot-status)"
+else
+echo "  3. Start Pixel Office (optional):"
+echo "     cd $PROJECT_DIR/pixel-office && npm run dev"
+fi
+echo ""
