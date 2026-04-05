@@ -79,6 +79,7 @@ function runClaude(prompt: string): Promise<string> {
     const proc = spawn("claude", args, {
       cwd: PROJECT_DIR,
       env: { ...process.env },
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
     let output = "";
