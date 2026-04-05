@@ -18,19 +18,12 @@ if [ -f "CLAUDE.md" ] && [ -d "config" ] && [ -d "discord-bot" ]; then
   : # Already inside the repo
 elif [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/CLAUDE.md" ]; then
   cd "$INSTALL_DIR"
-  # If running via process substitution (bash <(curl ...)), re-exec from local file
-  # to ensure clean stdin/fd state for the interactive wizard
-  if [[ "${0:-}" == /dev/fd/* ]] || [[ "${0:-}" == /proc/self/fd/* ]]; then
-    exec bash ./setup.sh
-  fi
 else
   echo "  Cloning AI Office..."
   git clone "$REPO_URL" "$INSTALL_DIR" 2>&1 | sed 's/^/  /'
   cd "$INSTALL_DIR"
   echo "  [OK] Cloned to $(pwd)"
   echo ""
-  # Re-exec from the cloned local file for clean stdin/fd state
-  exec bash ./setup.sh
 fi
 
 # ── Prerequisites ─────────────────────────────────────────────────────────────
