@@ -12,8 +12,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = parseInt(process.env.PIXEL_OFFICE_PORT ?? "3847");
 
 // Load .env if present (for ngrok config)
-const envPath = path.join(__dirname, "..", "..", ".env");
-if (fs.existsSync(envPath)) {
+// Try pixel-office/.env (one level up from server/) then two levels up (from dist/server/)
+const envCandidates = [
+  path.join(__dirname, "..", ".env"),       // tsx: server/ → pixel-office/
+  path.join(__dirname, "..", "..", ".env"),  // compiled: dist/server/ → pixel-office/
+];
+const envPath = envCandidates.find((p) => fs.existsSync(p)) ?? "";
+if (envPath) {
   for (const line of fs.readFileSync(envPath, "utf-8").split("\n")) {
     const match = line.match(/^([A-Z_]+)=(.*)$/);
     if (match && !process.env[match[1]]) {
