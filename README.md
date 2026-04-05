@@ -189,4 +189,4 @@ docker compose run setup          # Configuration wizard
 
 ## License
 
-MIT
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — free for personal and non-commercial use. Commercial use requires separate licensing.
