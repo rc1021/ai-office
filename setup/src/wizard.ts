@@ -210,9 +210,16 @@ async function main(): Promise<void> {
 
     console.log(`\n  ${t("hint.ngrok_auth")}\n`);
     pixelAuthUser = await ask(t("prompt.pixel_user"), "admin");
-    pixelAuthPass = await ask(t("prompt.pixel_pass"));
-    if (!pixelAuthPass) {
-      console.log(`  ${t("warn.no_pass")}\n`);
+    while (true) {
+      pixelAuthPass = await ask(t("prompt.pixel_pass"));
+      if (!pixelAuthPass) {
+        console.log(`  ${t("warn.no_pass")}\n`);
+        break;
+      } else if (pixelAuthPass.length < 8) {
+        console.log(`  [!] ngrok requires at least 8 characters. Please try again.\n`);
+      } else {
+        break;
+      }
     }
   }
 
