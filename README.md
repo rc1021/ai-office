@@ -2,35 +2,58 @@
 
 A multi-agent virtual office powered by Claude Code. "Hire" AI agents with specialized roles that collaborate via Discord to accomplish complex tasks under human supervision.
 
-## Prerequisites
-
-- **Node.js** >= 22
-- **Claude Code** (Max subscription recommended)
-- **Discord Bot** — [create one here](https://discord.com/developers/applications)
-  - Enable **MESSAGE CONTENT** intent
-  - Invite the bot to your server with admin permissions
+**71 role templates** across 22 industries. **34 MCP tools**. **77 automated tests**. End-to-end verified.
 
 ## Quick Start
 
 ```bash
-git clone https://github.com/your-org/ai-office.git
+git clone https://github.com/rc1021/ai-office.git
 cd ai-office
 ./setup.sh
 ```
 
-The setup script will:
-1. Check prerequisites
-2. Install dependencies for all sub-projects
-3. Build all TypeScript
-4. Run the interactive configuration wizard
+The setup script checks prerequisites, installs dependencies, builds TypeScript, and runs the configuration wizard.
 
-After setup, open Claude Code:
+After setup:
 
 ```bash
 claude
 ```
 
-The Leader agent will initialize and greet you in Discord `#general`.
+The Leader agent initializes and greets you in Discord `#general`.
+
+## Prerequisites
+
+- **Node.js** >= 22
+- **Claude Code** (Max subscription recommended for parallel workers)
+- **Discord Bot** — [create one here](https://discord.com/developers/applications)
+  - Enable **MESSAGE CONTENT** intent
+  - Invite the bot to your server with admin permissions
+
+## Architecture
+
+```
+User ──→ Discord ──→ Leader (Opus)
+                        │
+                ┌───────┼───────┐
+                ▼       ▼       ▼
+            Worker   Worker   Worker  (Sonnet)
+                ▲       ▲       ▲
+                └───────┼───────┘
+                        │
+              Coordination MCP (SQLite)
+                        │
+                   Pixel Office UI
+```
+
+| Module | Purpose | Tools |
+|--------|---------|-------|
+| `discord-bot/` | Discord Bot + MCP Server | 16 tools |
+| `coordination/` | Shared state, tasks, events, audit | 18 tools |
+| `orchestrator/` | Agent lifecycle CLI | 6 commands |
+| `pixel-office/` | Real-time visualization (Phaser.js) | — |
+| `setup/` | Configuration wizard | — |
+| `roles/` | 71 role templates (YAML) | — |
 
 ## Starter Packs
 
@@ -39,51 +62,66 @@ The Leader agent will initialize and greet you in Discord `#general`.
 | Solo Creator | Leader only | Exploring AI Office |
 | Dev Team | PM + Software Engineer | Building software |
 | Startup MVP | PM + Engineer + Research Analyst | Rapid prototyping |
-| Research Lab | Research Analyst | Deep research & analysis |
+| Research Lab | Research Analyst | Deep research |
+| Full Dev Team | PM + Engineer + QA + DevOps + Designer | Complete dev team |
+| Marketing Team | Marketing Manager + Content + Community | Marketing ops |
+| Finance Office | Accountant + Financial Analyst | Bookkeeping & forecasting |
+| E-Commerce Shop | Product Manager + Marketing + Content + CS | E-commerce ops |
+| Legal Firm | Legal Advisor + Admin Assistant | Legal operations |
 
-## Architecture
+## Role Templates
 
-```
-ai-office/
-  discord-bot/      # Discord Bot + MCP Server (16 tools)
-  coordination/     # Coordination MCP Server (18 tools)
-  orchestrator/     # Agent lifecycle CLI (spawn/stop workers)
-  pixel-office/     # Real-time visualization (Phaser.js)
-  setup/            # Configuration wizard
-  config/           # Office + channel + starter pack config
-  roles/            # Role templates (YAML)
-  agents/           # Leader + Worker CLAUDE.md templates
-```
+71 roles across 4 categories:
 
-- **Leader** (Opus) receives user requests, delegates to workers
-- **Workers** (Sonnet) execute specialized tasks
-- **Discord** is the human-facing UI layer
-- **Coordination MCP** handles agent-to-agent state
-- **Pixel Office** visualizes the office in real-time
+- **1 Default** — Leader (always present)
+- **20 General** — PM, Engineer, Analyst, Designer, QA, DevOps, etc.
+- **45 Industry** — Tech, Finance, E-Commerce, Healthcare, Legal, Education, Media, Gaming, Crypto, Government, and more
+- **5 Emerging** — AI Prompt Engineer, ESG Analyst, Crisis PR, Accessibility Consultant, Personal Brand
+
+See [docs/role-catalog.md](docs/role-catalog.md) for the complete catalog.
 
 ## Pixel Office UI
-
-Start the visualization dashboard:
 
 ```bash
 cd pixel-office && npm run dev
 ```
 
-Open `http://localhost:3848` to see your agents in a pixel art office.
+Open `http://localhost:3848` — pixel art office with real-time agent visualization, task assignment lines, speech bubbles, and interactive panels.
+
+## Security
+
+- **OutputGate** — 4-layer check: denied scopes → write scopes → clearance → data classification
+- **Identity Tokens** — HMAC-SHA256 signed, session-scoped, auto-expiry
+- **Token Middleware** — Coordination MCP enforces agent identity on every tool call
+- **Audit Trail** — Hash-chained, tamper-evident log of all actions
+- **RBAC** — 4 clearance levels (PUBLIC → RESTRICTED), fine-grained scope patterns
+
+See [docs/security-model.md](docs/security-model.md) for details.
+
+## Testing
+
+```bash
+cd coordination && npm test    # 45 tests
+cd discord-bot && npm test     # 26 tests
+cd orchestrator && npm test    # 6 tests
+```
 
 ## Docker
 
-Build and run the Pixel Office UI:
-
 ```bash
-docker compose up pixel-office
+docker compose up pixel-office    # Pixel Office UI
+docker compose run setup          # Configuration wizard
 ```
 
-Run the setup wizard in Docker:
+## Documentation
 
-```bash
-docker compose run setup
-```
+| Document | Description |
+|----------|-------------|
+| [Getting Started](docs/getting-started.md) | Installation, setup, first run |
+| [Architecture](docs/architecture.md) | System design, data flow, agent lifecycle |
+| [Security Model](docs/security-model.md) | Authentication, authorization, audit |
+| [API Reference](docs/api-reference.md) | 34 MCP tools + CLI commands |
+| [Role Catalog](docs/role-catalog.md) | All 71 role templates |
 
 ## Configuration
 
@@ -94,14 +132,6 @@ docker compose run setup
 | `config/starter-packs.yaml` | Pre-configured role combinations |
 | `config/active-roles.yaml` | Currently active roles (written by wizard) |
 | `.mcp.json` | MCP server config for Claude Code |
-| `discord-bot/.env` | Discord bot credentials |
-
-## Security
-
-- **OutputGate**: Scope + clearance + data classification checks on every Discord message
-- **Identity Tokens**: HMAC-SHA256 signed tokens for agent authentication
-- **Audit Trail**: Hash-chained, tamper-evident log of all agent actions
-- **Role Scopes**: Fine-grained permission model per role template
 
 ## License
 
