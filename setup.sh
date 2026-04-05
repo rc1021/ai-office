@@ -141,12 +141,14 @@ echo "[5/5] Starting Discord Listener daemon..."
 LISTENER_LOG="$PROJECT_DIR/discord-bot/listener.log"
 
 # Start listener in background, redirect all output to log file
+set +u  # $! is unset before first background job
 node "$PROJECT_DIR/discord-bot/dist/listener.js" >>"$LISTENER_LOG" 2>&1 &
-LISTENER_PID="${!:-0}"
+LISTENER_PID="$!"
+set -u
 
 # Brief pause to detect immediate crash
 sleep 2
-if [ "$LISTENER_PID" -gt 0 ] 2>/dev/null && kill -0 "$LISTENER_PID" 2>/dev/null; then
+if kill -0 "$LISTENER_PID" 2>/dev/null; then
   echo "  [OK] Discord Listener started (PID $LISTENER_PID)"
   echo "  Log: $LISTENER_LOG"
 else
