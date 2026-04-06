@@ -103,6 +103,35 @@ User ──→ Discord #general
 
 See [docs/role-catalog.md](docs/role-catalog.md) for the complete catalog.
 
+## Worker Delegation
+
+Leader can spawn workers via the **Agent tool** directly from Discord:
+
+```
+User: "研究蝦皮 API 的聊天功能"
+  → Leader spawns research-analyst (Sonnet) via Agent tool
+  → Worker executes, reports back via coordination MCP
+  → Leader reviews output, posts results to #general
+```
+
+- Workers use **Sonnet 4.6** (cost-efficient), Leader uses **Opus 4.6**
+- Parallel spawning supported (e.g., 3 workers for brainstorming)
+- Context preserved across messages via `task_checkpoint` / `task_resume`
+
+## Event Bridge + Heartbeat
+
+The listener daemon runs background subsystems:
+
+- **Event Bridge** — Polls coordination DB every 3s, routes events to Discord channels:
+  - `task.created/completed/failed` → `#task-board`
+  - `anomaly.reported` → `#alerts`
+  - `agent.online/offline` → `#bot-status` + `#config`
+  - `audit_log` entries → `#audit-log`
+- **Heartbeat** — Periodic health monitoring:
+  - Every 5 min: check Pixel Office + DB health, auto-restart if needed
+  - Every 30 min: system status embed to `#bot-status`
+  - Daily at 08:30 (user timezone): generate daily brief to `#daily-brief`
+
 ## Discord Listener Daemon
 
 The listener is the core runtime — a standalone process that keeps the bot online:
@@ -132,11 +161,14 @@ cd pixel-office && npx tsx server/index.ts
 Open via ngrok public URL (shown in Discord `#bot-status`), or `http://localhost:3847` locally.
 
 Features:
-- **Agent sprites** with spawn/despawn animations, idle bobbing, busy typing indicator
+- **Agent sprites** with spawn portal VFX, idle bobbing, busy typing indicator
+- **Heartbeat health ring** — color-coded pulse around each agent (green/yellow/orange/red by freshness)
+- **Task progress ring** — arc showing step completion % on busy agents
 - **Task assignment lines** — dashed lines from Leader to workers for active tasks
 - **Agent panel** — click any agent to see details, active tasks, stats (or press `Escape` to close)
 - **Task Board** — toggle with `T` key, shows in-progress/pending/completed tasks with progress bars
-- **Message Feed** — toggle with `M` key, streams all agent-to-agent events with agent/type filters
+- **Message Feed** — toggle with `M` key, streams events with Discord channel badges per event
+- **Brainstorm Panel** — toggle with `B` key, shows brainstorming sessions grouped by round
 - **Speech bubbles** — agents show status change messages ("Working...", "Done!", "Online")
 
 ## Remote Access (ngrok)
