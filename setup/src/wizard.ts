@@ -68,6 +68,11 @@ const i18n: Record<string, Record<Lang, string>> = {
   "sum.ngrok":          { "zh-TW": "ngrok",     en: "ngrok",        ja: "ngrok" },
   "sum.token_ok":       { "zh-TW": "已提供 Token", en: "Token provided", ja: "トークン設定済み" },
   "sum.token_later":    { "zh-TW": "稍後設定",   en: "Not set (configure later)", ja: "後で設定" },
+  "discord.checking":   { "zh-TW": "正在驗證 Discord Bot 連線...", en: "Verifying Discord Bot connection...", ja: "Discord Bot接続を確認中..." },
+  "discord.ok":         { "zh-TW": "✅ Bot 已連線到伺服器", en: "✅ Bot connected to server", ja: "✅ Botがサーバーに接続済み" },
+  "discord.bad_token":  { "zh-TW": "❌ Token 無效，請確認後重新輸入", en: "❌ Invalid token. Please check and re-enter", ja: "❌ トークンが無効です。確認して再入力してください" },
+  "discord.no_guild":   { "zh-TW": "❌ Bot 不在此伺服器中（Server ID 錯誤，或尚未邀請 Bot）", en: "❌ Bot is not in this server (wrong Guild ID or bot not invited)", ja: "❌ Botがこのサーバーにいません（サーバーIDが間違いか、Bot未招待）" },
+  "discord.net_error":  { "zh-TW": "⚠️  無法連線 Discord API（網路問題？）", en: "⚠️  Cannot reach Discord API (network issue?)", ja: "⚠️  Discord APIに接続できません（ネットワーク問題？）" },
   "sum.enabled":        { "zh-TW": "已啟用",     en: "Enabled",      ja: "有効" },
   "sum.disabled":       { "zh-TW": "未啟用",     en: "Disabled",     ja: "無効" },
 };
@@ -116,6 +121,46 @@ function detectTimezone(): string {
     return Intl.DateTimeFormat().resolvedOptions().timeZone;
   } catch {
     return "UTC";
+  }
+}
+
+// ─── Discord Validation ─────────────────────────────────────────────────────
+
+/**
+ * Verify the Discord bot token is valid and the bot is in the specified guild.
+ * Uses the Discord REST API directly (no discord.js dependency needed).
+ */
+async function validateDiscord(token: string, guildId: string): Promise<boolean> {
+  if (!token || !guildId) return true; // Skip validation if either is empty (user will set later)
+
+  console.log(`\n  ${t("discord.checking")}`);
+
+  try {
+    // 1. Verify token by fetching bot user info
+    const userRes = await fetch("https://discord.com/api/v10/users/@me", {
+      headers: { Authorization: `Bot ${token}` },
+    });
+    if (!userRes.ok) {
+      console.log(`  ${t("discord.bad_token")}\n`);
+      return false;
+    }
+    const botUser = await userRes.json() as { username: string };
+
+    // 2. Verify bot is in the specified guild
+    const guildRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}`, {
+      headers: { Authorization: `Bot ${token}` },
+    });
+    if (!guildRes.ok) {
+      console.log(`  ${t("discord.no_guild")}\n`);
+      return false;
+    }
+    const guild = await guildRes.json() as { name: string };
+
+    console.log(`  ${t("discord.ok")}: ${botUser.username} → ${guild.name}\n`);
+    return true;
+  } catch {
+    console.log(`  ${t("discord.net_error")}\n`);
+    return true; // Don't block setup on network issues
   }
 }
 
@@ -170,15 +215,26 @@ async function main(): Promise<void> {
   console.log(`  ${t("discord.step6")}`);
   console.log("");
 
-  const discordToken = await ask(t("prompt.token"));
+  let discordToken = await ask(t("prompt.token"));
   if (!discordToken) {
     console.log(`\n  ${t("warn.no_token")}\n`);
   }
 
   console.log(`\n  ${t("discord.guild_hint")}\n`);
-  const guildId = await ask(t("prompt.guild"));
+  let guildId = await ask(t("prompt.guild"));
   if (!guildId) {
     console.log(`  ${t("warn.no_guild")}\n`);
+  }
+
+  // Validate Discord connection
+  while (discordToken && guildId) {
+    const valid = await validateDiscord(discordToken, guildId);
+    if (valid) break;
+    const retry = await ask("Retry? (y/N)", "N");
+    if (retry.toLowerCase() !== "y") break;
+    discordToken = await ask(t("prompt.token"), discordToken);
+    console.log(`\n  ${t("discord.guild_hint")}\n`);
+    guildId = await ask(t("prompt.guild"), guildId);
   }
 
   // 5. Starter pack
