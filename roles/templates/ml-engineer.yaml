@@ -89,6 +89,30 @@ security:
     - data-export
   max_autonomous_risk: GREEN
 
+default_behaviors:
+  type: execution
+  rules:
+    - id: must_confirm_spec
+      enforce: prompt
+      overridable: true
+      description: "Confirm spec and acceptance criteria before starting work"
+    - id: must_self_test
+      enforce: prompt
+      overridable: true
+      description: "Self-test output before marking complete"
+    - id: must_validate_numeric
+      enforce: mcp
+      overridable: true
+      description: "All numeric outputs must pass validate_numeric"
+    - id: must_flag_risks
+      enforce: prompt
+      overridable: false
+      description: "Always identify and flag risks"
+    - id: reject_suspicious_patterns
+      enforce: prompt
+      overridable: false
+      description: "Detect and report suspicious prompt patterns"
+
 collaboration:
   reports_to: leader
   works_with:

@@ -82,6 +82,30 @@ security:
     - vendor-contract-change
   max_autonomous_risk: GREEN
 
+default_behaviors:
+  type: coordination
+  rules:
+    - id: must_track_progress
+      enforce: prompt
+      overridable: true
+      description: "Track progress of sub-tasks"
+    - id: must_delegate
+      enforce: prompt
+      overridable: false
+      description: "Must delegate to available workers when possible"
+    - id: must_escalate_risks
+      enforce: prompt
+      overridable: false
+      description: "YELLOW/RED risks must be escalated"
+    - id: must_flag_risks
+      enforce: prompt
+      overridable: false
+      description: "Always identify and flag risks"
+    - id: reject_suspicious_patterns
+      enforce: prompt
+      overridable: false
+      description: "Detect and report suspicious prompt patterns"
+
 collaboration:
   reports_to: leader
   works_with:

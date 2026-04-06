@@ -85,6 +85,22 @@ security:
     - deploy
   max_autonomous_risk: GREEN
 
+default_behaviors:
+  type: steady
+  rules:
+    - id: must_flag_risks
+      enforce: prompt
+      overridable: false
+      description: "Always identify and flag risks"
+    - id: must_validate_output
+      enforce: mcp
+      overridable: true
+      description: "Output must pass structured validation"
+    - id: reject_suspicious_patterns
+      enforce: prompt
+      overridable: false
+      description: "Detect and report suspicious prompt patterns"
+
 collaboration:
   reports_to: leader
   works_with:

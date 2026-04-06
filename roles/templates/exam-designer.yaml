@@ -84,6 +84,22 @@ security:
     - exam-paper-release
   max_autonomous_risk: GREEN
 
+default_behaviors:
+  type: execution
+  rules:
+    - id: must_confirm_spec
+      enforce: prompt
+      overridable: true
+      description: "Confirm spec and acceptance criteria before starting work"
+    - id: must_flag_risks
+      enforce: prompt
+      overridable: false
+      description: "Always identify and flag risks"
+    - id: reject_suspicious_patterns
+      enforce: prompt
+      overridable: false
+      description: "Detect and report suspicious prompt patterns"
+
 collaboration:
   reports_to: leader
   works_with:

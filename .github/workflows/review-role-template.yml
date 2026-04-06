@@ -1,0 +1,28 @@
+name: Review Role Template PR
+
+on:
+  pull_request:
+    paths:
+      - 'roles/templates/**/*.yaml'
+      - 'roles/schemas/**'
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install js-yaml ajv
+
+      - name: Validate role templates
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/review-role-template.js

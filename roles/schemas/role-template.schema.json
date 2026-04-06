@@ -61,7 +61,8 @@
         "design",
         "operations",
         "sales",
-        "support"
+        "support",
+        "audit"
       ],
       "description": "Department this role belongs to (determines dynamic channel)"
     },
@@ -239,6 +240,29 @@
       "items": { "type": "string" },
       "description": "Which starter packs include this role",
       "examples": [["startup-mvp", "dev-team"]]
+    },
+    "default_behaviors": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["pioneering", "steady", "execution", "coordination"]
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "enforce": { "type": "string", "enum": ["prompt", "mcp"] },
+              "overridable": { "type": "boolean" },
+              "description": { "type": "string" }
+            },
+            "required": ["id", "enforce", "overridable"]
+          }
+        }
+      },
+      "required": ["type", "rules"]
     },
     "metadata": {
       "type": "object",
