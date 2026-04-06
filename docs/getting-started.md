@@ -52,12 +52,14 @@ cd ai-office
 ./setup.sh
 ```
 
-The `setup.sh` script performs four steps automatically:
+The `setup.sh` script performs six steps automatically:
 
 1. **Checks prerequisites** — verifies Node.js >= 22, npm, and Docker (optional).
 2. **Installs dependencies** — runs `npm install` in `discord-bot`, `coordination`, `orchestrator`, `pixel-office`, and `setup`.
 3. **Builds TypeScript** — compiles all packages to `dist/`.
 4. **Launches the configuration wizard** — interactive prompts to create your office config (see [Section 4](#4-configuration-wizard)).
+5. **Stops old processes** — kills any existing listener/Pixel Office daemons to prevent duplicates.
+6. **Starts the Discord Listener daemon** — background process that keeps the bot online.
 
 If any step fails, the script exits with an error message indicating which package failed. Fix the issue and re-run `./setup.sh`.
 
@@ -298,3 +300,13 @@ This is idempotent — it is safe to run multiple times.
 1. Verify `.mcp.json` exists in the project root. If missing, re-run `node setup/dist/wizard.js`.
 2. Check that `discord-bot/dist/` and `coordination/dist/` exist. If not, run `./setup.sh` to build.
 3. In Claude Code, use `/mcp` to view the MCP server connection status and error details.
+
+### Uninstalling
+
+To stop all processes and clean up:
+
+```sh
+./uninstall.sh
+```
+
+This stops the listener and Pixel Office daemons, removes state files, build outputs, and `node_modules`. Your `.env` config files are preserved — run `./setup.sh` to reinstall.

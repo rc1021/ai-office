@@ -74,6 +74,54 @@ fi
 
 echo "  [OK] All builds successful"
 
+# ── Stop old processes & restart listener ────────────────────────────────────
+
+PROJECT_DIR="$(pwd)"
+
+echo ""
+echo "[4/4] Restarting services..."
+
+# Stop old Discord Listener
+LISTENER_PID_FILE="$PROJECT_DIR/discord-bot/listener.pid"
+if [ -f "$LISTENER_PID_FILE" ]; then
+  OLD_PID=$(cat "$LISTENER_PID_FILE")
+  if kill -0 "$OLD_PID" 2>/dev/null; then
+    kill "$OLD_PID" 2>/dev/null && echo "  [OK] Stopped old listener (PID $OLD_PID)"
+    sleep 1
+  fi
+  rm -f "$LISTENER_PID_FILE"
+fi
+
+# Stop old Pixel Office
+PIXEL_PID_FILE="$PROJECT_DIR/pixel-office/pixel.pid"
+if [ -f "$PIXEL_PID_FILE" ]; then
+  OLD_PID=$(cat "$PIXEL_PID_FILE")
+  if kill -0 "$OLD_PID" 2>/dev/null; then
+    kill "$OLD_PID" 2>/dev/null && echo "  [OK] Stopped old pixel-office (PID $OLD_PID)"
+    sleep 1
+  fi
+  rm -f "$PIXEL_PID_FILE"
+fi
+
+pkill -f "$PROJECT_DIR/pixel-office" 2>/dev/null && echo "  [OK] Cleaned up stale pixel-office processes" || true
+
+# Start new listener
+LISTENER_LOG="$PROJECT_DIR/discord-bot/listener.log"
+
+set +u
+node "$PROJECT_DIR/discord-bot/dist/listener.js" >>"$LISTENER_LOG" 2>&1 &
+LISTENER_PID="$!"
+set -u
+
+sleep 2
+if kill -0 "$LISTENER_PID" 2>/dev/null; then
+  echo "$LISTENER_PID" > "$PROJECT_DIR/discord-bot/listener.pid"
+  echo "  [OK] Discord Listener restarted (PID $LISTENER_PID)"
+else
+  echo "  [WARN] Discord Listener may have failed to start."
+  echo "         Check log: $LISTENER_LOG"
+fi
+
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo ""
@@ -82,7 +130,11 @@ echo "    Update Complete!"
 echo "  ==================================="
 echo ""
 echo "  Your configuration is preserved."
-echo "  Restart AI Office:"
-echo "    ./setup.sh    (to restart Pixel Office + Leader)"
-echo "    or manually:  cd pixel-office && npm run dev"
+echo "  Discord Listener has been restarted with the latest code."
+echo ""
+echo "  • View listener logs:"
+echo "     tail -f $LISTENER_LOG"
+echo ""
+echo "  • Stop the listener:"
+echo "     kill $LISTENER_PID"
 echo ""

@@ -144,10 +144,42 @@ node setup/dist/wizard.js || {
   exit 0
 }
 
+# ── Stop old processes ────────────────────────────────────────────────────────
+
+echo ""
+echo "[5/6] Stopping old processes (if any)..."
+
+# Stop old Discord Listener
+LISTENER_PID_FILE="$PROJECT_DIR/discord-bot/listener.pid"
+if [ -f "$LISTENER_PID_FILE" ]; then
+  OLD_PID=$(cat "$LISTENER_PID_FILE")
+  if kill -0 "$OLD_PID" 2>/dev/null; then
+    kill "$OLD_PID" 2>/dev/null && echo "  [OK] Stopped old listener (PID $OLD_PID)"
+    sleep 1
+  fi
+  rm -f "$LISTENER_PID_FILE"
+fi
+
+# Stop old Pixel Office
+PIXEL_PID_FILE="$PROJECT_DIR/pixel-office/pixel.pid"
+if [ -f "$PIXEL_PID_FILE" ]; then
+  OLD_PID=$(cat "$PIXEL_PID_FILE")
+  if kill -0 "$OLD_PID" 2>/dev/null; then
+    kill "$OLD_PID" 2>/dev/null && echo "  [OK] Stopped old pixel-office (PID $OLD_PID)"
+    sleep 1
+  fi
+  rm -f "$PIXEL_PID_FILE"
+fi
+
+# Kill any remaining pixel-office processes for THIS project
+pkill -f "$PROJECT_DIR/pixel-office" 2>/dev/null && echo "  [OK] Cleaned up stale pixel-office processes" || true
+
+echo "  [OK] Old processes cleaned up"
+
 # ── Start Discord Listener ────────────────────────────────────────────────────
 
 echo ""
-echo "[5/5] Starting Discord Listener daemon..."
+echo "[6/6] Starting Discord Listener daemon..."
 
 LISTENER_LOG="$PROJECT_DIR/discord-bot/listener.log"
 

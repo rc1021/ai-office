@@ -7,14 +7,72 @@ import {
   Events,
   ComponentType,
   Message,
+  Client,
 } from "discord.js";
 import { randomUUID } from "crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { findTextChannel } from "./channel-manager.js";
 import { ApprovalRequest, ApprovalStatus, RiskLevel } from "./types.js";
 import { getDiscordClient } from "./discord-client.js";
 
-// In-memory store for approvals
-const approvals = new Map<string, ApprovalRequest>();
+// ── File-based approval persistence ─────────────────────────────────────────
+// Approvals are stored on disk so both the MCP server (transient) and the
+// listener daemon (persistent) can access them.
+
+function getApprovalsFilePath(): string {
+  // Walk up from this file to find the project root
+  // At runtime: discord-bot/dist/approval-manager.js → project root is ../..
+  const distDir = path.dirname(new URL(import.meta.url).pathname);
+  const projectDir = path.resolve(distDir, "..", "..");
+  const stateDir = path.join(projectDir, ".ai-office", "state");
+  fs.mkdirSync(stateDir, { recursive: true });
+  return path.join(stateDir, "approvals.json");
+}
+
+interface SerializedApproval {
+  id: string;
+  channelName: string;
+  action: string;
+  description: string;
+  riskLevel: RiskLevel;
+  status: ApprovalStatus;
+  messageId: string | null;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolvedBy: string | null;
+}
+
+function loadApprovals(): Map<string, ApprovalRequest> {
+  const filePath = getApprovalsFilePath();
+  if (!fs.existsSync(filePath)) return new Map();
+  try {
+    const raw: SerializedApproval[] = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+    const map = new Map<string, ApprovalRequest>();
+    for (const item of raw) {
+      map.set(item.id, {
+        ...item,
+        createdAt: new Date(item.createdAt),
+        resolvedAt: item.resolvedAt ? new Date(item.resolvedAt) : null,
+      });
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function saveApprovals(approvals: Map<string, ApprovalRequest>): void {
+  const filePath = getApprovalsFilePath();
+  const arr: SerializedApproval[] = Array.from(approvals.values()).map((a) => ({
+    ...a,
+    createdAt: a.createdAt.toISOString(),
+    resolvedAt: a.resolvedAt ? a.resolvedAt.toISOString() : null,
+  }));
+  // Keep only the last 100 approvals to avoid unbounded growth
+  const trimmed = arr.slice(-100);
+  fs.writeFileSync(filePath, JSON.stringify(trimmed, null, 2), "utf-8");
+}
 
 function generateApprovalId(): string {
   return `approval-${randomUUID()}`;
@@ -125,6 +183,7 @@ export async function createApproval(
     resolvedBy: null,
   };
 
+  const approvals = loadApprovals();
   approvals.set(approvalId, approval);
 
   const embed = buildApprovalEmbed(approval);
@@ -137,12 +196,14 @@ export async function createApproval(
 
   approval.messageId = message.id;
   approvals.set(approvalId, approval);
+  saveApprovals(approvals);
 
   console.log(`[ApprovalManager] Created approval ${approvalId} in #${channelName} (risk: ${riskLevel})`);
   return approval;
 }
 
 export function checkApproval(approvalId: string): ApprovalRequest {
+  const approvals = loadApprovals();
   const approval = approvals.get(approvalId);
   if (!approval) {
     throw new Error(`Approval "${approvalId}" not found.`);
@@ -151,6 +212,7 @@ export function checkApproval(approvalId: string): ApprovalRequest {
 }
 
 export function listApprovals(): ApprovalRequest[] {
+  const approvals = loadApprovals();
   return Array.from(approvals.values()).sort(
     (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
   );
@@ -175,8 +237,13 @@ async function updateApprovalMessage(approval: ApprovalRequest): Promise<void> {
   }
 }
 
-export function registerApprovalInteractionHandler(): void {
-  const client = getDiscordClient();
+/**
+ * Register the approval button interaction handler on a Discord client.
+ * Can be called with any Client instance — the MCP server's or the listener's.
+ * If no client is provided, falls back to the shared singleton.
+ */
+export function registerApprovalInteractionHandler(externalClient?: Client): void {
+  const client = externalClient ?? getDiscordClient();
 
   client.on(Events.InteractionCreate, async (interaction) => {
     if (!interaction.isButton()) return;
@@ -188,28 +255,35 @@ export function registerApprovalInteractionHandler(): void {
     if (parts.length < 3) return;
 
     const [, action, approvalId] = parts;
+
+    // Acknowledge immediately to avoid the 3-second Discord timeout
+    try {
+      await interaction.deferReply({ ephemeral: action === "preview" });
+    } catch (err) {
+      console.error("[ApprovalManager] Failed to defer interaction:", err);
+      return;
+    }
+
+    const approvals = loadApprovals();
     const approval = approvals.get(approvalId);
 
     if (!approval) {
-      await interaction.reply({
+      await interaction.editReply({
         content: `Approval \`${approvalId}\` not found or expired.`,
-        ephemeral: true,
       });
       return;
     }
 
     if (action === "preview") {
-      await interaction.reply({
+      await interaction.editReply({
         content: `**Preview for Approval \`${approvalId}\`**\n**Action:** ${approval.action}\n**Description:** ${approval.description}\n**Risk:** ${getRiskEmoji(approval.riskLevel)} ${approval.riskLevel}`,
-        ephemeral: true,
       });
       return;
     }
 
     if (approval.status !== "PENDING") {
-      await interaction.reply({
+      await interaction.editReply({
         content: `This approval has already been ${approval.status.toLowerCase()}.`,
-        ephemeral: true,
       });
       return;
     }
@@ -219,9 +293,10 @@ export function registerApprovalInteractionHandler(): void {
     approval.resolvedAt = new Date();
     approval.resolvedBy = interaction.user.username;
     approvals.set(approvalId, approval);
+    saveApprovals(approvals);
 
     const emoji = newStatus === "APPROVED" ? "✅" : "❌";
-    await interaction.reply({
+    await interaction.editReply({
       content: `${emoji} Approval \`${approvalId}\` has been **${newStatus}** by ${interaction.user.username}.`,
     });
 

@@ -23,7 +23,8 @@ The setup script will:
 2. Check prerequisites (Node.js, npm, git, Claude Code, ngrok)
 3. Install dependencies and build (server + client)
 4. Run the configuration wizard (office name, Discord bot, ngrok, starter pack)
-5. Start the **Discord Listener daemon** in the background
+5. Stop old processes (if any — prevents duplicate daemons)
+6. Start the **Discord Listener daemon** in the background
 
 After setup, the bot is online in Discord. Send a message in `#general` — the Leader responds automatically. No need to open Claude Code.
 
@@ -33,7 +34,15 @@ After setup, the bot is online in Discord. Send a message in `#general` — the 
 ./update.sh
 ```
 
-Pulls latest code, reinstalls dependencies, rebuilds — preserves your configuration.
+Pulls latest code, reinstalls dependencies, rebuilds, and **restarts the listener** — preserves your configuration.
+
+### Uninstalling
+
+```bash
+./uninstall.sh
+```
+
+Stops all processes (listener + Pixel Office), removes state/build/node_modules. Your `.env` config files are preserved for easy reinstall.
 
 ## Prerequisites
 
@@ -100,10 +109,11 @@ The listener is the core runtime — a standalone process that keeps the bot onl
 
 ```
 User sends message in #general
-  → Listener receives it, adds ⏳ reaction
+  → Listener queues it (one at a time), adds ⏳ reaction
   → Spawns claude -p with the message
   → Leader processes, delegates to workers if needed
-  → Response posted back to Discord, ⏳ → ✅
+  → Leader responds via MCP send_message, ⏳ → ✅
+  → Next queued message starts processing
 ```
 
 Management commands (printed after setup):

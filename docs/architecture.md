@@ -93,7 +93,7 @@
 - `src/agent-registry.ts` — Resolves `agent_id` → security profile by loading role YAML
 - `src/throttle-manager.ts` — Rate limiting: buffer, reject, embed-edit strategies per channel
 - `src/department-manager.ts` — Auto-creates `dept-{name}` channels on agent registration
-- `src/approval-manager.ts` — In-memory approval state; Discord buttons resolve to approved/rejected
+- `src/approval-manager.ts` — File-based approval state (JSON); Discord buttons resolve to approved/rejected via deferred interaction replies
 - `src/setup-server.ts` — Idempotent setup of 11 fixed channels across 4 categories
 
 ### coordination

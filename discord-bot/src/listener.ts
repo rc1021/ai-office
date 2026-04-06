@@ -30,6 +30,8 @@ import {
   TextChannel,
   Message,
 } from "discord.js";
+import { registerApprovalInteractionHandler } from "./approval-manager.js";
+import { setDiscordClient } from "./discord-client.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -185,21 +187,47 @@ async function checkFirstRun(): Promise<void> {
   }
 }
 
-// ── Handle incoming user message ──────────────────────────────────────────────
+// ── Message Queue — process one message at a time ────────────────────────────
 
-async function handleMessage(message: Message): Promise<void> {
-  // Safety checks
+const messageQueue: Message[] = [];
+let processing = false;
+
+async function enqueueMessage(message: Message): Promise<void> {
+  // Safety checks (fast, before queuing)
   if (message.author.bot) return;
   if (!(message.channel instanceof TextChannel)) return;
   if (message.channel.name !== GENERAL_CHANNEL) return;
+  if (!message.content.trim()) return;
 
+  messageQueue.push(message);
+  console.log(`[Listener] Queued message from ${message.author.username} (queue size: ${messageQueue.length})`);
+
+  if (!processing) {
+    await drainQueue();
+  }
+}
+
+async function drainQueue(): Promise<void> {
+  processing = true;
+  while (messageQueue.length > 0) {
+    const msg = messageQueue.shift()!;
+    try {
+      await handleMessage(msg);
+    } catch (err) {
+      console.error("[Listener] Unhandled error in handleMessage:", err);
+    }
+  }
+  processing = false;
+}
+
+// ── Handle incoming user message ──────────────────────────────────────────────
+
+async function handleMessage(message: Message): Promise<void> {
   const userContent = message.content.trim();
-  if (!userContent) return;
-
   const channel = message.channel as TextChannel;
 
   console.log(
-    `[Listener] Message from ${message.author.username}: ${userContent.substring(0, 80)}`
+    `[Listener] Processing message from ${message.author.username}: ${userContent.substring(0, 80)}`
   );
 
   // 1. Acknowledge with ⏳
@@ -214,9 +242,13 @@ async function handleMessage(message: Message): Promise<void> {
   const prompt = buildPrompt(message.author.username, userContent);
 
   // 3. Run claude -p
-  let response: string;
+  //    Claude sends responses directly via MCP send_message tool during execution.
+  //    We do NOT post stdout to Discord — that caused duplicate/out-of-order messages.
   try {
-    response = await runClaude(prompt);
+    const output = await runClaude(prompt);
+    if (output) {
+      console.log("[Listener] Claude output (not posted to Discord):", output.substring(0, 200));
+    }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error("[Listener] claude failed:", errMsg);
@@ -229,20 +261,7 @@ async function handleMessage(message: Message): Promise<void> {
     return;
   }
 
-  // 4. Post response
-  if (response) {
-    // Discord messages have a 2000-char limit; split if needed
-    const chunks = splitMessage(response, 1900);
-    for (const chunk of chunks) {
-      await channel.send(chunk).catch((e) =>
-        console.error("[Listener] Failed to send response chunk:", e)
-      );
-    }
-  } else {
-    console.warn("[Listener] claude returned empty output.");
-  }
-
-  // 5. Replace ⏳ with ✅
+  // 4. Replace ⏳ with ✅
   await removeReaction(message, "⏳");
   try {
     await message.react("✅");
@@ -268,8 +287,9 @@ function buildPrompt(username: string, content: string): string {
     "--- END MESSAGE ---\n" +
     "\n" +
     "Process this request according to your role instructions (agents/leader/CLAUDE.md). " +
-    "Return a concise response that will be posted back to Discord #general. " +
-    "Keep it under 1800 characters when possible. " +
+    "IMPORTANT: Use the send_message MCP tool to respond to the user in #general. " +
+    "Do NOT return text output — your stdout is not posted to Discord. " +
+    "Keep each message under 1800 characters. " +
     "Use your MCP tools (coordination, discord) as needed."
   );
 }
@@ -382,6 +402,13 @@ async function main(): Promise<void> {
     partials: [Partials.Channel, Partials.Message, Partials.Reaction],
   });
 
+  // Set the listener's client as the shared singleton so approval-manager
+  // can use findTextChannel to update approval messages after button clicks.
+  setDiscordClient(client);
+
+  // Register approval button handler on the listener's client (persistent process)
+  registerApprovalInteractionHandler(client);
+
   client.once(Events.ClientReady, async (readyClient) => {
     console.log(`[Listener] Bot ready! Logged in as ${readyClient.user.tag}`);
     console.log(`[Listener] Serving ${readyClient.guilds.cache.size} guild(s)`);
@@ -392,8 +419,8 @@ async function main(): Promise<void> {
   });
 
   client.on(Events.MessageCreate, (message) => {
-    handleMessage(message).catch((err) => {
-      console.error("[Listener] Unhandled error in handleMessage:", err);
+    enqueueMessage(message).catch((err) => {
+      console.error("[Listener] Unhandled error in enqueueMessage:", err);
     });
   });
 

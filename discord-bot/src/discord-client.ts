@@ -44,7 +44,15 @@ export function createDiscordClient(): Client {
 
 export function getDiscordClient(): Client {
   if (!clientInstance) {
-    throw new Error("Discord client not initialized. Call createDiscordClient() first.");
+    throw new Error("Discord client not initialized. Call createDiscordClient() or setDiscordClient() first.");
   }
   return clientInstance;
+}
+
+/**
+ * Set an externally-created Client as the shared singleton.
+ * Used by the listener daemon which creates its own Client instance.
+ */
+export function setDiscordClient(client: Client): void {
+  clientInstance = client;
 }

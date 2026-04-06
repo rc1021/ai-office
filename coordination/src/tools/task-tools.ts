@@ -1,7 +1,22 @@
+import { createHash } from "node:crypto";
 import { getDb, appendAudit, publishEvent, generateId } from "../database.js";
 import type { Task, TaskStep } from "../types.js";
 
 // ── task_create ──
+
+/**
+ * Compute a short hash of the task content for dedup.
+ * Two tasks with the same title + description within the dedup window are considered duplicates.
+ */
+function computeContentHash(title: string, description: string): string {
+  return createHash("sha256")
+    .update(`${title.trim().toLowerCase()}|${description.trim().toLowerCase()}`)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+/** Dedup window: ignore duplicate tasks created within this many seconds. */
+const DEDUP_WINDOW_SECONDS = 300; // 5 minutes
 
 export function taskCreate(params: {
   title: string;
@@ -23,11 +38,46 @@ export function taskCreate(params: {
     status: "pending" as const,
   }));
   const status = params.assigned_to ? "assigned" : "pending";
+  const contentHash = computeContentHash(params.title, params.description ?? "");
+
+  // ── Dedup check: reject if an active task with the same content hash exists recently ──
+  const existing = db.prepare(`
+    SELECT id, status, assigned_to FROM tasks
+    WHERE content_hash = ?
+      AND status IN ('pending', 'assigned', 'in_progress', 'checkpoint')
+      AND created_at > datetime('now', ?)
+  `).get(contentHash, `-${DEDUP_WINDOW_SECONDS} seconds`) as
+    | { id: string; status: string; assigned_to: string | null }
+    | undefined;
+
+  if (existing) {
+    throw new Error(
+      `Duplicate task rejected: an active task with similar content already exists ` +
+      `(task_id=${existing.id}, status=${existing.status}). ` +
+      `Wait for it to complete/fail, or use a different title/description.`
+    );
+  }
+
+  // ── Agent busy check: reject if the target agent already has an active task ──
+  if (params.assigned_to) {
+    const busyTask = db.prepare(`
+      SELECT id, title FROM tasks
+      WHERE assigned_to = ?
+        AND status IN ('assigned', 'in_progress', 'checkpoint')
+    `).get(params.assigned_to) as { id: string; title: string } | undefined;
+
+    if (busyTask) {
+      throw new Error(
+        `Agent "${params.assigned_to}" is busy with task "${busyTask.title}" ` +
+        `(task_id=${busyTask.id}). Wait for it to finish or assign to another agent.`
+      );
+    }
+  }
 
   db.prepare(`
     INSERT INTO tasks (id, trace_id, title, description, status, priority, risk_level,
-      assigned_to, created_by, steps, input_artifacts)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      assigned_to, created_by, steps, input_artifacts, content_hash)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     traceId,
@@ -39,7 +89,8 @@ export function taskCreate(params: {
     params.assigned_to ?? null,
     params.created_by,
     JSON.stringify(steps),
-    JSON.stringify(params.input_artifacts ?? [])
+    JSON.stringify(params.input_artifacts ?? []),
+    contentHash
   );
 
   // Update agent status if assigned
@@ -302,6 +353,7 @@ interface RawTaskRow {
   current_step: number;
   steps: string;
   context_summary: string;
+  content_hash: string;
   input_artifacts: string;
   output_artifact: string | null;
   created_at: string;

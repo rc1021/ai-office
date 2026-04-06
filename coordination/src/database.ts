@@ -165,6 +165,26 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    description: "Task dedup (content_hash) + agent single-active-task constraint",
+    up: (db) => {
+      db.exec(`
+        -- Content hash for task dedup
+        ALTER TABLE tasks ADD COLUMN content_hash TEXT NOT NULL DEFAULT '';
+
+        -- Prevent the same agent from having multiple active tasks.
+        -- SQLite partial unique index: only enforced for rows matching WHERE.
+        -- NULL assigned_to is excluded (multiple unassigned tasks are fine).
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_one_active_per_agent
+          ON tasks(assigned_to)
+          WHERE assigned_to IS NOT NULL
+            AND status IN ('assigned', 'in_progress', 'checkpoint');
+
+        UPDATE schema_meta SET value = '2' WHERE key = 'version';
+      `);
+    },
+  },
 ];
 
 function migrate(db: Database.Database): void {

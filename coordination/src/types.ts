@@ -41,6 +41,7 @@ export interface Task {
   current_step: number;
   steps: TaskStep[];
   context_summary: string;
+  content_hash: string;
   input_artifacts: string[];
   output_artifact: string | null;
   created_at: string;
@@ -149,4 +150,4 @@ export interface CrossVerifyRequest {
 
 // ── Schema Version ──
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
