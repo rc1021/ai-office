@@ -350,12 +350,12 @@ function buildPrompt(username: string, content: string): string {
  */
 async function removeReaction(message: Message, emoji: string): Promise<void> {
   try {
-    // Fetch fresh reaction data instead of relying on potentially stale cache
-    const fetched = await message.fetch();
-    const reaction = fetched.reactions.cache.get(emoji);
-    if (reaction) {
-      await reaction.users.remove(message.client.user!.id);
-    }
+    // Call the Discord REST API directly to remove the bot's own reaction.
+    // Using the REST route avoids stale reaction cache issues that caused flickering.
+    const encodedEmoji = encodeURIComponent(emoji);
+    await message.client.rest.delete(
+      `/channels/${message.channelId}/messages/${message.id}/reactions/${encodedEmoji}/@me`
+    );
   } catch {
     // Non-fatal — permissions may not allow reaction removal
   }
