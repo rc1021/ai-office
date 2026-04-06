@@ -101,3 +101,348 @@ starter_packs:
       zh-TW: "法務顧問 + 行政助理，適合法律事務。"
       ja: "法務アドバイザー + アシスタント。法務オペレーション向け。"
     roles: [legal-advisor, admin-assistant]
+
+# ─── Advanced Packs ──────────────────────────────────────────────────────────
+# Two-level menu: Industry → Team Type
+# Used by the "Advanced" mode in the setup wizard.
+
+advanced_packs:
+  tech:
+    name:
+      en: "Tech"
+      zh-TW: "科技業"
+      ja: "テクノロジー"
+    teams:
+      lean-dev:
+        name:
+          en: "Lean Development"
+          zh-TW: "精實開發"
+          ja: "リーン開発"
+        description:
+          en: "PM + Software Engineer + QA"
+          zh-TW: "PM + 軟體工程師 + QA"
+          ja: "PM + ソフトウェアエンジニア + QA"
+        roles: [pm, software-engineer, qa-engineer]
+      full-stack:
+        name:
+          en: "Full-Stack Team"
+          zh-TW: "全端團隊"
+          ja: "フルスタックチーム"
+        description:
+          en: "PM + Frontend + Backend + DevOps + QA + Designer"
+          zh-TW: "PM + 前端 + 後端 + DevOps + QA + 設計師"
+          ja: "PM + フロントエンド + バックエンド + DevOps + QA + デザイナー"
+        roles: [pm, frontend-engineer, backend-engineer, devops-engineer, qa-engineer, ui-ux-designer]
+      ai-ml:
+        name:
+          en: "AI/ML Team"
+          zh-TW: "AI/ML 團隊"
+          ja: "AI/MLチーム"
+        description:
+          en: "PM + ML Engineer + Data Engineer + Research Analyst"
+          zh-TW: "PM + ML 工程師 + 資料工程師 + 研究分析師"
+          ja: "PM + MLエンジニア + データエンジニア + リサーチアナリスト"
+        roles: [pm, ml-engineer, data-engineer, research-analyst]
+      security-compliance:
+        name:
+          en: "Security & Compliance"
+          zh-TW: "安全合規"
+          ja: "セキュリティ＆コンプライアンス"
+        description:
+          en: "Security Specialist + Auditor + Compliance + Internal Auditor"
+          zh-TW: "安全專家 + 安全稽核 + 合規官 + 內部稽核"
+          ja: "セキュリティスペシャリスト + 監査 + コンプライアンス + 内部監査"
+        roles: [security-specialist, security-auditor, compliance-officer, internal-auditor]
+
+  finance:
+    name:
+      en: "Finance"
+      zh-TW: "金融業"
+      ja: "金融"
+    teams:
+      basic-finance:
+        name:
+          en: "Basic Finance"
+          zh-TW: "基礎財務"
+          ja: "基本ファイナンス"
+        description:
+          en: "Accountant + Financial Analyst"
+          zh-TW: "會計 + 財務分析師"
+          ja: "会計 + 財務アナリスト"
+        roles: [accountant, financial-analyst]
+      investment:
+        name:
+          en: "Investment Analysis"
+          zh-TW: "投資分析"
+          ja: "投資分析"
+        description:
+          en: "Stock Analyst + Quant Researcher + Risk Manager"
+          zh-TW: "股票分析師 + 量化研究員 + 風險經理"
+          ja: "株式アナリスト + クオンツリサーチャー + リスクマネージャー"
+        roles: [stock-analyst, quant-researcher, risk-manager]
+      compliance-risk:
+        name:
+          en: "Compliance & Risk"
+          zh-TW: "合規風控"
+          ja: "コンプライアンス＆リスク"
+        description:
+          en: "Compliance Officer + Risk Manager + Internal Auditor + Privacy Officer"
+          zh-TW: "合規官 + 風險經理 + 內部稽核 + 隱私官"
+          ja: "コンプライアンスオフィサー + リスクマネージャー + 内部監査 + プライバシーオフィサー"
+        roles: [compliance-officer, risk-manager, internal-auditor, privacy-officer]
+
+  ecommerce:
+    name:
+      en: "E-Commerce"
+      zh-TW: "電商"
+      ja: "Eコマース"
+    teams:
+      basic-ops:
+        name:
+          en: "Basic Operations"
+          zh-TW: "基礎營運"
+          ja: "基本オペレーション"
+        description:
+          en: "Product Manager + Marketing Manager + Customer Service"
+          zh-TW: "產品經理 + 行銷經理 + 客服"
+          ja: "プロダクトマネージャー + マーケティングマネージャー + カスタマーサービス"
+        roles: [product-manager, marketing-manager, customer-service-rep]
+      full-ecommerce:
+        name:
+          en: "Full E-Commerce"
+          zh-TW: "全方位電商"
+          ja: "フルEコマース"
+        description:
+          en: "Product Manager + Ops + Marketing + Content + SEO + Customer Service"
+          zh-TW: "產品經理 + 營運 + 行銷 + 內容 + SEO + 客服"
+          ja: "プロダクトマネージャー + 運用 + マーケティング + コンテンツ + SEO + カスタマーサービス"
+        roles: [product-manager, ecommerce-ops-manager, marketing-manager, content-writer, seo-specialist, customer-service-rep]
+      ecommerce-data:
+        name:
+          en: "E-Commerce + Data"
+          zh-TW: "電商 + 數據"
+          ja: "Eコマース + データ"
+        description:
+          en: "Product Manager + Data Analyst + Marketing + Ad Specialist"
+          zh-TW: "產品經理 + 數據分析師 + 行銷 + 廣告專家"
+          ja: "プロダクトマネージャー + データアナリスト + マーケティング + 広告スペシャリスト"
+        roles: [product-manager, data-analyst, marketing-manager, ad-specialist]
+
+  legal:
+    name:
+      en: "Legal"
+      zh-TW: "法律"
+      ja: "法律"
+    teams:
+      basic-legal:
+        name:
+          en: "Basic Legal"
+          zh-TW: "基礎法務"
+          ja: "基本法務"
+        description:
+          en: "Legal Advisor + Contract Analyst + Admin Assistant"
+          zh-TW: "法務顧問 + 合約分析師 + 行政助理"
+          ja: "法務アドバイザー + 契約アナリスト + アシスタント"
+        roles: [legal-advisor, contract-analyst, admin-assistant]
+      ip-team:
+        name:
+          en: "IP Team"
+          zh-TW: "智財團隊"
+          ja: "知財チーム"
+        description:
+          en: "Legal Advisor + IP Specialist + Contract Analyst"
+          zh-TW: "法務顧問 + 智財專家 + 合約分析師"
+          ja: "法務アドバイザー + 知財スペシャリスト + 契約アナリスト"
+        roles: [legal-advisor, ip-specialist, contract-analyst]
+      litigation:
+        name:
+          en: "Litigation Team"
+          zh-TW: "訴訟團隊"
+          ja: "訴訟チーム"
+        description:
+          en: "Legal Advisor + Litigation Strategist + Contract Analyst"
+          zh-TW: "法務顧問 + 訴訟策略師 + 合約分析師"
+          ja: "法務アドバイザー + 訴訟ストラテジスト + 契約アナリスト"
+        roles: [legal-advisor, litigation-strategist, contract-analyst]
+      compliance-privacy:
+        name:
+          en: "Compliance & Privacy"
+          zh-TW: "合規隱私"
+          ja: "コンプライアンス＆プライバシー"
+        description:
+          en: "Compliance Officer + Privacy Officer + Legal Advisor + Internal Auditor"
+          zh-TW: "合規官 + 隱私官 + 法務顧問 + 內部稽核"
+          ja: "コンプライアンスオフィサー + プライバシーオフィサー + 法務アドバイザー + 内部監査"
+        roles: [compliance-officer, privacy-officer, legal-advisor, internal-auditor]
+
+  healthcare:
+    name:
+      en: "Healthcare"
+      zh-TW: "醫療"
+      ja: "ヘルスケア"
+    teams:
+      medical-research:
+        name:
+          en: "Medical Research"
+          zh-TW: "醫學研究"
+          ja: "医学研究"
+        description:
+          en: "Medical Literature Researcher + Clinical Trial Assistant + Research Analyst"
+          zh-TW: "醫學文獻研究員 + 臨床試驗助理 + 研究分析師"
+          ja: "医学文献リサーチャー + 臨床試験アシスタント + リサーチアナリスト"
+        roles: [medical-literature-researcher, clinical-trial-assistant, research-analyst]
+      health-info:
+        name:
+          en: "Health Informatics"
+          zh-TW: "健康資訊"
+          ja: "ヘルスインフォマティクス"
+        description:
+          en: "Health Info Analyst + Data Analyst + Privacy Officer"
+          zh-TW: "健康資訊分析師 + 數據分析師 + 隱私官"
+          ja: "ヘルスインフォアナリスト + データアナリスト + プライバシーオフィサー"
+        roles: [health-info-analyst, data-analyst, privacy-officer]
+
+  education:
+    name:
+      en: "Education"
+      zh-TW: "教育"
+      ja: "教育"
+    teams:
+      curriculum:
+        name:
+          en: "Curriculum Development"
+          zh-TW: "課程開發"
+          ja: "カリキュラム開発"
+        description:
+          en: "Curriculum Designer + Exam Designer + Content Writer"
+          zh-TW: "課程設計師 + 考試設計師 + 內容寫手"
+          ja: "カリキュラムデザイナー + 試験デザイナー + コンテンツライター"
+        roles: [curriculum-designer, exam-designer, content-writer]
+      academic-research:
+        name:
+          en: "Academic Research"
+          zh-TW: "學術研究"
+          ja: "学術研究"
+        description:
+          en: "Academic Research Assistant + Research Analyst + Data Analyst"
+          zh-TW: "學術研究助理 + 研究分析師 + 數據分析師"
+          ja: "学術研究アシスタント + リサーチアナリスト + データアナリスト"
+        roles: [academic-research-assistant, research-analyst, data-analyst]
+
+  marketing:
+    name:
+      en: "Marketing & Media"
+      zh-TW: "行銷/媒體"
+      ja: "マーケティング＆メディア"
+    teams:
+      content-marketing:
+        name:
+          en: "Content Marketing"
+          zh-TW: "內容行銷"
+          ja: "コンテンツマーケティング"
+        description:
+          en: "Marketing Manager + Content Writer + SEO Specialist + Community Manager"
+          zh-TW: "行銷經理 + 內容寫手 + SEO 專家 + 社群經理"
+          ja: "マーケティングマネージャー + コンテンツライター + SEOスペシャリスト + コミュニティマネージャー"
+        roles: [marketing-manager, content-writer, seo-specialist, community-manager]
+      brand-pr:
+        name:
+          en: "Brand & PR"
+          zh-TW: "品牌公關"
+          ja: "ブランド＆PR"
+        description:
+          en: "Personal Brand Consultant + Crisis PR Consultant + Content Writer"
+          zh-TW: "個人品牌顧問 + 危機公關顧問 + 內容寫手"
+          ja: "パーソナルブランドコンサルタント + 危機PRコンサルタント + コンテンツライター"
+        roles: [personal-brand-consultant, crisis-pr-consultant, content-writer]
+      multimedia:
+        name:
+          en: "Multimedia Production"
+          zh-TW: "多媒體製作"
+          ja: "マルチメディア制作"
+        description:
+          en: "Podcast Producer + Scriptwriter + Editor + Narrative Designer"
+          zh-TW: "Podcast 製作人 + 編劇 + 編輯 + 敘事設計師"
+          ja: "ポッドキャストプロデューサー + 脚本家 + エディター + ナラティブデザイナー"
+        roles: [podcast-producer, scriptwriter, editor, narrative-designer]
+
+  gaming:
+    name:
+      en: "Gaming"
+      zh-TW: "遊戲"
+      ja: "ゲーム"
+    teams:
+      game-design:
+        name:
+          en: "Game Design"
+          zh-TW: "遊戲設計"
+          ja: "ゲームデザイン"
+        description:
+          en: "Game Designer + Narrative Designer + UI/UX Designer"
+          zh-TW: "遊戲設計師 + 敘事設計師 + UI/UX 設計師"
+          ja: "ゲームデザイナー + ナラティブデザイナー + UI/UXデザイナー"
+        roles: [game-designer, narrative-designer, ui-ux-designer]
+      game-dev:
+        name:
+          en: "Game Development"
+          zh-TW: "遊戲開發"
+          ja: "ゲーム開発"
+        description:
+          en: "Game Designer + Software Engineer + QA + UI/UX Designer"
+          zh-TW: "遊戲設計師 + 軟體工程師 + QA + UI/UX 設計師"
+          ja: "ゲームデザイナー + ソフトウェアエンジニア + QA + UI/UXデザイナー"
+        roles: [game-designer, software-engineer, qa-engineer, ui-ux-designer]
+
+  web3:
+    name:
+      en: "Web3/Crypto"
+      zh-TW: "Web3/Crypto"
+      ja: "Web3/暗号資産"
+    teams:
+      defi-analysis:
+        name:
+          en: "DeFi Analysis"
+          zh-TW: "DeFi 分析"
+          ja: "DeFi分析"
+        description:
+          en: "Onchain Analyst + Smart Contract Auditor + Quant Researcher"
+          zh-TW: "鏈上分析師 + 智能合約稽核 + 量化研究員"
+          ja: "オンチェーンアナリスト + スマートコントラクト監査 + クオンツリサーチャー"
+        roles: [onchain-analyst, smart-contract-auditor, quant-researcher]
+      web3-dev:
+        name:
+          en: "Web3 Development"
+          zh-TW: "Web3 開發"
+          ja: "Web3開発"
+        description:
+          en: "Software Engineer + Smart Contract Auditor + Security Specialist"
+          zh-TW: "軟體工程師 + 智能合約稽核 + 安全專家"
+          ja: "ソフトウェアエンジニア + スマートコントラクト監査 + セキュリティスペシャリスト"
+        roles: [software-engineer, smart-contract-auditor, security-specialist]
+
+  government:
+    name:
+      en: "Government"
+      zh-TW: "政府/公共事務"
+      ja: "政府/公共"
+    teams:
+      policy-research:
+        name:
+          en: "Policy Research"
+          zh-TW: "政策研究"
+          ja: "政策研究"
+        description:
+          en: "Policy Analyst + Research Analyst + Official Document Writer"
+          zh-TW: "政策分析師 + 研究分析師 + 公文寫手"
+          ja: "政策アナリスト + リサーチアナリスト + 公文書ライター"
+        roles: [policy-analyst, research-analyst, official-document-writer]
+      public-admin:
+        name:
+          en: "Public Administration"
+          zh-TW: "公共行政"
+          ja: "公共行政"
+        description:
+          en: "Admin Assistant + Official Document Writer + Compliance Officer"
+          zh-TW: "行政助理 + 公文寫手 + 合規官"
+          ja: "アシスタント + 公文書ライター + コンプライアンスオフィサー"
+        roles: [admin-assistant, official-document-writer, compliance-officer]

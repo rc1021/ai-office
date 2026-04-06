@@ -4,7 +4,7 @@ import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import path from "node:path";
 import fs from "node:fs";
-import { loadStarterPacks, localize, StarterPack } from "./starter-packs.js";
+import { loadStarterPacks, loadAdvancedPacks, localize, StarterPack, AdvancedIndustry, AdvancedTeam } from "./starter-packs.js";
 import {
   SetupConfig,
   writeOfficeYaml,
@@ -75,6 +75,17 @@ const i18n: Record<string, Record<Lang, string>> = {
   "discord.net_error":  { "zh-TW": "⚠️  無法連線 Discord API（網路問題？）", en: "⚠️  Cannot reach Discord API (network issue?)", ja: "⚠️  Discord APIに接続できません（ネットワーク問題？）" },
   "sum.enabled":        { "zh-TW": "已啟用",     en: "Enabled",      ja: "有効" },
   "sum.disabled":       { "zh-TW": "未啟用",     en: "Disabled",     ja: "無効" },
+
+  "prompt.pack_mode":   { "zh-TW": "選擇組合包模式：",   en: "Choose pack mode:",           ja: "パックモードを選択：" },
+  "mode.basic":         { "zh-TW": "入門組合包 (Basic) — 快速選擇常見配置",
+                          en: "Basic Packs — Quick selection of common configurations",
+                          ja: "ベーシックパック — よくある構成をすばやく選択" },
+  "mode.advanced":      { "zh-TW": "進階組合包 (Advanced) — 按行業選擇專業團隊",
+                          en: "Advanced Packs — Choose specialized teams by industry",
+                          ja: "アドバンスドパック — 業界別に専門チームを選択" },
+  "prompt.industry":    { "zh-TW": "選擇行業：",         en: "Choose an industry:",         ja: "業界を選択：" },
+  "prompt.team":        { "zh-TW": "選擇團隊類型：",      en: "Choose a team type:",         ja: "チームタイプを選択：" },
+  "back":               { "zh-TW": "[B] 返回上一步",     en: "[B] Go back",                 ja: "[B] 前に戻る" },
 };
 
 let currentLang: Lang = "zh-TW";
@@ -112,6 +123,23 @@ async function choose(question: string, options: string[], defaultIdx: number = 
   });
   const answer = await rl.question(`  Choose [${defaultIdx + 1}]: `);
   const idx = parseInt(answer.trim()) - 1;
+  if (idx >= 0 && idx < options.length) return options[idx];
+  return options[defaultIdx];
+}
+
+const BACK = "__BACK__";
+
+async function chooseWithBack(question: string, options: string[], defaultIdx: number = 0): Promise<string> {
+  console.log(`  ${question}`);
+  options.forEach((opt, i) => {
+    const marker = i === defaultIdx ? ">" : " ";
+    console.log(`  ${marker} ${i + 1}. ${opt}`);
+  });
+  console.log(`    ${t("back")}`);
+  const answer = await rl.question(`  Choose [${defaultIdx + 1}]: `);
+  const trimmed = answer.trim().toLowerCase();
+  if (trimmed === "b") return BACK;
+  const idx = parseInt(trimmed) - 1;
   if (idx >= 0 && idx < options.length) return options[idx];
   return options[defaultIdx];
 }
@@ -237,20 +265,83 @@ async function main(): Promise<void> {
     guildId = await ask(t("prompt.guild"), guildId);
   }
 
-  // 5. Starter pack
+  // 5. Starter pack (Basic or Advanced)
   console.log(`\n  ${t("section.starter")}\n`);
   const packs = loadStarterPacks(projectRoot);
-  const packEntries = Object.entries(packs);
-  const packOptions = packEntries.map(([id, p]) => {
-    const name = localize(p.name, currentLang);
-    const desc = localize(p.description, currentLang);
-    const roles = p.roles.length > 0 ? ` (${p.roles.join(", ")})` : "";
-    return `${name}${roles} — ${desc}`;
-  });
+  const advancedPacks = loadAdvancedPacks(projectRoot);
 
-  const packChoice = await choose(t("prompt.starter"), packOptions, 0);
-  const packIdx = packOptions.indexOf(packChoice);
-  const [packId, packData] = packEntries[packIdx >= 0 ? packIdx : 0];
+  let packId = "";
+  let selectedRoles: string[] = [];
+  let selectedPackName: string | Record<string, string> = "";
+  let done = false;
+
+  while (!done) {
+    // Step 1: Mode selection
+    const modeOptions = [t("mode.basic"), t("mode.advanced")];
+    const modeChoice = await choose(t("prompt.pack_mode"), modeOptions, 0);
+    const isAdvanced = modeChoice === modeOptions[1];
+
+    if (!isAdvanced) {
+      // Basic mode — flat pack list with back support
+      const packEntries = Object.entries(packs);
+      const packOptions = packEntries.map(([_id, p]) => {
+        const name = localize(p.name, currentLang);
+        const desc = localize(p.description, currentLang);
+        const roles = p.roles.length > 0 ? ` (${p.roles.join(", ")})` : "";
+        return `${name}${roles} — ${desc}`;
+      });
+
+      const packChoice = await chooseWithBack(t("prompt.starter"), packOptions, 0);
+      if (packChoice === BACK) continue; // back to mode selection
+
+      const packIdx = packOptions.indexOf(packChoice);
+      const [id, data] = packEntries[packIdx >= 0 ? packIdx : 0];
+      packId = id;
+      selectedRoles = data.roles;
+      selectedPackName = data.name;
+      done = true;
+    } else {
+      // Advanced mode — Industry → Team
+      const industryEntries = Object.entries(advancedPacks);
+      const industryOptions = industryEntries.map(([_id, ind]) => localize(ind.name, currentLang));
+
+      let industryDone = false;
+      while (!industryDone) {
+        const industryChoice = await chooseWithBack(t("prompt.industry"), industryOptions, 0);
+        if (industryChoice === BACK) {
+          industryDone = true; // back to mode selection
+          break;
+        }
+
+        const industryIdx = industryOptions.indexOf(industryChoice);
+        const [industryId, industry] = industryEntries[industryIdx >= 0 ? industryIdx : 0];
+        const teamEntries = Object.entries(industry.teams);
+        const teamOptions = teamEntries.map(([_id, team]) => {
+          const name = localize(team.name, currentLang);
+          const desc = localize(team.description, currentLang);
+          return `${name} — ${desc}`;
+        });
+
+        const teamChoice = await chooseWithBack(t("prompt.team"), teamOptions, 0);
+        if (teamChoice === BACK) continue; // back to industry selection
+
+        const teamIdx = teamOptions.indexOf(teamChoice);
+        const [teamId, teamData] = teamEntries[teamIdx >= 0 ? teamIdx : 0];
+        packId = `${industryId}/${teamId}`;
+        selectedRoles = teamData.roles;
+        selectedPackName = teamData.name;
+        done = true;
+        industryDone = true;
+      }
+    }
+  }
+
+  // Build a packData-compatible object for the rest of the wizard
+  const packData: StarterPack = {
+    name: selectedPackName,
+    description: "",
+    roles: selectedRoles,
+  };
 
   // 6. Remote access (ngrok)
   console.log(`\n  ${t("section.ngrok")}\n`);
