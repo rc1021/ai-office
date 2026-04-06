@@ -170,7 +170,8 @@ if [ -f "$PIXEL_PID_FILE" ]; then
   rm -f "$PIXEL_PID_FILE"
 fi
 
-# Kill any remaining pixel-office processes for THIS project
+# Kill any remaining processes for THIS project (catches duplicates not in PID file)
+pkill -f "$PROJECT_DIR/discord-bot/dist/listener" 2>/dev/null && echo "  [OK] Cleaned up stale listener processes" || true
 pkill -f "$PROJECT_DIR/pixel-office" 2>/dev/null && echo "  [OK] Cleaned up stale pixel-office processes" || true
 
 echo "  [OK] Old processes cleaned up"
