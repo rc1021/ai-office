@@ -84,9 +84,11 @@ app.listen(PORT, "0.0.0.0", async () => {
         console.log(`[PixelOffice] 🔒 Protected with Basic Auth (user: ${authUser})`);
       }
 
-      // Write URL to state file so Leader can share it
+      // Write URL to state file so the listener daemon can share it on Discord.
+      // Prefer PROJECT_DIR (set by listener), fall back to HOME.
       try {
-        const stateDir = path.join(process.env.HOME ?? "", ".ai-office", "state");
+        const baseDir = process.env.PROJECT_DIR ?? process.env.HOME ?? "";
+        const stateDir = path.join(baseDir, ".ai-office", "state");
         fs.mkdirSync(stateDir, { recursive: true });
         fs.writeFileSync(path.join(stateDir, "ngrok-url.txt"), publicUrl ?? "", "utf-8");
       } catch { /* non-critical */ }

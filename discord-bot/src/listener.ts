@@ -273,6 +273,50 @@ async function handleMessage(message: Message): Promise<void> {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /**
+ * Post the ngrok public URL to #bot-status on every startup.
+ * Reads from PROJECT_DIR/.ai-office/state/ngrok-url.txt (written by pixel-office).
+ */
+async function postNgrokUrl(readyClient: import("discord.js").Client<true>): Promise<void> {
+  const ngrokFile = path.join(PROJECT_DIR, ".ai-office", "state", "ngrok-url.txt");
+  // Also check legacy HOME-based path
+  const ngrokFileLegacy = path.join(process.env.HOME ?? "", ".ai-office", "state", "ngrok-url.txt");
+
+  let url = "";
+  for (const f of [ngrokFile, ngrokFileLegacy]) {
+    if (fs.existsSync(f)) {
+      url = fs.readFileSync(f, "utf-8").trim();
+      if (url) break;
+    }
+  }
+
+  if (!url) {
+    console.log("[Listener] No ngrok URL found — skipping #bot-status post.");
+    return;
+  }
+
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (!guildId) return;
+
+  try {
+    const guild = await readyClient.guilds.fetch(guildId);
+    const channels = await guild.channels.fetch();
+    const botStatus = channels.find(
+      (ch) => ch !== null && "name" in ch && ch.name === "bot-status"
+    );
+    if (botStatus && botStatus.isTextBased()) {
+      await (botStatus as TextChannel).send(
+        `🌐 **Pixel Office** is online: ${url}`
+      );
+      console.log(`[Listener] Posted ngrok URL to #bot-status: ${url}`);
+    } else {
+      console.log("[Listener] #bot-status channel not found — skipping ngrok URL post.");
+    }
+  } catch (err) {
+    console.warn("[Listener] Failed to post ngrok URL:", err);
+  }
+}
+
+/**
  * Wrap the user message in a structured envelope to reduce injection risk.
  * The Leader's CLAUDE.md instructs it to sanitize input before delegation.
  */
@@ -373,7 +417,7 @@ async function main(): Promise<void> {
       const npxPath = path.join(PROJECT_DIR, "pixel-office", "node_modules", ".bin", "tsx");
       const pixelProc = spawn(npxPath, [pixelServerPath], {
         cwd: path.join(PROJECT_DIR, "pixel-office"),
-        env: { ...process.env },
+        env: { ...process.env, PROJECT_DIR },
         stdio: ["ignore", "ignore", "pipe"],
         detached: true,
       });
@@ -418,6 +462,9 @@ async function main(): Promise<void> {
 
     // First-run: Leader will create channels + post welcome via claude -p
     await checkFirstRun();
+
+    // Post ngrok URL to #bot-status on every startup (not just first run)
+    await postNgrokUrl(readyClient);
   });
 
   client.on(Events.MessageCreate, (message) => {
