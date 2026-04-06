@@ -287,22 +287,8 @@ export class HeartbeatScheduler {
     const memUsage = process.memoryUsage();
     const memMB = Math.round(memUsage.rss / 1024 / 1024);
 
-    // Audit chain check (every 30 min, not every 1 min)
-    const auditIssues: string[] = [];
-    const dbPath = path.join(this.statePath, "coordination.db");
-    await this.verifyAuditChain(dbPath, auditIssues);
-    if (auditIssues.length > 0) {
-      try {
-        await sendEmbed("alerts", {
-          title: "Audit Chain Alert",
-          description: auditIssues.join("\n"),
-          color: COLORS.RED,
-          footer: new Date().toISOString(),
-        });
-      } catch { /* best effort */ }
-    }
-
     // Count active agents and tasks from DB
+    const dbPath = path.join(this.statePath, "coordination.db");
     let activeAgents = 0;
     let activeTasks = 0;
     if (fs.existsSync(dbPath)) {
