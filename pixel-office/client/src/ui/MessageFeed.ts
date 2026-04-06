@@ -1,5 +1,20 @@
 import type { EventData } from "../api/client.js";
 
+const EVENT_CHANNEL_MAP: Record<string, string> = {
+  "task.created": "#task-board",
+  "task.completed": "#task-board",
+  "task.failed": "#task-board",
+  "task.assigned": "#task-board",
+  "task.checkpoint": "#ai-internal",
+  "artifact.published": "#ai-internal",
+  "anomaly.reported": "#alerts",
+  "verification.failed": "#alerts",
+  "agent.online": "#bot-status",
+  "agent.offline": "#bot-status",
+  "brainstorm.perspective": "#ai-internal",
+  "brainstorm.response": "#ai-internal",
+};
+
 const TYPE_COLORS: Record<string, string> = {
   "task.created": "#5865f2",
   "task.completed": "#57f287",
@@ -124,6 +139,7 @@ export class MessageFeed {
           <span class="event-time">${timeAgo(event.created_at)}</span>
           <span class="event-agent">${shortAgent(event.source_agent)}</span>
           <span class="event-type" style="background:${color}">${shortType(event.type)}</span>
+          <span class="event-channel">${EVENT_CHANNEL_MAP[event.type] || ""}</span>
           <span class="event-target">→ ${event.target_agents === "*" ? "all" : shortAgent(event.target_agents)}</span>
         </div>
         <div class="event-payload">${this.escapeHtml(preview)}</div>

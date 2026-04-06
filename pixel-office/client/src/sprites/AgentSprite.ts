@@ -6,6 +6,8 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   public agentData: AgentData;
   private gfxBody: Phaser.GameObjects.Graphics;
   private statusDot: Phaser.GameObjects.Graphics;
+  private heartbeatRing: Phaser.GameObjects.Graphics;
+  private progressRing: Phaser.GameObjects.Graphics;
   private nameText: Phaser.GameObjects.Text;
   private bubble: Phaser.GameObjects.Graphics | null = null;
   private bubbleText: Phaser.GameObjects.Text | null = null;
@@ -14,6 +16,9 @@ export class AgentSprite extends Phaser.GameObjects.Container {
   private targetY: number;
   private walkSpeed = 1.2;
   private isMoving = false;
+  private lastHeartbeat: string = "";
+  private taskProgress: number = 0;
+  private hasActiveTask: boolean = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, agent: AgentData) {
     super(scene, x, y);
@@ -31,6 +36,14 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     this.statusDot = scene.add.graphics();
     this.drawStatusDot();
     this.add(this.statusDot);
+
+    // Heartbeat health ring
+    this.heartbeatRing = scene.add.graphics();
+    this.add(this.heartbeatRing);
+
+    // Task progress ring
+    this.progressRing = scene.add.graphics();
+    this.add(this.progressRing);
 
     // Name label
     this.nameText = scene.add.text(0, SPRITE_SIZE / 2 + 6, this.getShortName(), {
@@ -171,9 +184,15 @@ export class AgentSprite extends Phaser.GameObjects.Container {
     if (this.bubbleText) { this.bubbleText.destroy(); this.bubbleText = null; }
   }
 
+  public updateTaskProgress(progress: number, hasTask: boolean): void {
+    this.taskProgress = progress;
+    this.hasActiveTask = hasTask;
+  }
+
   updateAgent(agent: AgentData): void {
     const prevStatus = this.agentData.status;
     this.agentData = agent;
+    this.lastHeartbeat = agent.last_heartbeat || "";
     this.drawBody();
     this.drawStatusDot();
 
@@ -230,6 +249,54 @@ export class AgentSprite extends Phaser.GameObjects.Container {
       this.gfxBody.x = 0;
       this.gfxBody.y = 0;
       this.statusDot.setAlpha(1);
+    }
+
+    // Heartbeat ring
+    this.heartbeatRing.clear();
+    if (this.lastHeartbeat) {
+      const ageMs = Date.now() - new Date(this.lastHeartbeat + (this.lastHeartbeat.includes("Z") ? "" : "Z")).getTime();
+      const ageSec = ageMs / 1000;
+
+      let color: number;
+      let beatSpeed: number;
+      let ringAlpha: number;
+
+      if (ageSec < 60) {
+        color = 0x57f287; beatSpeed = 0.008; ringAlpha = 0.5;
+      } else if (ageSec < 300) {
+        color = 0xfee75c; beatSpeed = 0.004; ringAlpha = 0.4;
+      } else if (ageSec < 900) {
+        color = 0xf39c12; beatSpeed = 0; ringAlpha = 0.3;
+      } else {
+        color = 0xed4245; beatSpeed = 0; ringAlpha = 0.2;
+      }
+
+      const pulse = beatSpeed > 0 ? Math.sin(time * beatSpeed) * 2 : 0;
+      const radius = 14 + pulse;
+
+      this.heartbeatRing.lineStyle(1, color, ringAlpha);
+      this.heartbeatRing.strokeCircle(0, -12, radius);
+    }
+
+    // Task progress ring
+    this.progressRing.clear();
+    if (this.hasActiveTask && this.taskProgress > 0) {
+      const startAngle = -Math.PI / 2;
+      const endAngle = startAngle + (Math.PI * 2 * this.taskProgress);
+      const color = this.taskProgress >= 1 ? 0x57f287 : 0xfaa61a;
+
+      this.progressRing.lineStyle(2, color, 0.7);
+      const segments = 32;
+      const radius = 16;
+      const step = (endAngle - startAngle) / segments;
+      for (let i = 0; i < segments; i++) {
+        const a1 = startAngle + step * i;
+        const a2 = startAngle + step * (i + 1);
+        this.progressRing.lineBetween(
+          Math.cos(a1) * radius, -12 + Math.sin(a1) * radius,
+          Math.cos(a2) * radius, -12 + Math.sin(a2) * radius
+        );
+      }
     }
   }
 }

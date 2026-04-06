@@ -65,6 +65,7 @@ console.log("[Listener] MCP config:", MCP_CONFIG);
 
 // Tools the Leader needs access to (pre-approved for non-interactive mode)
 const ALLOWED_TOOLS = [
+  "Agent",
   "Bash",
   "Read",
   "Write",
@@ -334,6 +335,9 @@ function buildPrompt(username: string, content: string): string {
     "IMPORTANT: Use the send_message MCP tool to respond to the user in #general. " +
     "Do NOT return text output — your stdout is not posted to Discord. " +
     "Keep each message under 1800 characters. " +
+    "Before processing: call task_resume for ongoing context, list_agents for available workers, check_inbox for pending events. " +
+    "After processing: call task_checkpoint with a context_summary of what was done and next steps. " +
+    "You can use the Agent tool to delegate tasks to workers (model: sonnet). " +
     "Use your MCP tools (coordination, discord) as needed."
   );
 }

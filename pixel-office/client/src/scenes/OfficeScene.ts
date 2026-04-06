@@ -4,6 +4,7 @@ import { AgentSprite } from "../sprites/AgentSprite.js";
 import { TaskBoard } from "../ui/TaskBoard.js";
 import { AgentPanel } from "../ui/AgentPanel.js";
 import { MessageFeed } from "../ui/MessageFeed.js";
+import { BrainstormPanel } from "../ui/BrainstormPanel.js";
 import { CANVAS_WIDTH, CANVAS_HEIGHT, DEPT_COLORS, SPRITE_SIZE } from "../config.js";
 import layout from "../assets/office-layout.json";
 
@@ -23,6 +24,7 @@ export class OfficeScene extends Phaser.Scene {
   private taskBoard!: TaskBoard;
   private agentPanel!: AgentPanel;
   private messageFeed!: MessageFeed;
+  private brainstormPanel!: BrainstormPanel;
   private rooms: Room[] = layout.rooms as Room[];
   private agents: AgentData[] = [];
   private tasks: TaskData[] = [];
@@ -37,6 +39,7 @@ export class OfficeScene extends Phaser.Scene {
     this.taskBoard = new TaskBoard();
     this.agentPanel = new AgentPanel();
     this.messageFeed = new MessageFeed();
+    this.brainstormPanel = new BrainstormPanel();
 
     // Draw office
     this.drawOffice();
@@ -60,6 +63,7 @@ export class OfficeScene extends Phaser.Scene {
       },
       onEvents: (events) => {
         this.messageFeed.updateEvents(events);
+        this.brainstormPanel.updateEvents(events);
       },
     });
   }
@@ -217,10 +221,23 @@ export class OfficeScene extends Phaser.Scene {
 
     // Redraw task lines after sprite sync
     this.drawTaskLines();
+
+    // Update task progress rings on sprites
+    for (const [agentId, sprite] of this.agentSprites) {
+      const task = this.tasks.find(t => t.assigned_to === agentId &&
+        ['assigned', 'in_progress', 'checkpoint'].includes(t.status));
+      if (task && task.steps && task.steps.length > 0) {
+        const progress = task.current_step / task.steps.length;
+        sprite.updateTaskProgress(progress, true);
+      } else {
+        sprite.updateTaskProgress(0, false);
+      }
+    }
   }
 
   private spawnAgentSprite(agent: AgentData): void {
     const pos = this.findDeskPosition(agent);
+    this.playSpawnVFX(pos.x, pos.y);
     const sprite = new AgentSprite(this, pos.x, pos.y, agent);
     sprite.setDepth(2);
 
@@ -229,6 +246,30 @@ export class OfficeScene extends Phaser.Scene {
     });
 
     this.agentSprites.set(agent.agent_id, sprite);
+  }
+
+  /** Spawn portal VFX: expanding purple ring that fades out */
+  private playSpawnVFX(x: number, y: number): void {
+    const ring = this.add.graphics();
+    ring.setDepth(1.5);
+
+    let radius = 2;
+    let alpha = 0.8;
+    const expand = this.time.addEvent({
+      delay: 16,
+      repeat: 30,
+      callback: () => {
+        ring.clear();
+        ring.lineStyle(2, 0x9b59b6, alpha);
+        ring.strokeCircle(x, y, radius);
+        radius += 0.8;
+        alpha -= 0.025;
+        if (alpha <= 0) {
+          ring.destroy();
+          expand.destroy();
+        }
+      },
+    });
   }
 
   private findDeskPosition(agent: AgentData): { x: number; y: number } {

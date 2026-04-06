@@ -718,6 +718,24 @@ export function createMcpServer(): Server {
             lines.push(`  Department channels: ${deptResult.skipped.join(", ")}`);
           }
 
+          // Post agent registration info to #config
+          try {
+            await sendEmbed("config", {
+              title: `Agent Registered: ${profile.agent_id}`,
+              description: `A new agent has been registered in the system.`,
+              color: 0x2ECC71, // GREEN
+              fields: [
+                { name: "Role", value: profile.role_id },
+                { name: "Department", value: profile.department },
+                { name: "Clearance", value: String(profile.clearance_level) },
+              ],
+              footer: new Date().toISOString(),
+            });
+          } catch (embedErr) {
+            // Non-fatal — #config channel may not exist yet
+            console.warn("[MCP] Failed to post registration embed to #config:", embedErr);
+          }
+
           return makeTextContent(lines.join("\n"));
         }
 
