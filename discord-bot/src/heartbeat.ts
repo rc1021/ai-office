@@ -104,7 +104,10 @@ export class HeartbeatScheduler {
       }
     }
 
-    // Clean up stale tasks and agents (stuck for >15 minutes)
+    // Verify audit chain integrity
+    await this.verifyAuditChain(dbPath, issues);
+
+    // Clean up stale tasks and agents (stuck for >10 minutes)
     await this.cleanupStaleTasks(issues);
 
     // Only alert on failure
@@ -123,7 +126,52 @@ export class HeartbeatScheduler {
   }
 
   /**
-   * Detect tasks stuck in active states for >15 minutes and mark them failed.
+   * Verify audit log hash chain integrity. Runs once per health check cycle.
+   * Only reports if corruption is detected (silent on success).
+   */
+  private async verifyAuditChain(dbPath: string, issues: string[]): Promise<void> {
+    if (!fs.existsSync(dbPath)) return;
+
+    try {
+      const { createHash } = await import("node:crypto");
+      const Database = (await import("better-sqlite3")).default;
+      const db = new Database(dbPath, { readonly: true });
+      db.pragma("busy_timeout = 2000");
+
+      const rows = db.prepare(
+        "SELECT agent_id, trace_id, action, detail, prev_hash, hash FROM audit_log ORDER BY id ASC"
+      ).all() as { agent_id: string; trace_id: string; action: string; detail: string; prev_hash: string; hash: string }[];
+
+      let expectedPrev = "genesis";
+      let broken = false;
+      for (const row of rows) {
+        if (row.prev_hash !== expectedPrev) {
+          broken = true;
+          break;
+        }
+        const record = JSON.stringify({
+          agentId: row.agent_id, traceId: row.trace_id,
+          action: row.action, detail: row.detail,
+          prevHash: row.prev_hash, timestamp: new Date().toISOString(),
+        });
+        // Note: we can't perfectly reconstruct the original timestamp, so we just
+        // verify the chain linkage (prev_hash matches previous hash).
+        expectedPrev = row.hash;
+      }
+
+      if (broken) {
+        issues.push("Audit log hash chain is broken — possible tampering detected");
+        console.error("[Heartbeat] AUDIT CHAIN INTEGRITY FAILURE");
+      }
+
+      db.close();
+    } catch {
+      // Non-critical — skip if DB not accessible
+    }
+  }
+
+  /**
+   * Detect tasks stuck in active states for >10 minutes and mark them failed.
    * Free any agents that are stuck in "busy" with stale heartbeats.
    */
   private async cleanupStaleTasks(issues: string[]): Promise<void> {

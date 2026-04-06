@@ -208,10 +208,10 @@ export class EventBridge {
       case "task.checkpoint": {
         const text = `**Checkpoint** [${event.source_agent}] ${payload.message ?? payload.detail ?? JSON.stringify(payload)}`;
         await this.safeSendMessage("ai-internal", text);
-        // Also post to department channel if available
+        // Also post to department channel if it exists (dept channels are optional)
         const dept = department || await this.lookupAgentDepartment(event.source_agent, db);
         if (dept) {
-          await this.safeSendMessage(`dept-${dept}`, text);
+          await this.trySendToDeptChannel(dept, text);
         }
         break;
       }
@@ -348,6 +348,20 @@ export class EventBridge {
       return row?.department ?? "";
     } catch {
       return "";
+    }
+  }
+
+  /**
+   * Try to send to a dept-* channel. Silently skip if the channel doesn't exist
+   * (dept channels are only created when a role in that department is hired).
+   */
+  private async trySendToDeptChannel(dept: string, content: string): Promise<void> {
+    const channelName = `dept-${dept}`;
+    try {
+      await findTextChannel(channelName);
+      await sendMessage(channelName, content);
+    } catch {
+      // Channel doesn't exist — silently skip (not an error)
     }
   }
 

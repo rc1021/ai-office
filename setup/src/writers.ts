@@ -97,7 +97,7 @@ export function writeMcpJson(projectRoot: string, config: SetupConfig): void {
  * Create the .ai-office directory structure.
  */
 export function createWorkspaceDirs(projectRoot: string): void {
-  const dirs = ["state", "artifacts", "events", "logs", "memory"];
+  const dirs = ["state", "artifacts", "events", "logs", "memory", "questions", "answers", "brainstorm"];
   const base = path.join(projectRoot, ".ai-office");
 
   for (const dir of dirs) {
