@@ -32,6 +32,11 @@ import {
 } from "discord.js";
 import { registerApprovalInteractionHandler } from "./approval-manager.js";
 import { setDiscordClient } from "./discord-client.js";
+import { loadOfficeConfig } from "./config-loader.js";
+import { EventBridge } from "./event-bridge.js";
+import { HeartbeatScheduler } from "./heartbeat.js";
+import { sendEmbed } from "./message-manager.js";
+import { COLORS } from "./embed-helpers.js";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -457,6 +462,10 @@ async function main(): Promise<void> {
   // Register approval button handler on the listener's client (persistent process)
   registerApprovalInteractionHandler(client);
 
+  // Subsystem instances (for graceful shutdown)
+  let eventBridge: EventBridge | null = null;
+  let heartbeat: HeartbeatScheduler | null = null;
+
   client.once(Events.ClientReady, async (readyClient) => {
     console.log(`[Listener] Bot ready! Logged in as ${readyClient.user.tag}`);
     console.log(`[Listener] Serving ${readyClient.guilds.cache.size} guild(s)`);
@@ -467,6 +476,21 @@ async function main(): Promise<void> {
 
     // Post ngrok URL to #bot-status on every startup (not just first run)
     await postNgrokUrl(readyClient);
+
+    // Start Event Bridge + Heartbeat subsystems
+    try {
+      const config = loadOfficeConfig(PROJECT_DIR);
+
+      eventBridge = new EventBridge(config.statePath);
+      eventBridge.start();
+      console.log("[Listener] EventBridge started — polling every 3s");
+
+      heartbeat = new HeartbeatScheduler(config.timezone, config.statePath);
+      heartbeat.start();
+      console.log("[Listener] HeartbeatScheduler started");
+    } catch (err) {
+      console.error("[Listener] Failed to start subsystems:", err);
+    }
   });
 
   client.on(Events.MessageCreate, (message) => {
@@ -487,6 +511,8 @@ async function main(): Promise<void> {
 
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`\n[Listener] Received ${signal}. Shutting down gracefully...`);
+    if (eventBridge) eventBridge.stop();
+    if (heartbeat) heartbeat.stop();
     client.destroy();
     console.log("[Listener] Discord client destroyed. Goodbye.");
     process.exit(0);
