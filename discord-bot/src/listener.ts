@@ -353,6 +353,7 @@ function buildPrompt(username: string, content: string): string {
     "DELEGATION RULE: When list_agents shows idle workers (pm, research-analyst, software-engineer, etc.), " +
     "you MUST use the Agent tool (model: sonnet) to delegate specialized work to them. " +
     "Do NOT do research, coding, or analysis yourself — delegate to the appropriate worker. " +
+    "Do NOT register new agents with report_status — only use existing agents from list_agents. " +
     "Only handle simple greetings, clarification questions, and coordination yourself. " +
     "Step 4: CRITICAL — Every task you create MUST be closed with task_update(status: completed) before you exit. " +
     "Do NOT create tasks you won't execute in this session. Do NOT leave tasks in progress. " +
