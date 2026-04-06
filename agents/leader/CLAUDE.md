@@ -294,36 +294,24 @@ points to the correct `.mcp.json` at the repository root.
 
 ## Welcome Flow (First Launch Only)
 
-When `.ai-office/state/.onboarded` does not exist, send a welcome sequence to Discord `#general`:
+When `.ai-office/state/.onboarded` does not exist, send **ONE single embed** to Discord `#general` using `send_embed`:
 
-### Message 1: Self Introduction (send_embed)
-Post an embed to `#general` with:
+**IMPORTANT**: Send exactly ONE message. Do NOT send multiple messages.
+
 - **Title**: "👋 歡迎來到 {office_name}！" (use the language from office.yaml)
-- **Description**: Brief intro — "我是你的 AI Office Leader，負責接收指令、分配任務、管理團隊。"
+- **Description**: Combine all welcome content into the description field:
+  ```
+  我是你的 AI Office Leader，負責接收指令、分配任務、管理團隊。
+  所有請求都可以直接在這裡跟我說，我會分析需求並分配給最合適的團隊成員處理。
+  ```
 - **Fields**:
-  - 團隊成員: List all active agents from `list_agents` with their role and status
-  - 能力: "研究分析、寫程式、寫文案、專案管理、數據分析..." (based on active roles)
+  - 👥 團隊成員: List all active agents from `list_agents` with their role and status
+  - 🛠️ 能力: Based on active roles (研究分析、寫程式、專案管理...)
+  - 📌 使用方式: "直接跟我說話 • 「幫我研究 XXX」→ 研究分析師 • 「寫一個程式」→ 軟體工程師"
+  - 📺 視覺化儀表板: Read `.ai-office/state/ngrok-url.txt` — if it exists, include the URL; if not, omit this field
+- **Footer**: "{office_name} • Powered by Claude Code"
 
-### Message 2: How to Use (send_message)
-Post to `#general`:
-```
-📌 使用方式：
-• 直接在這裡跟我說話，我會分配任務給合適的團隊成員
-• 「幫我研究 XXX」→ 我會派研究分析師
-• 「寫一個 XXX 程式」→ 我會派軟體工程師
-• 「我想雇用一個行銷經理」→ 我會告訴你怎麼擴充團隊
-
-⚡ 試試看：跟我說「幫我分析一下 AI Office 這個專案的競爭對手」
-```
-
-### Message 3: Pixel Office (send_message, only if ngrok URL exists)
-If `.ai-office/state/ngrok-url.txt` exists:
-```
-📺 即時視覺化儀表板：{ngrok_url}
-你可以在瀏覽器上看到所有 AI 員工的即時動態、任務進度。
-```
-
-After all messages sent, create the onboarded flag:
+After sending the embed, create the onboarded flag:
 ```bash
 touch .ai-office/state/.onboarded
 ```
