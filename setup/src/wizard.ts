@@ -48,6 +48,9 @@ const i18n: Record<string, Record<Lang, string>> = {
   "ngrok.mode_custom":  { "zh-TW": "自訂 URL (自有 domain / Cloudflare / reverse proxy)", en: "Custom URL (own domain / Cloudflare / reverse proxy)", ja: "カスタムURL (独自ドメイン / Cloudflare / リバースプロキシ)" },
   "ngrok.mode_disabled":{ "zh-TW": "不啟用 (僅 localhost)",   en: "Disabled (localhost only)",     ja: "無効 (localhostのみ)" },
   "prompt.public_url":  { "zh-TW": "Public URL",              en: "Public URL",                   ja: "パブリックURL" },
+  "hint.external_ngrok": { "zh-TW": "Pixel Office 啟動後會自動從 ngrok API (localhost:4040) 偵測 tunnel URL",
+                          en: "Pixel Office will auto-detect tunnel URL from ngrok API (localhost:4040)",
+                          ja: "Pixel Officeが起動後、ngrok API (localhost:4040) からトンネルURLを自動検出します" },
   "warn.no_url":        { "zh-TW": "未提供 URL，稍後可在 pixel-office/.env 設定", en: "No URL provided. Configure later in pixel-office/.env", ja: "URLが入力されていません。後でpixel-office/.envで設定できます" },
   "prompt.ngrok_token": { "zh-TW": "ngrok auth token",        en: "ngrok auth token",          ja: "ngrok auth token" },
   "prompt.pixel_user":  { "zh-TW": "Pixel Office 帳號",       en: "Pixel Office username",     ja: "Pixel Office ユーザー名" },
@@ -385,7 +388,9 @@ async function main(): Promise<void> {
         break;
       }
     }
-  } else if (ngrokMode === "external" || ngrokMode === "custom") {
+  } else if (ngrokMode === "external") {
+    console.log(`  ${t("hint.external_ngrok")}\n`);
+  } else if (ngrokMode === "custom") {
     pixelPublicUrl = await ask(t("prompt.public_url"));
     if (!pixelPublicUrl) {
       console.log(`  ${t("warn.no_url")}\n`);

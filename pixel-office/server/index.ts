@@ -97,12 +97,27 @@ app.listen(PORT, "0.0.0.0", async () => {
       console.error(`[PixelOffice] ngrok failed:`, (err as Error).message);
       console.log(`[PixelOffice] Pixel Office is still running locally at http://localhost:${PORT}`);
     }
-  } else if (ngrokMode === "external" || ngrokMode === "custom") {
-    // Don't start ngrok — user manages it externally
-    const publicUrl = process.env.PIXEL_PUBLIC_URL ?? "";
+  } else if (ngrokMode === "external") {
+    // User runs ngrok externally — auto-detect URL from ngrok local API
+    let publicUrl = process.env.PIXEL_PUBLIC_URL ?? "";
+    if (!publicUrl) {
+      // Poll ngrok API (localhost:4040) to find the tunnel URL for our port
+      const ngrokApi = process.env.NGROK_API_URL ?? "http://localhost:4040";
+      for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+          const res = await fetch(`${ngrokApi}/api/tunnels`);
+          const data = await res.json() as { tunnels: { public_url: string; config: { addr: string } }[] };
+          const tunnel = data.tunnels.find(t => t.config.addr.includes(String(PORT)));
+          if (tunnel) {
+            publicUrl = tunnel.public_url;
+            break;
+          }
+        } catch { /* ngrok may not be ready yet */ }
+        await new Promise(r => setTimeout(r, 2000)); // retry every 2s
+      }
+    }
     if (publicUrl) {
-      console.log(`[PixelOffice] 🌐 Public URL (${ngrokMode}): ${publicUrl}`);
-      // Write URL to state file for listener to post to #bot-status
+      console.log(`[PixelOffice] 🌐 Public URL (external ngrok): ${publicUrl}`);
       try {
         const baseDir = process.env.PROJECT_DIR ?? process.env.HOME ?? "";
         const stateDir = path.join(baseDir, ".ai-office", "state");
@@ -110,7 +125,20 @@ app.listen(PORT, "0.0.0.0", async () => {
         fs.writeFileSync(path.join(stateDir, "ngrok-url.txt"), publicUrl, "utf-8");
       } catch { /* non-critical */ }
     } else {
-      console.log(`[PixelOffice] ⚠️ ${ngrokMode} mode but PIXEL_PUBLIC_URL not set`);
+      console.log(`[PixelOffice] ⚠️ external ngrok mode but could not detect tunnel URL (is ngrok running?)`);
+    }
+  } else if (ngrokMode === "custom") {
+    const publicUrl = process.env.PIXEL_PUBLIC_URL ?? "";
+    if (publicUrl) {
+      console.log(`[PixelOffice] 🌐 Public URL (custom): ${publicUrl}`);
+      try {
+        const baseDir = process.env.PROJECT_DIR ?? process.env.HOME ?? "";
+        const stateDir = path.join(baseDir, ".ai-office", "state");
+        fs.mkdirSync(stateDir, { recursive: true });
+        fs.writeFileSync(path.join(stateDir, "ngrok-url.txt"), publicUrl, "utf-8");
+      } catch { /* non-critical */ }
+    } else {
+      console.log(`[PixelOffice] ⚠️ custom mode but PIXEL_PUBLIC_URL not set in .env`);
     }
   } else {
     console.log(`[PixelOffice] Running locally at http://localhost:${PORT} (no remote access)`);
