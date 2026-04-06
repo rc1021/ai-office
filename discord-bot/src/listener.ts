@@ -77,6 +77,8 @@ const ALLOWED_TOOLS = [
   "Edit",
   "Glob",
   "Grep",
+  "WebSearch",
+  "WebFetch",
   "mcp__ai-office-coordination__report_status",
   "mcp__ai-office-coordination__task_create",
   "mcp__ai-office-coordination__task_update",
