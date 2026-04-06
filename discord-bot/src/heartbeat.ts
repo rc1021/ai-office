@@ -104,9 +104,11 @@ export class HeartbeatScheduler {
       }
     }
 
+    // Clean up stale tasks and agents (stuck for >15 minutes)
+    await this.cleanupStaleTasks(issues);
+
     // Only alert on failure
     if (issues.length > 0) {
-      const text = `**Health Check Failed**\n${issues.map((i) => `- ${i}`).join("\n")}`;
       try {
         await sendEmbed("alerts", {
           title: "Health Check Alert",
@@ -117,6 +119,72 @@ export class HeartbeatScheduler {
       } catch (err) {
         console.error("[Heartbeat] Failed to post health alert:", err);
       }
+    }
+  }
+
+  /**
+   * Detect tasks stuck in active states for >15 minutes and mark them failed.
+   * Free any agents that are stuck in "busy" with stale heartbeats.
+   */
+  private async cleanupStaleTasks(issues: string[]): Promise<void> {
+    const dbPath = path.join(this.statePath, "coordination.db");
+    if (!fs.existsSync(dbPath)) return;
+
+    try {
+      const Database = (await import("better-sqlite3")).default;
+      const db = new Database(dbPath, { readonly: false });
+      db.pragma("busy_timeout = 5000");
+
+      // Find and fail stale tasks (no update in 15 minutes)
+      const staleTasks = db.prepare(`
+        SELECT id, title, assigned_to FROM tasks
+        WHERE status IN ('assigned', 'in_progress', 'checkpoint')
+        AND updated_at < datetime('now', '-15 minutes')
+      `).all() as { id: string; title: string; assigned_to: string | null }[];
+
+      if (staleTasks.length > 0) {
+        const failStmt = db.prepare(
+          "UPDATE tasks SET status = 'failed', updated_at = datetime('now') WHERE id = ?"
+        );
+        const freeAgentStmt = db.prepare(
+          "UPDATE agents SET status = 'idle', current_task_id = NULL WHERE agent_id = ? AND current_task_id = ?"
+        );
+
+        for (const task of staleTasks) {
+          failStmt.run(task.id);
+          if (task.assigned_to) {
+            freeAgentStmt.run(task.assigned_to, task.id);
+          }
+          console.log(`[Heartbeat] Marked stale task as failed: "${task.title}" (${task.id})`);
+        }
+
+        issues.push(`${staleTasks.length} stale task(s) marked as failed: ${staleTasks.map(t => t.title).join(", ")}`);
+      }
+
+      // Free any agents stuck in "busy" with no recent heartbeat (>15 min)
+      const staleAgents = db.prepare(`
+        SELECT agent_id FROM agents
+        WHERE status = 'busy'
+        AND last_heartbeat < datetime('now', '-15 minutes')
+        AND (current_task_id IS NULL OR current_task_id NOT IN (
+          SELECT id FROM tasks WHERE status IN ('assigned', 'in_progress', 'checkpoint')
+        ))
+      `).all() as { agent_id: string }[];
+
+      if (staleAgents.length > 0) {
+        const freeStmt = db.prepare(
+          "UPDATE agents SET status = 'idle', current_task_id = NULL WHERE agent_id = ?"
+        );
+        for (const agent of staleAgents) {
+          freeStmt.run(agent.agent_id);
+          console.log(`[Heartbeat] Freed stale agent: ${agent.agent_id}`);
+        }
+        issues.push(`${staleAgents.length} stale agent(s) freed: ${staleAgents.map(a => a.agent_id).join(", ")}`);
+      }
+
+      db.close();
+    } catch (err) {
+      console.error("[Heartbeat] Stale cleanup error:", err);
     }
   }
 
