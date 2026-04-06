@@ -94,7 +94,7 @@ function generateWorkerMcpJson(roleId: string): object {
       command: nodeCmd,
       args: [path.join(root, "coordination", "dist", "index.js")],
       env: {
-        AI_OFFICE_WORKSPACE: "~/.ai-office",
+        AI_OFFICE_WORKSPACE: path.join(root, ".ai-office"),
         AI_OFFICE_ROOT: root,
         // AI_OFFICE_AGENT_TOKEN is set by prepareWorker()
       },

@@ -208,7 +208,7 @@ The dev server supports hot-reload. Changes to Phaser.js scenes or the Express A
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PIXEL_OFFICE_PORT` | HTTP port for the dashboard server. | `3847` |
-| `AI_OFFICE_WORKSPACE` | Path to the `.ai-office` workspace directory. | `~/.ai-office` |
+| `AI_OFFICE_WORKSPACE` | Path to the `.ai-office` workspace directory. | `<project-dir>/.ai-office` |
 
 ---
 
@@ -257,7 +257,7 @@ Or set `PIXEL_OFFICE_PORT` in your environment before running `docker compose up
 **Fix:** The workspace directory was not created by the setup wizard. Create it manually:
 
 ```sh
-mkdir -p ~/.ai-office/{state,artifacts,events,logs,memory}
+mkdir -p .ai-office/{state,artifacts,events,logs,memory}
 ```
 
 Then re-run the wizard or set `AI_OFFICE_WORKSPACE` to point to an existing directory.

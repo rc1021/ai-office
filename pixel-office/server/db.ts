@@ -5,22 +5,23 @@ import fs from "node:fs";
 let db: Database.Database | null = null;
 
 export function resolveDbPath(): string {
-  // 1. Explicit env var
-  const workspace = process.env.AI_OFFICE_WORKSPACE?.replace("~", process.env.HOME ?? "");
+  // 1. Explicit env var (AI_OFFICE_WORKSPACE is an absolute path to .ai-office/)
+  const workspace = process.env.AI_OFFICE_WORKSPACE;
   if (workspace) {
     return path.join(workspace, "state", "coordination.db");
   }
 
-  // 2. Walk up from cwd to find project root (has config/office.yaml),
-  //    then read the paths.state from office.yaml or fall back to .ai-office/state
+  // 2. PROJECT_DIR env var (set by the listener when spawning pixel-office)
+  const projectDir = process.env.PROJECT_DIR;
+  if (projectDir) {
+    const dbPath = path.join(projectDir, ".ai-office", "state", "coordination.db");
+    if (fs.existsSync(dbPath)) return dbPath;
+  }
+
+  // 3. Walk up from cwd to find project root (has config/office.yaml)
   let dir = process.cwd();
   for (let i = 0; i < 5; i++) {
     if (fs.existsSync(path.join(dir, "config", "office.yaml"))) {
-      // Check ~/.ai-office first (standard location)
-      const homePath = path.join(process.env.HOME ?? "", ".ai-office", "state", "coordination.db");
-      if (fs.existsSync(homePath)) return homePath;
-
-      // Then check project-local .ai-office
       const localPath = path.join(dir, ".ai-office", "state", "coordination.db");
       if (fs.existsSync(localPath)) return localPath;
     }

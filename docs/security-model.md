@@ -35,7 +35,7 @@ Layer 5 — Audit Trail         (coordination/src/database.ts)
 
 ### Session Key
 
-On each orchestrator `init`, a fresh 256-bit random session key is generated and written to `~/.ai-office/state/session-key`. Generating a new key immediately invalidates all tokens from the previous session — there is no need to track or expire individual old tokens.
+On each orchestrator `init`, a fresh 256-bit random session key is generated and written to `.ai-office/state/session-key`. Generating a new key immediately invalidates all tokens from the previous session — there is no need to track or expire individual old tokens.
 
 ```
 generateSessionKey()
@@ -100,7 +100,7 @@ Any single failure returns `null` and logs a warning.
 
 ### Token Revocation
 
-`revokeToken(agentId)` appends the agent ID to `~/.ai-office/state/revoked-tokens.json`. This list is checked on every `validateToken` call. When `stop-worker` is called, revocation happens before workspace deletion, ensuring the token cannot be reused even if an attacker copies it out of the workspace.
+`revokeToken(agentId)` appends the agent ID to `.ai-office/state/revoked-tokens.json`. This list is checked on every `validateToken` call. When `stop-worker` is called, revocation happens before workspace deletion, ensuring the token cannot be reused even if an attacker copies it out of the workspace.
 
 ---
 

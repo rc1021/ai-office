@@ -81,7 +81,7 @@ export function writeMcpJson(projectRoot: string, config: SetupConfig): void {
         command: nodePath,
         args: [path.join(absRoot, "coordination", "dist", "index.js")],
         env: {
-          AI_OFFICE_WORKSPACE: "~/.ai-office",
+          AI_OFFICE_WORKSPACE: path.join(absRoot, ".ai-office"),
           AI_OFFICE_ROOT: absRoot,
         },
       },

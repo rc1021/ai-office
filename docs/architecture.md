@@ -67,7 +67,7 @@
                                 │ SQLite WAL
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│  ~/.ai-office/state/coordination.db                                 │
+│  .ai-office/state/coordination.db                                   │
 │  tasks | agents | events | inbox | audit_log | artifacts | traces   │
 └─────────────────────────────────────────────────────────────────────┘
 
@@ -162,7 +162,7 @@ The following numbered steps trace a complete user request from Discord message 
  5. Orchestrator:
     a. Loads role template YAML
     b. Issues HMAC-signed identity token (TTL from office.yaml)
-    c. Creates worker workspace at ~/.ai-office/workers/{agent_id}/
+    c. Creates worker workspace at .ai-office/workers/{agent_id}/
     d. Writes worker CLAUDE.md (base template + injected role fields)
     e. Writes .mcp.json with AI_OFFICE_AGENT_TOKEN env var
     f. Returns agent_id, workspace_dir, identity_token to Leader
@@ -209,7 +209,7 @@ Leader detects task requires a worker
   │    ├─ Checks canSpawn() (active < max_concurrent from office.yaml)
   │    ├─ Assigns instance number (role-id-N, incrementing)
   │    ├─ Issues HMAC token with role scopes + TTL
-  │    ├─ Creates ~/.ai-office/workers/{agent_id}/ workspace
+  │    ├─ Creates .ai-office/workers/{agent_id}/ workspace
   │    ├─ Writes CLAUDE.md with {{ROLE_*}} placeholders substituted
   │    └─ Returns: agent_id, workspace_dir, identity_token
   │
@@ -256,7 +256,7 @@ Leader reviews response:
 Leader calls orchestrator stop-worker --agent-id {agent_id}
   │
   ├─ revokeToken(agent_id) → agent_id added to revoked-tokens.json
-  ├─ Worker record marked stopped in ~/.ai-office/state/workers.json
+  ├─ Worker record marked stopped in .ai-office/state/workers.json
   └─ Workspace directory deleted
 ```
 

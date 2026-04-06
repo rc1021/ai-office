@@ -16,9 +16,7 @@ import { initAuth, enforceIdentity, enforceClearance } from "./auth.js";
 
 // ── Resolve workspace path ──
 
-const WORKSPACE = process.env.AI_OFFICE_WORKSPACE ?? path.join(
-  process.env.HOME ?? "~", ".ai-office"
-);
+const WORKSPACE = process.env.AI_OFFICE_WORKSPACE ?? path.join(process.cwd(), ".ai-office");
 
 // ── Initialize database ──
 

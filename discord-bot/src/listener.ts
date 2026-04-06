@@ -183,7 +183,7 @@ async function checkFirstRun(): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("");
     console.error("[Listener] ❌ First-run setup failed:", msg);
-    console.error("[Listener] To retry: delete ~/.ai-office/state/.onboarded and restart the listener.");
+    console.error("[Listener] To retry: delete .ai-office/state/.onboarded (in project root) and restart the listener.");
     console.error("");
   }
 }
@@ -279,15 +279,10 @@ async function handleMessage(message: Message): Promise<void> {
  */
 async function postNgrokUrl(readyClient: import("discord.js").Client<true>): Promise<void> {
   const ngrokFile = path.join(PROJECT_DIR, ".ai-office", "state", "ngrok-url.txt");
-  // Also check legacy HOME-based path
-  const ngrokFileLegacy = path.join(process.env.HOME ?? "", ".ai-office", "state", "ngrok-url.txt");
 
   let url = "";
-  for (const f of [ngrokFile, ngrokFileLegacy]) {
-    if (fs.existsSync(f)) {
-      url = fs.readFileSync(f, "utf-8").trim();
-      if (url) break;
-    }
+  if (fs.existsSync(ngrokFile)) {
+    url = fs.readFileSync(ngrokFile, "utf-8").trim();
   }
 
   if (!url) {
