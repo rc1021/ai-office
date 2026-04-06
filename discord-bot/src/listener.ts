@@ -197,6 +197,7 @@ async function checkFirstRun(): Promise<void> {
 
 const messageQueue: Message[] = [];
 let processing = false;
+const processedMessageIds = new Set<string>();
 
 async function enqueueMessage(message: Message): Promise<void> {
   // Safety checks (fast, before queuing)
@@ -204,6 +205,17 @@ async function enqueueMessage(message: Message): Promise<void> {
   if (!(message.channel instanceof TextChannel)) return;
   if (message.channel.name !== GENERAL_CHANNEL) return;
   if (!message.content.trim()) return;
+
+  // Dedup: Discord may fire MessageCreate multiple times for the same message
+  // (reconnect, partial message hydration, etc.)
+  if (processedMessageIds.has(message.id)) return;
+  processedMessageIds.add(message.id);
+
+  // Keep the set from growing forever (retain last 200)
+  if (processedMessageIds.size > 200) {
+    const first = processedMessageIds.values().next().value;
+    if (first) processedMessageIds.delete(first);
+  }
 
   messageQueue.push(message);
   console.log(`[Listener] Queued message from ${message.author.username} (queue size: ${messageQueue.length})`);
