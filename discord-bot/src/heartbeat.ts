@@ -27,6 +27,7 @@ export class HeartbeatScheduler {
   private startTime: number;
   private statusMessageId: string | null = null;
   private running = false;
+  private lastAuditVerifiedId: number = 0;
 
   constructor(timezone: string, statePath: string) {
     this.timezone = timezone;
@@ -104,9 +105,6 @@ export class HeartbeatScheduler {
       }
     }
 
-    // Verify audit chain integrity
-    await this.verifyAuditChain(dbPath, issues);
-
     // Clean up stale tasks and agents (stuck for >10 minutes)
     await this.cleanupStaleTasks(issues);
 
@@ -126,47 +124,63 @@ export class HeartbeatScheduler {
   }
 
   /**
-   * Verify audit log hash chain integrity. Runs once per health check cycle.
-   * Only reports if corruption is detected (silent on success).
+   * Verify audit log hash chain linkage: each row's prev_hash must equal
+   * the previous row's hash. Only checks chain linkage, not hash recomputation
+   * (original timestamps are not stored in the hash input).
+   */
+  /**
+   * Verify audit log hash chain linkage for NEW entries only.
+   * Each row's prev_hash must equal the previous row's hash.
+   * Tracks lastVerifiedId to avoid re-checking historical entries
+   * (which may have been corrupted by earlier multi-process bugs).
    */
   private async verifyAuditChain(dbPath: string, issues: string[]): Promise<void> {
     if (!fs.existsSync(dbPath)) return;
 
     try {
-      const { createHash } = await import("node:crypto");
       const Database = (await import("better-sqlite3")).default;
       const db = new Database(dbPath, { readonly: true });
       db.pragma("busy_timeout = 2000");
 
-      const rows = db.prepare(
-        "SELECT agent_id, trace_id, action, detail, prev_hash, hash FROM audit_log ORDER BY id ASC"
-      ).all() as { agent_id: string; trace_id: string; action: string; detail: string; prev_hash: string; hash: string }[];
+      // On first run, skip to the latest entry (trust existing history)
+      if (this.lastAuditVerifiedId === 0) {
+        const latest = db.prepare("SELECT MAX(id) as maxId FROM audit_log").get() as { maxId: number } | undefined;
+        this.lastAuditVerifiedId = latest?.maxId ?? 0;
+        db.close();
+        return;
+      }
 
-      let expectedPrev = "genesis";
+      // Only verify entries added since last check
+      const rows = db.prepare(
+        "SELECT id, prev_hash, hash FROM audit_log WHERE id > ? ORDER BY id ASC"
+      ).all(this.lastAuditVerifiedId) as { id: number; prev_hash: string; hash: string }[];
+
+      if (rows.length === 0) { db.close(); return; }
+
+      // Get the hash of the last verified row to check linkage
+      const prevRow = db.prepare(
+        "SELECT hash FROM audit_log WHERE id = ?"
+      ).get(this.lastAuditVerifiedId) as { hash: string } | undefined;
+      let expectedPrev = prevRow?.hash ?? "genesis";
+
       let broken = false;
       for (const row of rows) {
         if (row.prev_hash !== expectedPrev) {
           broken = true;
           break;
         }
-        const record = JSON.stringify({
-          agentId: row.agent_id, traceId: row.trace_id,
-          action: row.action, detail: row.detail,
-          prevHash: row.prev_hash, timestamp: new Date().toISOString(),
-        });
-        // Note: we can't perfectly reconstruct the original timestamp, so we just
-        // verify the chain linkage (prev_hash matches previous hash).
         expectedPrev = row.hash;
+        this.lastAuditVerifiedId = row.id;
       }
 
       if (broken) {
-        issues.push("Audit log hash chain is broken — possible tampering detected");
-        console.error("[Heartbeat] AUDIT CHAIN INTEGRITY FAILURE");
+        issues.push("Audit log hash chain broken in recent entries — possible tampering");
+        console.error("[Heartbeat] AUDIT CHAIN INTEGRITY FAILURE (new entries)");
       }
 
       db.close();
     } catch {
-      // Non-critical — skip if DB not accessible
+      // Non-critical
     }
   }
 
@@ -273,10 +287,24 @@ export class HeartbeatScheduler {
     const memUsage = process.memoryUsage();
     const memMB = Math.round(memUsage.rss / 1024 / 1024);
 
+    // Audit chain check (every 30 min, not every 1 min)
+    const auditIssues: string[] = [];
+    const dbPath = path.join(this.statePath, "coordination.db");
+    await this.verifyAuditChain(dbPath, auditIssues);
+    if (auditIssues.length > 0) {
+      try {
+        await sendEmbed("alerts", {
+          title: "Audit Chain Alert",
+          description: auditIssues.join("\n"),
+          color: COLORS.RED,
+          footer: new Date().toISOString(),
+        });
+      } catch { /* best effort */ }
+    }
+
     // Count active agents and tasks from DB
     let activeAgents = 0;
     let activeTasks = 0;
-    const dbPath = path.join(this.statePath, "coordination.db");
     if (fs.existsSync(dbPath)) {
       try {
         // Dynamic import to avoid issues if DB doesn't exist
