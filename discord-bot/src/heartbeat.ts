@@ -298,7 +298,7 @@ export class HeartbeatScheduler {
         const db = new Database(dbPath, { readonly: true });
         db.pragma("busy_timeout = 2000");
         try {
-          const agentRow = db.prepare("SELECT COUNT(*) as cnt FROM agents WHERE status = 'online'").get() as { cnt: number } | undefined;
+          const agentRow = db.prepare("SELECT COUNT(*) as cnt FROM agents WHERE status != 'offline'").get() as { cnt: number } | undefined;
           activeAgents = agentRow?.cnt ?? 0;
         } catch { /* table may not exist */ }
         try {
