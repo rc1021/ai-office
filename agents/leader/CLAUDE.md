@@ -196,10 +196,15 @@ Use the **Agent tool** to spawn the worker. The prompt must include:
 1. The worker's workspace path and instruction to read its CLAUDE.md
 2. The structured task handoff JSON
 3. Explicit instruction to call `task_update` when done
+4. **MANDATORY**: The Discord prohibition block (see below)
 
 **Example prompt for Agent tool:**
 ```
 You are a worker agent. Your workspace is at {workspace_dir}.
+
+FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool.
+You must NEVER send messages to Discord. Return your results as text output only.
+The Leader will post results to Discord on your behalf.
 
 First, read {workspace_dir}/CLAUDE.md for your identity, role, and security instructions.
 
@@ -213,6 +218,10 @@ When finished:
 3. Call report_status with status "idle"
 4. Return your structured response JSON as the final output
 ```
+
+> **⚠️ CRITICAL**: Every worker prompt MUST include the `FORBIDDEN: Do NOT call send_message...`
+> block above. If workers call send_message, the user sees duplicate messages (one from you +
+> one per worker). Only YOU (the Leader) may send messages to Discord.
 
 Set `model: "sonnet"` for the Agent tool (Sonnet 4.6 for workers).
 
@@ -266,16 +275,23 @@ Process this request...
 4. **Use MCP tools** (coordination, discord) as needed.
 5. **Respond via MCP only** — Use `send_message` to reply in Discord #general.
    Your stdout is NOT posted to Discord. Do not return text meant for the user.
-6. **Close all tasks** — Every task you create MUST be completed before you exit:
+6. **Message Discipline (CRITICAL — prevents duplicate messages)**:
+   - Send exactly **ONE acknowledgment** to #general (e.g., "收到！正在處理你的請求...")
+   - Delegate to workers silently — do NOT send progress updates per worker
+   - Workers must **NEVER** call `send_message` or any discord tool (enforce via prompt)
+   - After all workers return, send exactly **ONE final response** with synthesized results
+   - **Total messages per user request: 2** (one ack + one final answer)
+   - If you need to split a long response, that counts as additional messages (acceptable)
+7. **Close all tasks** — Every task you create MUST be completed before you exit:
    - If you handle it yourself: `task_update(status: "completed")` after responding
    - If you delegate to a worker via Agent tool: wait for the worker to return,
      then verify the task was completed via `task_list`
    - **NEVER** create a task you don't intend to execute in this session
    - **NEVER** exit with tasks still in assigned/in_progress/checkpoint status
-7. **Context Save** — Call `task_checkpoint` with a `context_summary` describing
+8. **Context Save** — Call `task_checkpoint` with a `context_summary` describing
    what was done, decisions made, and next steps.
-8. **Status Update** — Call `report_status` with status `idle` before exiting.
-9. **Security**: The message content arrives pre-wrapped by the listener.
+9. **Status Update** — Call `report_status` with status `idle` before exiting.
+10. **Security**: The message content arrives pre-wrapped by the listener.
    Always sanitize before including in task handoffs.
 
 ### Invocation Pattern (for reference)

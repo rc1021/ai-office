@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_URL="https://github.com/rc1021/ai-office.git"
+REPO="rc1021/ai-office"
+BRANCH="main"
+ARCHIVE_URL="https://github.com/${REPO}/archive/refs/heads/${BRANCH}.tar.gz"
 INSTALL_DIR="${AI_OFFICE_DIR:-ai-office}"
 
 echo ""
@@ -10,19 +12,25 @@ echo "    AI Office — Setup"
 echo "  ==================================="
 echo ""
 
-# ── Prerequisites ─────────────────────────────────────────────────────────────
-
-# ── Clone if needed ───────────────────────────────────────────────────────────
+# ── Download if needed ───────────────────────────────────────────────────────
 
 if [ -f "CLAUDE.md" ] && [ -d "config" ] && [ -d "discord-bot" ]; then
-  : # Already inside the repo
+  : # Already inside the project
 elif [ -d "$INSTALL_DIR" ] && [ -f "$INSTALL_DIR/CLAUDE.md" ]; then
   cd "$INSTALL_DIR"
 else
-  echo "  Cloning AI Office..."
-  git clone "$REPO_URL" "$INSTALL_DIR" 2>&1 | sed 's/^/  /'
+  echo "  Downloading AI Office..."
+  tmpfile=$(mktemp)
+  curl -fsSL "$ARCHIVE_URL" -o "$tmpfile" || {
+    echo "  [FAIL] Download failed. Check your network connection."
+    rm -f "$tmpfile"
+    exit 1
+  }
+  mkdir -p "$INSTALL_DIR"
+  tar xzf "$tmpfile" --strip-components=1 -C "$INSTALL_DIR"
+  rm -f "$tmpfile"
   cd "$INSTALL_DIR"
-  echo "  [OK] Cloned to $(pwd)"
+  echo "  [OK] Downloaded to $(pwd)"
   echo ""
 fi
 
@@ -53,12 +61,12 @@ if ! command -v npm &>/dev/null; then
 fi
 echo "  [OK] npm $(npm -v)"
 
-# git
-if ! command -v git &>/dev/null; then
-  echo "  [FAIL] git not found."
+# curl (needed for downloads)
+if ! command -v curl &>/dev/null; then
+  echo "  [FAIL] curl not found."
   exit 1
 fi
-echo "  [OK] git $(git --version | awk '{print $3}')"
+echo "  [OK] curl"
 
 # Claude Code
 if command -v claude &>/dev/null; then
