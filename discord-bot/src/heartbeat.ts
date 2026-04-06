@@ -38,12 +38,12 @@ export class HeartbeatScheduler {
     if (this.running) return;
     this.running = true;
 
-    // Health check every 5 minutes
+    // Health check every 1 minute (lightweight: PID check + stale task cleanup)
     this.healthTimer = setInterval(() => {
       this.healthCheck().catch((err) =>
         console.error("[Heartbeat] Health check error:", err)
       );
-    }, 5 * 60 * 1000);
+    }, 1 * 60 * 1000);
 
     // System status every 30 minutes
     this.statusTimer = setInterval(() => {
@@ -55,7 +55,7 @@ export class HeartbeatScheduler {
     // Schedule daily brief
     this.scheduleDailyBrief();
 
-    console.log(`[Heartbeat] Started — health/5min, status/30min, daily-brief@08:30 ${this.timezone}`);
+    console.log(`[Heartbeat] Started — health/1min, status/30min, daily-brief@08:30 ${this.timezone}`);
   }
 
   stop(): void {
@@ -139,7 +139,7 @@ export class HeartbeatScheduler {
       const staleTasks = db.prepare(`
         SELECT id, title, assigned_to FROM tasks
         WHERE status IN ('assigned', 'in_progress', 'checkpoint')
-        AND updated_at < datetime('now', '-15 minutes')
+        AND updated_at < datetime('now', '-10 minutes')
       `).all() as { id: string; title: string; assigned_to: string | null }[];
 
       if (staleTasks.length > 0) {
@@ -165,7 +165,7 @@ export class HeartbeatScheduler {
       const staleAgents = db.prepare(`
         SELECT agent_id FROM agents
         WHERE status = 'busy'
-        AND last_heartbeat < datetime('now', '-15 minutes')
+        AND last_heartbeat < datetime('now', '-10 minutes')
         AND (current_task_id IS NULL OR current_task_id NOT IN (
           SELECT id FROM tasks WHERE status IN ('assigned', 'in_progress', 'checkpoint')
         ))

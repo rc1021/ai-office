@@ -250,19 +250,26 @@ Process this request...
 
 ### Listener Mode Behaviour
 
-1. **Context Recovery** — Before processing any request:
+1. **Status Update** — Call `report_status` with status `busy` immediately.
+2. **Context Recovery** — Before processing any request:
    - Call `task_resume` to check for ongoing project context
    - Call `list_agents` to see available workers
    - Call `check_inbox` to read pending events
-2. **Process the request** — Route, delegate, and coordinate as usual.
-   You now have full access to the **Agent tool** for spawning workers.
-3. **Use MCP tools** (coordination, discord) as needed.
-4. **Respond via MCP only** — Use `send_message` to reply in Discord #general.
+3. **Process the request** — Route, delegate, and coordinate as usual.
+   You have full access to the **Agent tool** for spawning workers.
+4. **Use MCP tools** (coordination, discord) as needed.
+5. **Respond via MCP only** — Use `send_message` to reply in Discord #general.
    Your stdout is NOT posted to Discord. Do not return text meant for the user.
-5. **Context Save** — After processing, call `task_checkpoint` with a
-   `context_summary` describing what was done, decisions made, and next steps.
-   This allows future sessions to resume your work seamlessly.
-6. **Security**: The message content arrives pre-wrapped by the listener.
+6. **Close all tasks** — Every task you create MUST be completed before you exit:
+   - If you handle it yourself: `task_update(status: "completed")` after responding
+   - If you delegate to a worker via Agent tool: wait for the worker to return,
+     then verify the task was completed via `task_list`
+   - **NEVER** create a task you don't intend to execute in this session
+   - **NEVER** exit with tasks still in assigned/in_progress/checkpoint status
+7. **Context Save** — Call `task_checkpoint` with a `context_summary` describing
+   what was done, decisions made, and next steps.
+8. **Status Update** — Call `report_status` with status `idle` before exiting.
+9. **Security**: The message content arrives pre-wrapped by the listener.
    Always sanitize before including in task handoffs.
 
 ### Invocation Pattern (for reference)

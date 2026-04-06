@@ -330,12 +330,13 @@ function buildPrompt(username: string, content: string): string {
     "IMPORTANT: Use the send_message MCP tool to respond to the user in #general. " +
     "Do NOT return text output — your stdout is not posted to Discord. " +
     "Keep each message under 1800 characters. " +
-    "First: call report_status with status 'busy' so the Pixel Office shows you working. " +
-    "Before processing: call task_resume for ongoing context, list_agents for available workers, check_inbox for pending events. " +
-    "After processing: call task_checkpoint with a context_summary of what was done and next steps. " +
-    "Finally: call report_status with status 'idle' when done. " +
-    "You can use the Agent tool to delegate tasks to workers (model: sonnet). " +
-    "Use your MCP tools (coordination, discord) as needed."
+    "Step 1: report_status(busy). " +
+    "Step 2: task_resume + list_agents + check_inbox for context. " +
+    "Step 3: Process the request. Use Agent tool (model: sonnet) to delegate to workers if needed. " +
+    "Step 4: CRITICAL — Every task you create MUST be closed with task_update(status: completed) before you exit. " +
+    "Do NOT create tasks you won't execute in this session. Do NOT leave tasks in progress. " +
+    "Step 5: task_checkpoint with context_summary. " +
+    "Step 6: report_status(idle)."
   );
 }
 
