@@ -261,13 +261,13 @@ async function handleMessage(message: Message): Promise<void> {
     return;
   }
 
-  // 4. Replace ⏳ with ✅
-  await removeReaction(message, "⏳");
+  // 4. Replace ⏳ with ✅ (add ✅ first so there's no gap)
   try {
     await message.react("✅");
   } catch (err) {
     console.warn("[Listener] Could not add ✅ reaction:", err);
   }
+  await removeReaction(message, "⏳");
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -299,9 +299,11 @@ function buildPrompt(username: string, content: string): string {
  */
 async function removeReaction(message: Message, emoji: string): Promise<void> {
   try {
-    const myReaction = message.reactions.cache.get(emoji);
-    if (myReaction) {
-      await myReaction.users.remove(message.client.user!.id);
+    // Fetch fresh reaction data instead of relying on potentially stale cache
+    const fetched = await message.fetch();
+    const reaction = fetched.reactions.cache.get(emoji);
+    if (reaction) {
+      await reaction.users.remove(message.client.user!.id);
     }
   } catch {
     // Non-fatal — permissions may not allow reaction removal
