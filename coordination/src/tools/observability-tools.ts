@@ -14,7 +14,8 @@ export function reportStatus(params: {
   const db = getDb();
   const status = params.status as AgentStatus;
 
-  // Upsert agent record
+  // Update existing agent only — new agents must be registered via
+  // register_agent (Discord MCP) or orchestrator, not via report_status.
   const existing = db.prepare("SELECT agent_id FROM agents WHERE agent_id = ?").get(
     params.agent_id
   ) as { agent_id: string } | undefined;
@@ -25,24 +26,11 @@ export function reportStatus(params: {
       WHERE agent_id = ?
     `).run(status, params.current_task_id ?? null, params.agent_id);
   } else {
-    db.prepare(`
-      INSERT INTO agents (agent_id, role_id, department, status, current_task_id, clearance_level)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      params.agent_id,
-      params.role_id,
-      params.department ?? "",
-      status,
-      params.current_task_id ?? null,
-      params.clearance_level ?? 0
+    throw new Error(
+      `Agent "${params.agent_id}" is not registered. ` +
+      `Only pre-registered agents (from setup or register_agent) can report status. ` +
+      `Available agents can be found via list_agents.`
     );
-
-    // Announce new agent
-    publishEvent(generateId("evt"), "agent.online", params.agent_id, "*", {
-      agent_id: params.agent_id,
-      role_id: params.role_id,
-      department: params.department,
-    }, "");
   }
 
   const agent = db.prepare("SELECT * FROM agents WHERE agent_id = ?").get(
