@@ -131,7 +131,7 @@ echo "  [OK] All builds successful"
 # ── Configuration Wizard ──────────────────────────────────────────────────────
 
 echo ""
-echo "[4/4] Running configuration wizard..."
+echo "[4/6] Running configuration wizard..."
 echo ""
 
 # Reset terminal settings (npm/build may have altered them)
@@ -139,15 +139,14 @@ stty sane 2>/dev/null || true
 
 node setup/dist/wizard.js || {
   echo ""
-  echo "  Setup was cancelled. To restart: ./setup.sh"
+  echo "  Wizard skipped — using existing configuration."
   echo ""
-  exit 0
 }
 
 # ── Stop old processes ────────────────────────────────────────────────────────
 
 echo ""
-echo "[5/6] Stopping old processes (if any)..."
+echo "[5/6] Stopping old processes..."
 
 # Stop old Discord Listener
 LISTENER_PID_FILE="$PROJECT_DIR/discord-bot/listener.pid"
