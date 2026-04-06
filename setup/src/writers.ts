@@ -10,10 +10,12 @@ export interface SetupConfig {
   maxWorkers: number;
   starterPack: string;
   starterRoles: string[];
+  ngrokMode?: "internal" | "external" | "custom" | "disabled";
   ngrokEnabled?: boolean;
   ngrokAuthToken?: string;
   pixelAuthUser?: string;
   pixelAuthPass?: string;
+  pixelPublicUrl?: string;
 }
 
 /**
@@ -136,18 +138,28 @@ export function writeActiveRoles(projectRoot: string, config: SetupConfig): void
 }
 
 /**
- * Write pixel-office/.env with ngrok and auth settings.
+ * Write pixel-office/.env with ngrok mode and auth settings.
  */
 export function writePixelOfficeEnv(projectRoot: string, config: SetupConfig): void {
-  if (!config.ngrokEnabled) return;
+  const mode = config.ngrokMode ?? (config.ngrokEnabled ? "internal" : "disabled");
+  if (mode === "disabled") return;
 
   const envPath = path.join(projectRoot, "pixel-office", ".env");
   const lines = [
-    `NGROK_ENABLED=true`,
-    `NGROK_AUTHTOKEN=${config.ngrokAuthToken ?? ""}`,
-    `PIXEL_AUTH_USER=${config.pixelAuthUser ?? "admin"}`,
-    `PIXEL_AUTH_PASS=${config.pixelAuthPass ?? ""}`,
+    `NGROK_MODE=${mode}`,
+    `NGROK_ENABLED=${mode === "internal" ? "true" : "false"}`,
   ];
+
+  if (mode === "internal") {
+    lines.push(`NGROK_AUTHTOKEN=${config.ngrokAuthToken ?? ""}`);
+    lines.push(`PIXEL_AUTH_USER=${config.pixelAuthUser ?? "admin"}`);
+    lines.push(`PIXEL_AUTH_PASS=${config.pixelAuthPass ?? ""}`);
+  }
+
+  if ((mode === "external" || mode === "custom") && config.pixelPublicUrl) {
+    lines.push(`PIXEL_PUBLIC_URL=${config.pixelPublicUrl}`);
+  }
+
   fs.writeFileSync(envPath, lines.join("\n") + "\n", "utf-8");
-  console.log("  [OK] pixel-office/.env (ngrok)");
+  console.log(`  [OK] pixel-office/.env (${mode})`);
 }

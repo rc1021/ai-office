@@ -64,8 +64,10 @@ app.listen(PORT, "0.0.0.0", async () => {
   console.log(`[PixelOffice] API server running at http://0.0.0.0:${PORT}`);
   console.log(`[PixelOffice] Open http://localhost:3848 for dev client (vite)`);
 
-  // Start ngrok tunnel if enabled
-  if (process.env.NGROK_ENABLED === "true" && process.env.NGROK_AUTHTOKEN) {
+  // Remote access based on NGROK_MODE
+  const ngrokMode = process.env.NGROK_MODE ?? (process.env.NGROK_ENABLED === "true" ? "internal" : "disabled");
+
+  if (ngrokMode === "internal" && process.env.NGROK_AUTHTOKEN) {
     try {
       const ngrok = await import("@ngrok/ngrok");
       const authUser = process.env.PIXEL_AUTH_USER ?? "";
@@ -85,7 +87,6 @@ app.listen(PORT, "0.0.0.0", async () => {
       }
 
       // Write URL to state file so the listener daemon can share it on Discord.
-      // Prefer PROJECT_DIR (set by listener), fall back to HOME.
       try {
         const baseDir = process.env.PROJECT_DIR ?? process.env.HOME ?? "";
         const stateDir = path.join(baseDir, ".ai-office", "state");
@@ -96,5 +97,22 @@ app.listen(PORT, "0.0.0.0", async () => {
       console.error(`[PixelOffice] ngrok failed:`, (err as Error).message);
       console.log(`[PixelOffice] Pixel Office is still running locally at http://localhost:${PORT}`);
     }
+  } else if (ngrokMode === "external" || ngrokMode === "custom") {
+    // Don't start ngrok — user manages it externally
+    const publicUrl = process.env.PIXEL_PUBLIC_URL ?? "";
+    if (publicUrl) {
+      console.log(`[PixelOffice] 🌐 Public URL (${ngrokMode}): ${publicUrl}`);
+      // Write URL to state file for listener to post to #bot-status
+      try {
+        const baseDir = process.env.PROJECT_DIR ?? process.env.HOME ?? "";
+        const stateDir = path.join(baseDir, ".ai-office", "state");
+        fs.mkdirSync(stateDir, { recursive: true });
+        fs.writeFileSync(path.join(stateDir, "ngrok-url.txt"), publicUrl, "utf-8");
+      } catch { /* non-critical */ }
+    } else {
+      console.log(`[PixelOffice] ⚠️ ${ngrokMode} mode but PIXEL_PUBLIC_URL not set`);
+    }
+  } else {
+    console.log(`[PixelOffice] Running locally at http://localhost:${PORT} (no remote access)`);
   }
 });

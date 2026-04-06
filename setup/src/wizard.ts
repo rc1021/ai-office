@@ -42,7 +42,13 @@ const i18n: Record<string, Record<Lang, string>> = {
   "prompt.token":       { "zh-TW": "Discord Bot Token",       en: "Discord Bot Token",        ja: "Discord Bot Token" },
   "prompt.guild":       { "zh-TW": "Discord Server ID",       en: "Discord Guild (Server) ID", ja: "Discord Server ID" },
   "prompt.starter":     { "zh-TW": "選擇入門組合包：",         en: "Choose a starter pack:",    ja: "スターターパックを選択：" },
-  "prompt.ngrok_enable":{ "zh-TW": "啟用 ngrok 遠端存取？(y/N)", en: "Enable remote access via ngrok? (y/N)", ja: "ngrokリモートアクセスを有効にしますか？(y/N)" },
+  "prompt.ngrok_mode":  { "zh-TW": "選擇遠端存取方式：",       en: "Choose remote access mode:",   ja: "リモートアクセス方式を選択：" },
+  "ngrok.mode_internal":{ "zh-TW": "內建 ngrok (AI Office 自動啟動 tunnel)", en: "Built-in ngrok (AI Office starts tunnel automatically)", ja: "内蔵 ngrok (AI Officeが自動でトンネルを起動)" },
+  "ngrok.mode_external":{ "zh-TW": "外部 ngrok (你自己管理 ngrok，填入 URL)", en: "External ngrok (you manage ngrok, enter URL)", ja: "外部 ngrok (自分でngrokを管理、URLを入力)" },
+  "ngrok.mode_custom":  { "zh-TW": "自訂 URL (自有 domain / Cloudflare / reverse proxy)", en: "Custom URL (own domain / Cloudflare / reverse proxy)", ja: "カスタムURL (独自ドメイン / Cloudflare / リバースプロキシ)" },
+  "ngrok.mode_disabled":{ "zh-TW": "不啟用 (僅 localhost)",   en: "Disabled (localhost only)",     ja: "無効 (localhostのみ)" },
+  "prompt.public_url":  { "zh-TW": "Public URL",              en: "Public URL",                   ja: "パブリックURL" },
+  "warn.no_url":        { "zh-TW": "未提供 URL，稍後可在 pixel-office/.env 設定", en: "No URL provided. Configure later in pixel-office/.env", ja: "URLが入力されていません。後でpixel-office/.envで設定できます" },
   "prompt.ngrok_token": { "zh-TW": "ngrok auth token",        en: "ngrok auth token",          ja: "ngrok auth token" },
   "prompt.pixel_user":  { "zh-TW": "Pixel Office 帳號",       en: "Pixel Office username",     ja: "Pixel Office ユーザー名" },
   "prompt.pixel_pass":  { "zh-TW": "Pixel Office 密碼",       en: "Pixel Office password",     ja: "Pixel Office パスワード" },
@@ -343,14 +349,25 @@ async function main(): Promise<void> {
     roles: selectedRoles,
   };
 
-  // 6. Remote access (ngrok)
+  // 6. Remote access mode
   console.log(`\n  ${t("section.ngrok")}\n`);
-  const enableNgrok = await ask(t("prompt.ngrok_enable"), "N");
+
+  const ngrokModeOptions = [
+    t("ngrok.mode_internal"),
+    t("ngrok.mode_external"),
+    t("ngrok.mode_custom"),
+    t("ngrok.mode_disabled"),
+  ];
+  const ngrokModeChoice = await choose(t("prompt.ngrok_mode"), ngrokModeOptions, 3); // default: disabled
+  const ngrokModeIdx = ngrokModeOptions.indexOf(ngrokModeChoice);
+  const ngrokMode = (["internal", "external", "custom", "disabled"] as const)[ngrokModeIdx >= 0 ? ngrokModeIdx : 3];
+
   let ngrokAuthToken = "";
   let pixelAuthUser = "";
   let pixelAuthPass = "";
+  let pixelPublicUrl = "";
 
-  if (enableNgrok.toLowerCase() === "y") {
+  if (ngrokMode === "internal") {
     console.log(`\n  ${t("hint.ngrok_get")}`);
     console.log("     https://dashboard.ngrok.com/get-started/your-authtoken\n");
     ngrokAuthToken = await ask(t("prompt.ngrok_token"));
@@ -368,7 +385,13 @@ async function main(): Promise<void> {
         break;
       }
     }
+  } else if (ngrokMode === "external" || ngrokMode === "custom") {
+    pixelPublicUrl = await ask(t("prompt.public_url"));
+    if (!pixelPublicUrl) {
+      console.log(`  ${t("warn.no_url")}\n`);
+    }
   }
+  // disabled: nothing to ask
 
   // 7. Max workers
   console.log(`\n  ${t("section.perf")}\n`);
@@ -385,10 +408,12 @@ async function main(): Promise<void> {
     maxWorkers,
     starterPack: packId,
     starterRoles: packData.roles,
-    ngrokEnabled: enableNgrok.toLowerCase() === "y",
+    ngrokMode,
+    ngrokEnabled: ngrokMode === "internal",
     ngrokAuthToken,
     pixelAuthUser,
     pixelAuthPass,
+    pixelPublicUrl,
   };
 
   console.log(`\n  ${t("section.summary")}\n`);
@@ -399,7 +424,12 @@ async function main(): Promise<void> {
   console.log(`  ${t("sum.guild")}:        ${guildId || t("sum.token_later")}`);
   console.log(`  ${t("sum.starter")}:      ${localize(packData.name, currentLang)} (${packData.roles.length > 0 ? packData.roles.join(", ") : "Leader only"})`);
   console.log(`  ${t("sum.workers")}:      ${config.maxWorkers}`);
-  console.log(`  ${t("sum.ngrok")}:        ${config.ngrokEnabled ? `${t("sum.enabled")} (user: ${config.pixelAuthUser})` : t("sum.disabled")}`);
+  const ngrokSummary = config.ngrokMode === "internal"
+    ? `internal (user: ${config.pixelAuthUser})`
+    : config.ngrokMode === "external" || config.ngrokMode === "custom"
+      ? `${config.ngrokMode} (${config.pixelPublicUrl || "URL not set"})`
+      : t("sum.disabled");
+  console.log(`  ${t("sum.ngrok")}:        ${ngrokSummary}`);
 
   const confirm = await ask(`\n${t("prompt.proceed")}`, "Y");
   if (confirm.toLowerCase() === "n") {
