@@ -9,7 +9,7 @@ import path from "node:path";
 import fs from "node:fs";
 import Database from "better-sqlite3";
 import { sendMessage, sendEmbed } from "./message-manager.js";
-import { findTextChannel } from "./channel-manager.js";
+import { findTextChannel, createCategory, createChannel } from "./channel-manager.js";
 import { COLORS, buildDiscordEmbed } from "./embed-helpers.js";
 import type { EmbedInput } from "./types.js";
 
@@ -351,17 +351,36 @@ export class EventBridge {
     }
   }
 
+  // Departments that use fixed channels instead of dept-* channels
+  private static readonly SKIP_DEPT_CHANNELS = new Set(["management", "system", "unknown", ""]);
+
   /**
-   * Try to send to a dept-* channel. Silently skip if the channel doesn't exist
-   * (dept channels are only created when a role in that department is hired).
+   * Send to a dept-* channel, auto-creating it if it doesn't exist.
+   * Skips departments that use fixed channels (management → #general).
    */
   private async trySendToDeptChannel(dept: string, content: string): Promise<void> {
+    if (EventBridge.SKIP_DEPT_CHANNELS.has(dept)) return;
+
     const channelName = `dept-${dept}`;
     try {
       await findTextChannel(channelName);
-      await sendMessage(channelName, content);
     } catch {
-      // Channel doesn't exist — silently skip (not an error)
+      // Channel doesn't exist — create it
+      try {
+        const categoryName = `DEPT-${dept.toUpperCase()}`;
+        await createCategory(categoryName);
+        await createChannel(categoryName, channelName, `${dept} department workspace`);
+        console.log(`[EventBridge] Auto-created #${channelName}`);
+      } catch (createErr) {
+        console.warn(`[EventBridge] Failed to create #${channelName}:`, createErr);
+        return;
+      }
+    }
+
+    try {
+      await sendMessage(channelName, content);
+    } catch (err) {
+      console.warn(`[EventBridge] Failed to send to #${channelName}:`, err);
     }
   }
 
