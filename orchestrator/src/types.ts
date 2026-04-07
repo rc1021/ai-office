@@ -96,4 +96,13 @@ export interface RoleTemplate {
     requires_approval?: string[];
     max_autonomous_risk: string;
   };
+  default_behaviors?: {
+    type: string; // "pioneering" | "steady" | "execution" | "coordination"
+    rules: Array<{
+      id: string;
+      enforce: string; // "prompt" | "mcp"
+      overridable: boolean;
+      description?: string;
+    }>;
+  };
 }

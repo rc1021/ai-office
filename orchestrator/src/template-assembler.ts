@@ -63,6 +63,22 @@ export function assembleWorkerClaude(
     "{{ROLE_MAX_RISK}}": role.security.max_autonomous_risk,
   };
 
+  // Format default_behaviors prompt rules
+  let behaviorRulesText = "";
+  if (role.default_behaviors?.rules) {
+    const promptRules = role.default_behaviors.rules.filter(r => r.enforce === "prompt");
+    if (promptRules.length > 0) {
+      const lines = promptRules.map(r => {
+        const override = r.overridable ? "" : " (NEVER overridable)";
+        return `- **${r.id}**: ${r.description ?? r.id}${override}`;
+      });
+      behaviorRulesText = `### Behavior Rules (${role.default_behaviors.type} type)\n\n` +
+        `These rules are part of your role identity. Follow them unless the Leader explicitly overrides (only for overridable rules).\n\n` +
+        lines.join("\n");
+    }
+  }
+  replacements["{{ROLE_BEHAVIOR_RULES}}"] = behaviorRulesText;
+
   // Perform substitution
   let assembled = template;
   for (const [placeholder, value] of Object.entries(replacements)) {

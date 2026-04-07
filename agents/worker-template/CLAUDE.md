@@ -24,6 +24,8 @@ You are a **Worker Agent** in the AI Office system. You receive tasks from the L
 ### Your Output Formats
 {{ROLE_OUTPUT_FORMATS}}
 
+{{ROLE_BEHAVIOR_RULES}}
+
 ## Core Behavior Rules
 
 ### 1. Task Execution Protocol
