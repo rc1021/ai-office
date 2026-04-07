@@ -2,7 +2,7 @@
 
 A multi-agent virtual office powered by Claude Code. "Hire" AI agents with specialized roles that collaborate via Discord to accomplish complex tasks under human supervision.
 
-**77 role templates** across 22 industries. **35 MCP tools**. **46 automated tests**. End-to-end verified.
+**77 role templates** across 22 industries. **35 MCP tools**. **73 automated tests**. End-to-end verified.
 
 ## Quick Start
 
@@ -224,8 +224,8 @@ See [docs/security-model.md](docs/security-model.md) for details.
 ## Testing
 
 ```bash
-cd coordination && npm test    # 45 tests
-cd discord-bot && npm test     # 26 tests
+cd coordination && npm test    # 46 tests
+cd discord-bot && npm test     # 21 tests
 cd orchestrator && npm test    # 6 tests
 ```
 

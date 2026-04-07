@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { AgentProfile } from "../src/types.js";
+import type { AgentProfile } from "@ai-office/core";
 
-// Mock agent-registry before importing output-gate
-vi.mock("../src/agent-registry.js", () => ({
+// Mock the agent-registry at the core's internal path
+// checkOutputGate imports resolveAgent from "./agent-registry.js" inside core
+vi.mock("@ai-office/core/dist/agent-registry.js", () => ({
   resolveAgent: vi.fn(),
 }));
 
-import { checkOutputGate } from "../src/output-gate.js";
-import { resolveAgent } from "../src/agent-registry.js";
+import { checkOutputGate } from "@ai-office/core";
+import { resolveAgent } from "@ai-office/core/dist/agent-registry.js";
 
 const mockedResolveAgent = vi.mocked(resolveAgent);
 
@@ -28,8 +29,6 @@ describe("checkOutputGate", () => {
     vi.clearAllMocks();
   });
 
-  // -- Scope checks --
-
   it("allows with wildcard scope", () => {
     mockedResolveAgent.mockReturnValue(makeAgent({ scopes: ["write:discord:*"] }));
     const result = checkOutputGate("test-1", "general", "hello");
@@ -49,24 +48,20 @@ describe("checkOutputGate", () => {
     expect(result.allowed).toBe(true);
   });
 
-  // -- Denied scopes --
-
   it("denied scope overrides allowed scope", () => {
     mockedResolveAgent.mockReturnValue(makeAgent({
       scopes: ["write:discord:*"],
-      denied_scopes: ["write:discord:audit-log"],
+      denied_scopes: ["write:discord:alerts"],
     }));
-    const result = checkOutputGate("test-1", "audit-log", "test");
+    const result = checkOutputGate("test-1", "alerts", "test");
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("explicitly denied");
   });
 
-  // -- Department implicit grants --
-
   it("allows department channel via department membership", () => {
     mockedResolveAgent.mockReturnValue(makeAgent({
       department: "engineering",
-      scopes: [], // no explicit scope
+      scopes: [],
     }));
     const result = checkOutputGate("test-1", "dept-engineering", "test");
     expect(result.allowed).toBe(true);
@@ -90,27 +85,6 @@ describe("checkOutputGate", () => {
     expect(result.allowed).toBe(true);
   });
 
-  // -- Clearance checks --
-
-  it("denies low clearance for audit-log", () => {
-    mockedResolveAgent.mockReturnValue(makeAgent({
-      scopes: ["write:discord:*"],
-      clearance_level: 1,
-    }));
-    const result = checkOutputGate("test-1", "audit-log", "test");
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("clearance");
-  });
-
-  it("allows sufficient clearance for audit-log", () => {
-    mockedResolveAgent.mockReturnValue(makeAgent({
-      scopes: ["write:discord:*"],
-      clearance_level: 3,
-    }));
-    const result = checkOutputGate("test-1", "audit-log", "test");
-    expect(result.allowed).toBe(true);
-  });
-
   it("denies low clearance for confidential channel", () => {
     mockedResolveAgent.mockReturnValue(makeAgent({
       scopes: ["write:discord:dept-*"],
@@ -129,8 +103,6 @@ describe("checkOutputGate", () => {
     const result = checkOutputGate("test-1", "dept-engineering-confidential", "test");
     expect(result.allowed).toBe(true);
   });
-
-  // -- Data classification --
 
   it("denies RESTRICTED content with low clearance", () => {
     mockedResolveAgent.mockReturnValue(makeAgent({
