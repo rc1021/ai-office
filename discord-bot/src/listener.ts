@@ -183,22 +183,36 @@ async function handleMessage(message: Message): Promise<void> {
   try { await message.react("⏳"); } catch { /* non-fatal */ }
 
   // 2. Resolve reply context (if user replied to a message)
-  //    Save full content as file, put brief summary in prompt — AI decides whether to Read full text
+  //    Extract text + embeds, save full content as file, put brief in prompt
   let replyContext = "";
   if (message.reference?.messageId) {
     try {
       const replied = await channel.messages.fetch(message.reference.messageId);
       const replyAuthor = replied.member?.displayName ?? replied.author.displayName ?? replied.author.username;
-      const replyContent = replied.content;
-      const brief = replyContent.length > 200
-        ? replyContent.substring(0, 200) + "..."
-        : replyContent;
+
+      // Build full content: text + embeds
+      const parts: string[] = [];
+      if (replied.content) parts.push(replied.content);
+      for (const embed of replied.embeds) {
+        const embedParts: string[] = [];
+        if (embed.title) embedParts.push(`## ${embed.title}`);
+        if (embed.description) embedParts.push(embed.description);
+        for (const field of embed.fields) {
+          embedParts.push(`**${field.name}**: ${field.value}`);
+        }
+        if (embed.footer?.text) embedParts.push(`_${embed.footer.text}_`);
+        if (embedParts.length > 0) parts.push(embedParts.join("\n"));
+      }
+      const fullContent = parts.join("\n\n") || "(empty message)";
+      const brief = fullContent.length > 200
+        ? fullContent.substring(0, 200) + "..."
+        : fullContent;
 
       // Save full reply content as file
       const replyDir = path.join(PROJECT_DIR, ".ai-office", "shared", "inbox", "reply-context");
       fs.mkdirSync(replyDir, { recursive: true });
       const replyFile = path.join(replyDir, `${message.reference.messageId}.md`);
-      fs.writeFileSync(replyFile, `# Reply from ${replyAuthor}\n\n${replyContent}`, "utf-8");
+      fs.writeFileSync(replyFile, `# Reply from ${replyAuthor}\n\n${fullContent}`, "utf-8");
 
       replyContext = `\n\nThis message is a REPLY to a previous message:\n` +
         `Reply-to author: ${replyAuthor}\n` +
