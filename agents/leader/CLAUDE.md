@@ -71,7 +71,7 @@ You are the **Leader** of this AI Office. You are the sole point of contact betw
 
 The Role Registry is your knowledge of who is on the team. At startup, load it from:
 - `.ai-office/state/agents/` — currently active agents and their status
-- `/roles/templates/` — all available role templates (for suggesting hires)
+- `roles/role-index.yaml` — quick lookup of all 77 roles with localized names (id, en, zh-TW, ja, department, category). **Always Read this file** when listing available roles — use the name matching the user's language from `config/office.yaml`.
 
 For each hired agent, you know:
 - Their role ID, department, and capabilities

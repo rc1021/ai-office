@@ -1,0 +1,389 @@
+# Role index — auto-generated, do not edit manually
+# Used by Leader to display localized role names
+
+roles:
+  - id: leader
+    en: "Office Leader"
+    zh-TW: "辦公室主管"
+    department: management
+    category: default
+  - id: academic-research-assistant
+    en: "Academic Research Assistant"
+    zh-TW: "學術研究助理"
+    department: research
+    category: industry
+  - id: accessibility-consultant
+    en: "Accessibility Consultant"
+    zh-TW: "無障礙顧問"
+    department: design
+    category: emerging
+  - id: accountant
+    en: "Accountant"
+    zh-TW: "會計"
+    department: finance
+    category: general
+  - id: ad-specialist
+    en: "Ad Specialist"
+    zh-TW: "廣告投放專員"
+    department: marketing
+    category: industry
+  - id: admin-assistant
+    en: "Admin Assistant"
+    zh-TW: "行政助理"
+    department: operations
+    category: general
+  - id: agriculture-data-analyst
+    en: "Agriculture Data Analyst"
+    zh-TW: "農業數據分析師"
+    department: research
+    category: industry
+  - id: ai-ethics-reviewer
+    en: "AI Ethics Reviewer"
+    zh-TW: "AI 倫理審查員"
+    department: research
+    category: emerging
+  - id: ai-prompt-engineer
+    en: "AI Prompt Engineer"
+    zh-TW: "AI/Prompt 工程師"
+    department: engineering
+    category: emerging
+  - id: backend-engineer
+    en: "Backend Engineer"
+    zh-TW: "後端工程師"
+    department: engineering
+    category: industry
+  - id: building-code-inspector
+    en: "Building Code Inspector"
+    zh-TW: "建築規範檢查員"
+    department: legal
+    category: industry
+  - id: clinical-trial-assistant
+    en: "Clinical Trial Assistant"
+    zh-TW: "臨床試驗助理"
+    department: research
+    category: industry
+  - id: community-manager
+    en: "Community Manager"
+    zh-TW: "社群經理"
+    department: marketing
+    category: general
+  - id: compliance-officer
+    en: "Compliance Officer"
+    zh-TW: "合規專員"
+    department: legal
+    category: industry
+  - id: content-writer
+    en: "Content Writer"
+    zh-TW: "內容寫手"
+    department: marketing
+    category: general
+  - id: contract-analyst
+    en: "Contract Analyst"
+    zh-TW: "合約分析師"
+    department: legal
+    category: industry
+  - id: cost-estimator
+    en: "Cost Estimator"
+    zh-TW: "工程估價師"
+    department: finance
+    category: industry
+  - id: crisis-pr-consultant
+    en: "Crisis PR Consultant"
+    zh-TW: "危機公關顧問"
+    department: marketing
+    category: emerging
+  - id: curriculum-designer
+    en: "Curriculum Designer"
+    zh-TW: "課程設計師"
+    department: design
+    category: industry
+  - id: customer-service-rep
+    en: "Customer Service Representative"
+    zh-TW: "客服代表"
+    department: support
+    category: general
+  - id: data-analyst
+    en: "Data Analyst"
+    zh-TW: "數據分析師"
+    department: research
+    category: general
+  - id: data-engineer
+    en: "Data Engineer"
+    zh-TW: "資料工程師"
+    department: engineering
+    category: industry
+  - id: devops-engineer
+    en: "DevOps Engineer"
+    zh-TW: "DevOps 工程師"
+    department: engineering
+    category: general
+  - id: ecommerce-ops-manager
+    en: "E-Commerce Operations Manager"
+    zh-TW: "電商營運經理"
+    department: operations
+    category: industry
+  - id: editor
+    en: "Editor"
+    zh-TW: "編輯"
+    department: marketing
+    category: industry
+  - id: esg-analyst
+    en: "ESG Analyst"
+    zh-TW: "ESG 分析師"
+    department: research
+    category: emerging
+  - id: exam-designer
+    en: "Exam Designer"
+    zh-TW: "考試出題專員"
+    department: design
+    category: industry
+  - id: financial-analyst
+    en: "Financial Analyst"
+    zh-TW: "財務分析師"
+    department: finance
+    category: general
+  - id: frontend-engineer
+    en: "Frontend Engineer"
+    zh-TW: "前端工程師"
+    department: engineering
+    category: industry
+  - id: fundraising-strategist
+    en: "Fundraising Strategist"
+    zh-TW: "募款策略師"
+    department: marketing
+    category: industry
+  - id: game-designer
+    en: "Game Designer"
+    zh-TW: "遊戲設計師"
+    department: design
+    category: industry
+  - id: grant-writer
+    en: "Grant Writer"
+    zh-TW: "專案補助撰寫員"
+    department: research
+    category: industry
+  - id: headhunter
+    en: "Headhunter"
+    zh-TW: "獵頭顧問"
+    department: hr
+    category: industry
+  - id: health-info-analyst
+    en: "Health Information Analyst"
+    zh-TW: "醫療資訊分析師"
+    department: research
+    category: industry
+  - id: hr-specialist
+    en: "HR Specialist"
+    zh-TW: "HR 專員"
+    department: hr
+    category: general
+  - id: insurance-product-analyst
+    en: "Insurance Product Analyst"
+    zh-TW: "保險產品分析師"
+    department: research
+    category: industry
+  - id: internal-auditor
+    en: "Internal Auditor"
+    zh-TW: "內部稽核員"
+    department: audit
+    category: general
+  - id: ip-specialist
+    en: "IP Specialist"
+    zh-TW: "智慧財產專員"
+    department: legal
+    category: industry
+  - id: legal-advisor
+    en: "Legal Advisor"
+    zh-TW: "法務顧問"
+    department: legal
+    category: general
+  - id: litigation-strategist
+    en: "Litigation Strategist"
+    zh-TW: "訴訟策略師"
+    department: legal
+    category: industry
+  - id: logistics-planner
+    en: "Logistics Planner"
+    zh-TW: "物流規劃師"
+    department: operations
+    category: industry
+  - id: marketing-manager
+    en: "Marketing Manager"
+    zh-TW: "行銷經理"
+    department: marketing
+    category: general
+  - id: medical-literature-researcher
+    en: "Medical Literature Researcher"
+    zh-TW: "醫學文獻研究員"
+    department: research
+    category: industry
+  - id: menu-planner
+    en: "Menu Planner"
+    zh-TW: "菜單策劃師"
+    department: operations
+    category: industry
+  - id: ml-engineer
+    en: "ML Engineer"
+    zh-TW: "ML 工程師"
+    department: engineering
+    category: industry
+  - id: narrative-designer
+    en: "Narrative Designer"
+    zh-TW: "遊戲敘事設計師"
+    department: design
+    category: industry
+  - id: official-document-writer
+    en: "Official Document Writer"
+    zh-TW: "公文撰寫專員"
+    department: legal
+    category: industry
+  - id: onchain-analyst
+    en: "Onchain Analyst"
+    zh-TW: "鏈上數據分析師"
+    department: research
+    category: industry
+  - id: operational-risk-officer
+    en: "Operational Risk Officer"
+    zh-TW: "營運風險管理師"
+    department: operations
+    category: general
+  - id: personal-brand-consultant
+    en: "Personal Brand Consultant"
+    zh-TW: "個人品牌顧問"
+    department: marketing
+    category: emerging
+  - id: pm
+    en: "Project Manager"
+    zh-TW: "專案經理"
+    department: operations
+    category: general
+  - id: podcast-producer
+    en: "Podcast Producer"
+    zh-TW: "Podcast 製作人"
+    department: marketing
+    category: industry
+  - id: policy-analyst
+    en: "Policy Analyst"
+    zh-TW: "政策分析師"
+    department: research
+    category: industry
+  - id: privacy-officer
+    en: "Privacy Officer"
+    zh-TW: "隱私長"
+    department: legal
+    category: industry
+  - id: procurement-specialist
+    en: "Procurement Specialist"
+    zh-TW: "採購專員"
+    department: operations
+    category: industry
+  - id: product-manager
+    en: "Product Manager"
+    zh-TW: "產品經理"
+    department: operations
+    category: general
+  - id: property-analyst
+    en: "Property Analyst"
+    zh-TW: "房產分析師"
+    department: research
+    category: industry
+  - id: property-copywriter
+    en: "Property Copywriter"
+    zh-TW: "物件文案師"
+    department: marketing
+    category: industry
+  - id: qa-engineer
+    en: "QA Engineer"
+    zh-TW: "QA 工程師"
+    department: engineering
+    category: general
+  - id: quality-manager
+    en: "Quality Manager"
+    zh-TW: "品質管理專員"
+    department: operations
+    category: industry
+  - id: quant-researcher
+    en: "Quant Researcher"
+    zh-TW: "量化研究員"
+    department: research
+    category: industry
+  - id: research-analyst
+    en: "Research Analyst"
+    zh-TW: "研究分析師"
+    department: research
+    category: general
+  - id: risk-manager
+    en: "Risk Manager"
+    zh-TW: "風險管理師"
+    department: finance
+    category: industry
+  - id: scriptwriter
+    en: "Scriptwriter"
+    zh-TW: "劇本撰寫師"
+    department: marketing
+    category: industry
+  - id: security-auditor
+    en: "Security Auditor"
+    zh-TW: "安全稽核員"
+    department: legal
+    category: industry
+  - id: security-specialist
+    en: "Security Specialist"
+    zh-TW: "資安專員"
+    department: engineering
+    category: general
+  - id: seo-specialist
+    en: "SEO Specialist"
+    zh-TW: "SEO 專員"
+    department: marketing
+    category: industry
+  - id: smart-contract-auditor
+    en: "Smart Contract Auditor"
+    zh-TW: "智慧合約審計員"
+    department: engineering
+    category: industry
+  - id: software-engineer
+    en: "Software Engineer"
+    zh-TW: "軟體工程師"
+    department: engineering
+    category: general
+  - id: sre
+    en: "SRE"
+    zh-TW: "SRE"
+    department: engineering
+    category: industry
+  - id: stock-analyst
+    en: "Stock Analyst"
+    zh-TW: "股票分析師"
+    department: finance
+    category: industry
+  - id: strategy-consultant
+    en: "Strategy Consultant"
+    zh-TW: "策略顧問"
+    department: management
+    category: general
+  - id: supply-chain-analyst
+    en: "Supply Chain Analyst"
+    zh-TW: "供應鏈分析師"
+    department: operations
+    category: industry
+  - id: technical-writer
+    en: "Technical Writer"
+    zh-TW: "技術文件撰寫員"
+    department: engineering
+    category: industry
+  - id: translator
+    en: "Translator"
+    zh-TW: "翻譯"
+    department: operations
+    category: general
+  - id: travel-planner
+    en: "Travel Planner"
+    zh-TW: "行程規劃師"
+    department: operations
+    category: industry
+  - id: ui-ux-designer
+    en: "UI/UX Designer"
+    zh-TW: "UI/UX 設計師"
+    department: design
+    category: general
