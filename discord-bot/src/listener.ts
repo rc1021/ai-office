@@ -218,30 +218,16 @@ function buildPrompt(username: string, content: string): string {
     "--- END MESSAGE ---\n" +
     "\n" +
     "Process this request according to your role instructions (agents/leader/CLAUDE.md). " +
-    "IMPORTANT: Use the send_message MCP tool to respond to the user in #general. " +
-    "Do NOT return text output — your stdout is not posted to Discord. " +
-    "Keep each message under 1800 characters. " +
-    "Step 1: report_status(busy). " +
-    "Step 2: task_resume + list_agents + check_inbox for context. " +
-    "Step 3: Process the request. " +
-    "DELEGATION RULE: When list_agents shows idle workers (pm, research-analyst, software-engineer, etc.), " +
-    "you MUST use the Agent tool (model: sonnet) to delegate specialized work to them. " +
-    "Do NOT do research, coding, or analysis yourself — delegate to the appropriate worker. " +
-    "Do NOT register new agents with report_status — only use existing agents from list_agents. " +
-    "Only handle simple greetings, clarification questions, and coordination yourself. " +
-    "RESPONSE RULE (CRITICAL — you MUST follow this EXACTLY): " +
-    "You may call send_message AT MOST 2 times total for this request. " +
-    "  Call 1: ONE short acknowledgment (e.g. '收到！正在處理...'). " +
-    "  Call 2: ONE final answer with all results in a SINGLE send_message call. " +
-    "The system will auto-paginate if your message exceeds Discord's character limit. " +
-    "So put ALL content in ONE send_message call — NEVER split manually into multiple calls. " +
-    "Workers must NEVER call send_message, send_embed, or ANY discord MCP tool. " +
-    "When spawning workers via Agent tool, include in their prompt: " +
-    "'FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool.' " +
-    "Step 4: CRITICAL — Every task you create MUST be closed with task_update(status: completed) before you exit. " +
-    "Do NOT create tasks you won't execute in this session. Do NOT leave tasks in progress. " +
-    "Step 5: task_checkpoint with context_summary. " +
-    "Step 6: report_status(idle)."
+    "Read agents/leader/CLAUDE.md first for your full identity and instructions.\n" +
+    "RULES:\n" +
+    "- Use send_message MCP tool to respond in #general. stdout is NOT posted to Discord.\n" +
+    "- Long messages are auto-paginated — just send the full content in one call.\n" +
+    "- When spawning workers via Agent tool, include in their prompt: " +
+    "'FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool.'\n" +
+    "- Do NOT register new agents with report_status — only use existing agents from list_agents.\n" +
+    "- Every task you create MUST be closed with task_update(status: completed) before you exit.\n" +
+    "- Call report_status(busy) at start, report_status(idle) at end.\n" +
+    "- Call task_checkpoint with context_summary before exiting."
   );
 }
 
