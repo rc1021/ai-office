@@ -9,11 +9,17 @@ import fs from "node:fs";
 import path from "node:path";
 import yaml from "js-yaml";
 
+export interface AuditConfig {
+  autoReview: boolean;
+  riskThreshold: "GREEN" | "YELLOW" | "RED";
+}
+
 export interface OfficeConfig {
   timezone: string;
   language: string;
   statePath: string;
   dailyBriefTime: string; // "HH:MM" format, default "08:00"
+  audit: AuditConfig;
 }
 
 let cached: OfficeConfig | null = null;
@@ -30,11 +36,17 @@ export function loadOfficeConfig(projectDir: string): OfficeConfig {
   const office = (raw?.office ?? {}) as Record<string, string>;
   const paths = (raw?.paths ?? {}) as Record<string, string>;
 
+  const auditRaw = (raw?.audit ?? {}) as Record<string, unknown>;
+
   cached = {
     timezone: office.timezone ?? "Asia/Taipei",
     language: office.language ?? "zh-TW",
     statePath: path.resolve(projectDir, paths.state ?? ".ai-office/state"),
     dailyBriefTime: office.daily_brief_time ?? "08:00",
+    audit: {
+      autoReview: auditRaw.auto_review === true,
+      riskThreshold: (auditRaw.risk_threshold as "GREEN" | "YELLOW" | "RED") ?? "YELLOW",
+    },
   };
 
   console.log(`[ConfigLoader] Loaded config: timezone=${cached.timezone}, language=${cached.language}, state=${cached.statePath}`);

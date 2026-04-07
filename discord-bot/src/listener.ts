@@ -364,7 +364,7 @@ async function main(): Promise<void> {
 
       heartbeat = new HeartbeatScheduler(
         config.timezone, config.statePath, PROJECT_DIR, CLAUDE_CONFIG, adapter,
-        config.dailyBriefTime,
+        config.dailyBriefTime, config.audit,
       );
       heartbeat.start();
       console.log("[Listener] HeartbeatScheduler started");

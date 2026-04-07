@@ -34,6 +34,11 @@ working_hours:
   end: "18:00"
   # Outside working hours: batch messages, suppress non-critical alerts
 
+# Audit — Internal Auditor auto-reviews completed tasks
+audit:
+  auto_review: false            # Set true to enable (requires internal-auditor role hired)
+  risk_threshold: "YELLOW"      # Minimum risk level to trigger audit (GREEN=all, YELLOW=medium+, RED=high only)
+
 # Observability
 logging:
   level: "INFO"         # DEBUG | INFO | WARN | ERROR

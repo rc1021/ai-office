@@ -185,6 +185,18 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 3,
+    description: "Add audit_status to tasks for Internal Auditor auto-review",
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE tasks ADD COLUMN audit_status TEXT NOT NULL DEFAULT ''
+          CHECK(audit_status IN ('', 'auditing', 'passed', 'failed', 'skipped'));
+
+        UPDATE schema_meta SET value = '3' WHERE key = 'version';
+      `);
+    },
+  },
 ];
 
 function migrate(db: Database.Database): void {

@@ -23,7 +23,7 @@ export type { ChatAdapter } from "./chat-adapter.js";
 
 // Config
 export { loadOfficeConfig } from "./config-loader.js";
-export type { OfficeConfig } from "./config-loader.js";
+export type { OfficeConfig, AuditConfig } from "./config-loader.js";
 
 // Claude runner
 export { runClaude } from "./claude-runner.js";

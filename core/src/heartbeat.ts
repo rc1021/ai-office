@@ -14,6 +14,7 @@ import { spawn } from "node:child_process";
 import type { ChatAdapter } from "./chat-adapter.js";
 import { runClaude } from "./claude-runner.js";
 import type { ClaudeRunnerConfig } from "./claude-runner.js";
+import type { AuditConfig } from "./config-loader.js";
 import { COLORS } from "./types.js";
 
 // ── HeartbeatScheduler ───────────────────────────────────────────────────────
@@ -29,6 +30,8 @@ export class HeartbeatScheduler {
   private running = false;
   private dailyBriefHour: number;
   private dailyBriefMinute: number;
+  private auditConfig: AuditConfig;
+  private auditingTaskIds = new Set<string>(); // prevent double-audit
 
   constructor(
     timezone: string,
@@ -37,6 +40,7 @@ export class HeartbeatScheduler {
     claudeConfig: ClaudeRunnerConfig,
     adapter: ChatAdapter,
     dailyBriefTime: string = "08:00",
+    auditConfig: AuditConfig = { autoReview: false, riskThreshold: "YELLOW" },
   ) {
     this.timezone = timezone;
     this.statePath = statePath;
@@ -46,6 +50,7 @@ export class HeartbeatScheduler {
     const [h, m] = dailyBriefTime.split(":").map(Number);
     this.dailyBriefHour = h;
     this.dailyBriefMinute = m;
+    this.auditConfig = auditConfig;
   }
 
   start(): void {
@@ -110,6 +115,11 @@ export class HeartbeatScheduler {
 
     // Clean up stale tasks and agents (stuck for >10 minutes)
     await this.cleanupStaleTasks(issues);
+
+    // Auto-audit completed tasks (if enabled)
+    if (this.auditConfig.autoReview) {
+      await this.checkPendingAudits();
+    }
 
     // Only alert on failure
     if (issues.length > 0) {
@@ -189,6 +199,116 @@ export class HeartbeatScheduler {
       db.close();
     } catch (err) {
       console.error("[Heartbeat] Stale cleanup error:", err);
+    }
+  }
+
+  /**
+   * Check for completed tasks that need audit review.
+   * Spawns internal-auditor via claude -p for each unaudited task.
+   */
+  private async checkPendingAudits(): Promise<void> {
+    const dbPath = path.join(this.statePath, "coordination.db");
+    if (!fs.existsSync(dbPath)) return;
+
+    try {
+      const Database = (await import("better-sqlite3")).default;
+      const db = new Database(dbPath, { readonly: false });
+      db.pragma("busy_timeout = 5000");
+
+      // Check if internal-auditor is hired
+      const auditor = db.prepare(
+        "SELECT agent_id FROM agents WHERE role_id = 'internal-auditor'"
+      ).get() as { agent_id: string } | undefined;
+
+      if (!auditor) { db.close(); return; }
+
+      // Risk level ordering for threshold comparison
+      const riskOrder: Record<string, number> = { GREEN: 0, YELLOW: 1, RED: 2 };
+      const threshold = riskOrder[this.auditConfig.riskThreshold] ?? 1;
+
+      // Find completed tasks without audit_status that meet risk threshold
+      const tasks = db.prepare(`
+        SELECT id, title, risk_level, output_artifact, assigned_to
+        FROM tasks
+        WHERE status = 'completed'
+        AND (audit_status IS NULL OR audit_status = '')
+        AND updated_at > datetime('now', '-24 hours')
+        LIMIT 3
+      `).all() as {
+        id: string; title: string; risk_level: string | null;
+        output_artifact: string | null; assigned_to: string | null;
+      }[];
+
+      for (const task of tasks) {
+        // Skip if below risk threshold
+        const taskRisk = riskOrder[task.risk_level ?? "GREEN"] ?? 0;
+        if (taskRisk < threshold) {
+          db.prepare("UPDATE tasks SET audit_status = 'skipped' WHERE id = ?").run(task.id);
+          continue;
+        }
+
+        // Skip if already auditing
+        if (this.auditingTaskIds.has(task.id)) continue;
+        this.auditingTaskIds.add(task.id);
+
+        // Mark as auditing
+        db.prepare("UPDATE tasks SET audit_status = 'auditing' WHERE id = ?").run(task.id);
+
+        console.log(`[Heartbeat] Spawning audit for task: "${task.title}" (${task.id})`);
+
+        // Spawn auditor — fire and forget (don't block health check)
+        this.runAudit(task.id, task.title, task.output_artifact, task.assigned_to)
+          .then((passed) => {
+            try {
+              const db2 = new Database(dbPath, { readonly: false });
+              db2.pragma("busy_timeout = 5000");
+              db2.prepare("UPDATE tasks SET audit_status = ? WHERE id = ?")
+                .run(passed ? "passed" : "failed", task.id);
+              db2.close();
+            } catch { /* best effort */ }
+            this.auditingTaskIds.delete(task.id);
+            console.log(`[Heartbeat] Audit ${passed ? "passed" : "failed"}: "${task.title}"`);
+          })
+          .catch((err) => {
+            console.error(`[Heartbeat] Audit error for "${task.title}":`, err);
+            this.auditingTaskIds.delete(task.id);
+          });
+      }
+
+      db.close();
+    } catch (err) {
+      console.error("[Heartbeat] Audit check error:", err);
+    }
+  }
+
+  private async runAudit(
+    taskId: string, title: string,
+    outputArtifact: string | null, assignedTo: string | null,
+  ): Promise<boolean> {
+    const prompt =
+      "You are the Internal Auditor (role: internal-auditor). " +
+      "Review the following completed task for correctness and quality.\n\n" +
+      `Task ID: ${taskId}\n` +
+      `Title: ${title}\n` +
+      `Completed by: ${assignedTo ?? "unknown"}\n` +
+      (outputArtifact ? `Output artifact: ${outputArtifact}\n` : "") +
+      "\nAudit checklist:\n" +
+      "1. Numerical correctness — were numbers validated?\n" +
+      "2. Source citations — are conclusions backed by evidence?\n" +
+      "3. Completeness — does the output address all requirements?\n" +
+      "4. Security — any sensitive data leakage or vulnerabilities?\n\n" +
+      "If the output artifact exists, Read it and review its contents.\n" +
+      "Call task_list to see the full task details.\n\n" +
+      "After review, call publish_event with:\n" +
+      "- type: 'audit.passed' if all checks pass\n" +
+      "- type: 'audit.failed' + call report_anomaly if any check fails\n" +
+      "Return PASS or FAIL as your final output.";
+
+    try {
+      const output = await runClaude(prompt, this.claudeConfig);
+      return output.toUpperCase().includes("PASS");
+    } catch {
+      return false;
     }
   }
 
