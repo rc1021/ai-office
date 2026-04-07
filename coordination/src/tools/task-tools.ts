@@ -154,6 +154,23 @@ export function taskUpdate(params: {
     db.prepare(`UPDATE tasks SET ${updates.join(", ")} WHERE id = ?`).run(...values);
   }
 
+  // If completed, mark all non-completed steps as skipped
+  if (params.status === "completed") {
+    const stepsRow = db.prepare("SELECT steps FROM tasks WHERE id = ?").get(params.task_id) as { steps: string };
+    const steps: TaskStep[] = JSON.parse(stepsRow.steps);
+    let stepsChanged = false;
+    for (const step of steps) {
+      if (step.status !== "completed") {
+        step.status = "skipped";
+        step.completed_at = new Date().toISOString();
+        stepsChanged = true;
+      }
+    }
+    if (stepsChanged) {
+      db.prepare("UPDATE tasks SET steps = ? WHERE id = ?").run(JSON.stringify(steps), params.task_id);
+    }
+  }
+
   // If completed/failed, free the agent
   if (params.status === "completed" || params.status === "failed") {
     if (task.assigned_to) {
@@ -194,6 +211,17 @@ export function taskCheckpoint(params: {
 
   if (params.step_index < 0 || params.step_index >= steps.length) {
     throw new Error(`Step index ${params.step_index} out of range (0-${steps.length - 1})`);
+  }
+
+  // Fill gaps — mark skipped steps
+  const currentStep = task.current_step ?? 0;
+  if (params.step_index > currentStep) {
+    for (let i = currentStep; i < params.step_index; i++) {
+      if (steps[i].status !== "completed") {
+        steps[i].status = "skipped";
+        steps[i].completed_at = new Date().toISOString();
+      }
+    }
   }
 
   // Update step

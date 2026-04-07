@@ -73,9 +73,11 @@ export class TaskBoard {
 
   private renderCard(task: TaskData): string {
     const steps = task.steps || [];
-    const completedSteps = steps.filter((s: any) => s.status === "completed").length;
+    const doneSteps = task.status === "completed" && steps.length > 0
+      ? steps.length
+      : steps.filter((s: any) => s.status === "completed" || s.status === "skipped").length;
     const totalSteps = steps.length;
-    const progressPct = totalSteps > 0 ? (completedSteps / totalSteps) * 100 : 0;
+    const progressPct = totalSteps > 0 ? (doneSteps / totalSteps) * 100 : 0;
 
     const riskColors: Record<string, string> = { GREEN: "#57f287", YELLOW: "#fee75c", RED: "#ed4245" };
     const prioIcons: Record<string, string> = { urgent: "!!", high: "!", normal: "", low: "" };
@@ -86,7 +88,7 @@ export class TaskBoard {
         <div class="meta">
           <span style="color:${riskColors[task.risk_level] || "#999"}">${task.risk_level}</span>
           ${task.assigned_to ? ` · ${task.assigned_to}` : ""}
-          ${totalSteps > 0 ? ` · Step ${completedSteps}/${totalSteps}` : ""}
+          ${totalSteps > 0 ? ` · Step ${doneSteps}/${totalSteps}` : ""}
         </div>
         ${totalSteps > 0 ? `<div class="progress"><div class="progress-fill" style="width:${progressPct}%"></div></div>` : ""}
       </div>`;
