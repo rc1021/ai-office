@@ -123,11 +123,19 @@ User: "研究蝦皮 API 的聊天功能"
 
 The listener daemon runs a background heartbeat subsystem (`core/`):
 
-- Every 1 min: check Pixel Office + DB health, auto-restart if needed, cleanup stale tasks
+- Every 1 min: check Pixel Office + DB health, auto-restart if needed, cleanup stale tasks, auto-audit completed tasks
 - Health alerts (anomalies, errors) → `#alerts`
-- Daily at 08:30 (user timezone): generate daily brief → `#daily-brief`
+- Daily at 08:00 (configurable in `office.yaml`) → `#daily-brief`
 
 System events (task state changes, agent status, audit logs) are stored in the coordination DB and visible in the Pixel Office UI — they are not pushed to Discord channels.
+
+## Role Behavior System
+
+Each role has a behavior type (`pioneering` / `steady` / `execution` / `coordination`) and specific rules injected into the worker's CLAUDE.md at spawn time. 4 rules are **never overridable** (security-critical).
+
+**Internal Auditor**: When `audit.auto_review: true` in `office.yaml` and the `internal-auditor` role is hired, the heartbeat auto-reviews completed tasks — checking numerical correctness, source citations, completeness, and security. Results stored as `audit_status` (passed/failed/skipped).
+
+See [docs/role-template-schema.md](docs/role-template-schema.md) for the full behavior system.
 
 ## Discord Listener Daemon
 

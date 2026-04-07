@@ -89,7 +89,7 @@
 **Key files**:
 - `src/chat-adapter.ts` — `ChatAdapter` interface: sendMessage, sendEmbed, editEmbed, channelExists, createCategory, createChannel
 - `src/claude-runner.ts` — Spawns `claude -p` with configurable projectDir, mcpConfigPath, and allowedTools
-- `src/heartbeat.ts` — Health checks (1min), health alerts to #alerts, daily brief (08:30) to #daily-brief, stale task cleanup — all via ChatAdapter
+- `src/heartbeat.ts` — Health checks (1min), health alerts to #alerts, daily brief (configurable) to #daily-brief, stale task cleanup, Internal Auditor auto-trigger — all via ChatAdapter
 - `src/config-loader.ts` — Reads `config/office.yaml`, returns timezone/language/statePath
 - `src/output-gate.ts` — 4-layer security check before any message send
 - `src/throttle-manager.ts` — Rate limiting: buffer, reject, embed-edit strategies per channel

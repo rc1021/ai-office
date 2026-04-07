@@ -189,14 +189,59 @@ metadata:
 
 ### Enforcement Levels
 
-| enforce | How it works |
-|---------|-------------|
-| `prompt` | Injected into Worker CLAUDE.md at spawn time. Agent follows via instruction. |
-| `mcp` | Enforced at MCP tool level (planned). Cannot be bypassed even if the agent ignores the prompt. |
+| enforce | How it works | Status |
+|---------|-------------|--------|
+| `prompt` | Injected into Worker CLAUDE.md at spawn time. Agent follows via instruction. | **Active** — template-assembler reads YAML rules and injects into Worker CLAUDE.md |
+| `mcp` | Enforced at MCP tool level. Cannot be bypassed even if the agent ignores the prompt. | Planned — not yet implemented (persona already guides 80% of behavior) |
+
+### Runtime Behavior Flow
+
+```
+Role YAML (default_behaviors)
+  │
+  │ template-assembler reads rules
+  │ filters enforce: "prompt"
+  ▼
+Worker CLAUDE.md (injected at spawn time)
+  ┌──────────────────────────────────────┐
+  │ ### Behavior Rules (steady type)      │
+  │                                       │
+  │ - must_validate_numeric: All numeric  │
+  │   outputs must pass validate_numeric  │
+  │ - must_cite_sources: Cite data        │
+  │   sources and methodology             │
+  │ - must_flag_risks: Always identify    │
+  │   and flag risks (NEVER overridable)  │
+  └──────────────────────────────────────┘
+  │
+  │ Worker completes task
+  ▼
+Heartbeat (every 1 min)
+  │ Checks: status=completed, audit_status=empty
+  │ Checks: internal-auditor role hired?
+  │ Checks: risk_level >= threshold?
+  ▼
+Internal Auditor (claude -p)
+  │ Reviews: numerical correctness, source citations,
+  │          completeness, security
+  ▼
+tasks.audit_status = passed | failed | skipped
+```
+
+### Internal Auditor
+
+When `audit.auto_review: true` in `office.yaml`, the heartbeat automatically reviews completed tasks:
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| `audit.auto_review` | `false` | Enable/disable auto-audit |
+| `audit.risk_threshold` | `YELLOW` | Minimum risk level to trigger (`GREEN`=all, `YELLOW`=medium+, `RED`=high only) |
+
+Requires the `internal-auditor` role to be hired. Tasks below the risk threshold are marked `audit_status: skipped`.
 
 ### Override Mechanism
 
-- `overridable: true` — Leader can override per-task via `behavior_override` in task handoff JSON
+- `overridable: true` — Leader can override per-task via prompt instructions
 - `overridable: false` — **Never** overridable, even by Leader
 
 ### Role → Behavior Type Mapping (all 77 roles)
