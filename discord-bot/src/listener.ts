@@ -183,15 +183,27 @@ async function handleMessage(message: Message): Promise<void> {
   try { await message.react("⏳"); } catch { /* non-fatal */ }
 
   // 2. Resolve reply context (if user replied to a message)
+  //    Save full content as file, put brief summary in prompt — AI decides whether to Read full text
   let replyContext = "";
   if (message.reference?.messageId) {
     try {
       const replied = await channel.messages.fetch(message.reference.messageId);
       const replyAuthor = replied.author.username;
       const replyContent = replied.content;
+      const brief = replyContent.length > 200
+        ? replyContent.substring(0, 200) + "..."
+        : replyContent;
+
+      // Save full reply content as file
+      const replyDir = path.join(PROJECT_DIR, ".ai-office", "shared", "inbox", "reply-context");
+      fs.mkdirSync(replyDir, { recursive: true });
+      const replyFile = path.join(replyDir, `${message.reference.messageId}.md`);
+      fs.writeFileSync(replyFile, `# Reply from ${replyAuthor}\n\n${replyContent}`, "utf-8");
+
       replyContext = `\n\nThis message is a REPLY to a previous message:\n` +
         `Reply-to author: ${replyAuthor}\n` +
-        `Reply-to content: ${replyContent}\n`;
+        `Reply-to brief: ${brief}\n` +
+        `Full content saved at: ${replyFile} (use Read tool if you need the complete text)\n`;
     } catch { /* non-fatal — original message may be deleted */ }
   }
 
