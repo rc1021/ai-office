@@ -44,7 +44,7 @@ const i18n: Record<string, Record<Lang, string>> = {
   "prompt.starter":     { "zh-TW": "選擇入門組合包：",         en: "Choose a starter pack:",    ja: "スターターパックを選択：" },
   "prompt.ngrok_mode":  { "zh-TW": "選擇遠端存取方式：",       en: "Choose remote access mode:",   ja: "リモートアクセス方式を選択：" },
   "ngrok.mode_internal":{ "zh-TW": "內建 ngrok (AI Office 自動啟動 tunnel)", en: "Built-in ngrok (AI Office starts tunnel automatically)", ja: "内蔵 ngrok (AI Officeが自動でトンネルを起動)" },
-  "ngrok.mode_external":{ "zh-TW": "外部 ngrok (你自己管理 ngrok，填入 URL)", en: "External ngrok (you manage ngrok, enter URL)", ja: "外部 ngrok (自分でngrokを管理、URLを入力)" },
+  "ngrok.mode_external":{ "zh-TW": "外部 ngrok (你自己管理 ngrok，自動偵測 URL)", en: "External ngrok (you manage ngrok, URL auto-detected)", ja: "外部 ngrok (自分でngrokを管理、URL自動検出)" },
   "ngrok.mode_custom":  { "zh-TW": "自訂 URL (自有 domain / Cloudflare / reverse proxy)", en: "Custom URL (own domain / Cloudflare / reverse proxy)", ja: "カスタムURL (独自ドメイン / Cloudflare / リバースプロキシ)" },
   "ngrok.mode_disabled":{ "zh-TW": "不啟用 (僅 localhost)",   en: "Disabled (localhost only)",     ja: "無効 (localhostのみ)" },
   "prompt.public_url":  { "zh-TW": "Public URL",              en: "Public URL",                   ja: "パブリックURL" },

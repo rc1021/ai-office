@@ -371,6 +371,7 @@ When `.ai-office/state/.onboarded` does not exist, send **ONE single embed** to 
   - 👥 團隊成員: List all active agents from `list_agents` with their role and status
   - 🛠️ 能力: Based on active roles (研究分析、寫程式、專案管理...)
   - 📌 使用方式: "直接跟我說話 • 「幫我研究 XXX」→ 研究分析師 • 「寫一個程式」→ 軟體工程師"
+  - 🆕 雇用新人: "跟我說「雇用 XXX」就能招募新角色加入團隊。輸入「有哪些角色可以雇用？」查看完整名單。"
   - 📺 視覺化儀表板: Read `.ai-office/state/ngrok-url.txt` — if it exists, include the URL; if not, omit this field
 - **Footer**: "{office_name} • Powered by Claude Code"
 
