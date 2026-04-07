@@ -20,6 +20,8 @@ export interface OfficeConfig {
   statePath: string;
   dailyBriefTime: string; // "HH:MM" format, default "08:00"
   audit: AuditConfig;
+  executionMode: "sequential" | "parallel"; // default "sequential"
+  maxConcurrent: number; // agents.workers.max_concurrent, default 1
 }
 
 let cached: OfficeConfig | null = null;
@@ -37,6 +39,18 @@ export function loadOfficeConfig(projectDir: string): OfficeConfig {
   const paths = (raw?.paths ?? {}) as Record<string, string>;
 
   const auditRaw = (raw?.audit ?? {}) as Record<string, unknown>;
+  const executionRaw = (raw?.execution ?? {}) as Record<string, unknown>;
+  const agentsRaw = (raw?.agents ?? {}) as Record<string, unknown>;
+  const workersRaw = (agentsRaw.workers ?? {}) as Record<string, unknown>;
+
+  const rawMode = executionRaw.mode;
+  const executionMode: "sequential" | "parallel" =
+    rawMode === "parallel" ? "parallel" : "sequential";
+
+  const maxConcurrent =
+    typeof workersRaw.max_concurrent === "number" && workersRaw.max_concurrent > 0
+      ? workersRaw.max_concurrent
+      : 1;
 
   cached = {
     timezone: office.timezone ?? "Asia/Taipei",
@@ -47,8 +61,10 @@ export function loadOfficeConfig(projectDir: string): OfficeConfig {
       autoReview: auditRaw.auto_review === true,
       riskThreshold: (auditRaw.risk_threshold as "GREEN" | "YELLOW" | "RED") ?? "YELLOW",
     },
+    executionMode,
+    maxConcurrent,
   };
 
-  console.log(`[ConfigLoader] Loaded config: timezone=${cached.timezone}, language=${cached.language}, state=${cached.statePath}`);
+  console.log(`[ConfigLoader] Loaded config: timezone=${cached.timezone}, language=${cached.language}, state=${cached.statePath}, executionMode=${cached.executionMode}, maxConcurrent=${cached.maxConcurrent}`);
   return cached;
 }

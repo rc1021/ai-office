@@ -66,6 +66,7 @@ const SendMessageSchema = z.object({
   agent_id: AgentIdField,
   channel_name: z.string().min(1),
   content: z.string().min(1).max(2000),
+  reply_to_message_id: z.string().optional(),
 });
 
 const SendEmbedSchema = z.object({
@@ -198,6 +199,7 @@ const TOOLS = [
         agent_id: AGENT_ID_PROP,
         channel_name: { type: "string", description: "Target channel name (without #)" },
         content: { type: "string", description: "Message text (max 2000 chars)" },
+        reply_to_message_id: { type: "string", description: "Discord message ID to reply to (creates a threaded reply)" },
       },
       required: ["agent_id", "channel_name", "content"],
     },
@@ -390,7 +392,8 @@ async function gatedSendMessage(
   agentId: string,
   channelName: string,
   content: string,
-  options?: ThrottleOptions
+  options?: ThrottleOptions,
+  replyToMessageId?: string
 ): Promise<string> {
   // OutputGate check
   const gate = checkOutputGate(agentId, channelName, content);
@@ -404,7 +407,7 @@ async function gatedSendMessage(
   switch (decision.action) {
     case "send": {
       const toSend = decision.bufferedContent ?? content;
-      return await sendMessage(channelName, toSend);
+      return await sendMessage(channelName, toSend, replyToMessageId);
     }
     case "buffer":
       return `BUFFERED: ${decision.reason}`;
@@ -412,9 +415,9 @@ async function gatedSendMessage(
       throw new GateError(`Throttle rejected: ${decision.reason}`);
     case "edit":
       // For text messages, edit is unusual — just send
-      return await sendMessage(channelName, content);
+      return await sendMessage(channelName, content, replyToMessageId);
     default:
-      return await sendMessage(channelName, content);
+      return await sendMessage(channelName, content, replyToMessageId);
   }
 }
 
@@ -561,7 +564,8 @@ export function createMcpServer(): Server {
             input.agent_id,
             input.channel_name,
             input.content,
-            opts
+            opts,
+            input.reply_to_message_id
           );
           if (result.startsWith("BUFFERED:")) {
             return makeTextContent(result);

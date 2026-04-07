@@ -9,7 +9,25 @@ import { seedActiveRoles } from "./seed.js";
 import { resolveDbPath } from "./db.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PORT = parseInt(process.env.PIXEL_OFFICE_PORT ?? "3847");
+
+function resolvePixelOfficePort(): number {
+  if (process.env.PIXEL_OFFICE_PORT) return parseInt(process.env.PIXEL_OFFICE_PORT);
+  // Try to read from config/office.yaml — check tsx and compiled paths
+  const yamlCandidates = [
+    path.join(__dirname, "..", "..", "config", "office.yaml"),       // tsx: server/ → pixel-office/ → ai-office/
+    path.join(__dirname, "..", "..", "..", "config", "office.yaml"), // compiled: dist/server/ → pixel-office/ → ai-office/
+  ];
+  for (const yamlPath of yamlCandidates) {
+    try {
+      const yaml = fs.readFileSync(yamlPath, "utf-8");
+      const match = yaml.match(/pixel_office:\s*\n\s+port:\s*(\d+)/);
+      if (match) return parseInt(match[1]);
+    } catch { /* file not found, try next */ }
+  }
+  return 3847;
+}
+
+const PORT = resolvePixelOfficePort();
 
 // Load .env if present (for ngrok config)
 // Try pixel-office/.env (one level up from server/) then two levels up (from dist/server/)
@@ -63,6 +81,13 @@ app.get("*", (_req, res) => {
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`[PixelOffice] API server running at http://0.0.0.0:${PORT}`);
   console.log(`[PixelOffice] Open http://localhost:3848 for dev client (vite)`);
+
+  // Clear stale ngrok URL so Leader never shares an expired tunnel
+  try {
+    const baseDir = process.env.PROJECT_DIR ?? process.env.HOME ?? "";
+    const stateFile = path.join(baseDir, ".ai-office", "state", "ngrok-url.txt");
+    if (fs.existsSync(stateFile)) fs.unlinkSync(stateFile);
+  } catch { /* non-critical */ }
 
   // Remote access based on NGROK_MODE
   const ngrokMode = process.env.NGROK_MODE ?? "disabled";

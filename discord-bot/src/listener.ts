@@ -131,7 +131,7 @@ async function checkFirstRun(): Promise<void> {
   }
 }
 
-// ── Job Queue — process one job at a time (messages + approval triggers) ─────
+// ── Job Queue — semaphore-based parallel pool (configurable via office.yaml) ──
 
 interface QueueJob {
   type: "message" | "approval";
@@ -140,8 +140,18 @@ interface QueueJob {
 }
 
 const jobQueue: QueueJob[] = [];
-let processing = false;
+let activeJobs = 0;
+let maxConcurrent = 1; // default sequential; updated from config after ClientReady
 const processedMessageIds = new Set<string>();
+
+/**
+ * Called once after office config is loaded to set the concurrency limit.
+ * When executionMode is "sequential", maxConcurrent is clamped to 1.
+ */
+function initConcurrency(executionMode: "sequential" | "parallel", limit: number): void {
+  maxConcurrent = executionMode === "parallel" ? Math.max(1, limit) : 1;
+  console.log(`[Listener] Concurrency mode: ${executionMode}, maxConcurrent: ${maxConcurrent}`);
+}
 
 async function enqueueMessage(message: Message): Promise<void> {
   if (message.author.bot) return;
@@ -159,39 +169,43 @@ async function enqueueMessage(message: Message): Promise<void> {
   }
 
   jobQueue.push({ type: "message", message });
-  console.log(`[Listener] Queued message from ${message.author.username} (queue size: ${jobQueue.length})`);
+  console.log(`[Listener] Queued message from ${message.author.username} (queue size: ${jobQueue.length}, active: ${activeJobs}/${maxConcurrent})`);
 
-  if (!processing) {
-    await drainQueue();
-  }
+  processQueue();
 }
 
 function enqueueApprovalTrigger(approval: ApprovalRequest): void {
   jobQueue.push({ type: "approval", approval });
-  console.log(`[Listener] Queued approval trigger for ${approval.id} (${approval.status}) (queue size: ${jobQueue.length})`);
+  console.log(`[Listener] Queued approval trigger for ${approval.id} (${approval.status}) (queue size: ${jobQueue.length}, active: ${activeJobs}/${maxConcurrent})`);
 
-  if (!processing) {
-    drainQueue().catch((err) => {
-      console.error("[Listener] Unhandled error in drainQueue (approval):", err);
+  processQueue();
+}
+
+/**
+ * Drain the queue up to maxConcurrent active jobs.
+ * Each completed job calls processQueue() again to pick up the next item.
+ */
+function processQueue(): void {
+  while (jobQueue.length > 0 && activeJobs < maxConcurrent) {
+    const job = jobQueue.shift()!;
+    activeJobs++;
+    processJob(job).finally(() => {
+      activeJobs--;
+      processQueue(); // try to pick up the next job
     });
   }
 }
 
-async function drainQueue(): Promise<void> {
-  processing = true;
-  while (jobQueue.length > 0) {
-    const job = jobQueue.shift()!;
-    try {
-      if (job.type === "message" && job.message) {
-        await handleMessage(job.message);
-      } else if (job.type === "approval" && job.approval) {
-        await handleApproval(job.approval);
-      }
-    } catch (err) {
-      console.error("[Listener] Unhandled error in drainQueue:", err);
+async function processJob(job: QueueJob): Promise<void> {
+  try {
+    if (job.type === "message" && job.message) {
+      await handleMessage(job.message);
+    } else if (job.type === "approval" && job.approval) {
+      await handleApproval(job.approval);
     }
+  } catch (err) {
+    console.error("[Listener] Unhandled error in processJob:", err);
   }
-  processing = false;
 }
 
 // ── Handle incoming user message ──────────────────────────────────────────────
@@ -270,7 +284,7 @@ async function handleMessage(message: Message): Promise<void> {
   // 4. Build prompt + run claude -p
   // Prefer server nickname > global display name > username
   const displayName = message.member?.displayName ?? message.author.displayName ?? message.author.username;
-  const prompt = buildPrompt(displayName, userContent, replyContext, savedAttachments);
+  const prompt = buildPrompt(displayName, userContent, message.id, replyContext, savedAttachments);
 
   try {
     const output = await runClaude(prompt, CLAUDE_CONFIG);
@@ -348,6 +362,7 @@ function buildApprovalPrompt(approval: ApprovalRequest): string {
 function buildPrompt(
   username: string,
   content: string,
+  messageId: string,
   replyContext: string = "",
   attachments: string[] = [],
 ): string {
@@ -361,6 +376,8 @@ function buildPrompt(
     "You are the AI Office Leader. A user has sent you a message in Discord #general.\n" +
     "\n" +
     "User: " + username + "\n" +
+    "User message ID: " + messageId + "\n" +
+    "When responding, use reply_to_message_id with this ID so your reply threads to the user's message.\n" +
     "--- BEGIN MESSAGE ---\n" +
     content + "\n" +
     "--- END MESSAGE ---\n" +
@@ -499,6 +516,10 @@ async function main(): Promise<void> {
     // Start core subsystems with Discord adapter
     try {
       const config = loadOfficeConfig(PROJECT_DIR);
+
+      // Initialize concurrency from config (parallel vs sequential)
+      initConcurrency(config.executionMode, config.maxConcurrent);
+
       const adapter = new DiscordChatAdapter();
 
       heartbeat = new HeartbeatScheduler(

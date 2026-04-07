@@ -245,15 +245,33 @@ export function appendAudit(
   detail: string
 ): void {
   const db = getDb();
-  const prevHash = lastAuditHash;
-  const record = JSON.stringify({ agentId, traceId, action, detail, prevHash, timestamp: new Date().toISOString() });
-  const hash = createHash("sha256").update(prevHash + record).digest("hex");
 
-  db.prepare(
-    "INSERT INTO audit_log (agent_id, trace_id, action, detail, prev_hash, hash) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(agentId, traceId, action, detail, prevHash, hash);
+  // Use BEGIN IMMEDIATE to serialize concurrent audit writes across processes.
+  // Each writer reads the last hash from the DB (not a process-local variable)
+  // inside the transaction, ensuring the hash chain remains valid even when
+  // multiple MCP server processes run concurrently (parallel claude -p).
+  const insertAudit = db.transaction(() => {
+    const lastRow = db.prepare(
+      "SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1"
+    ).get() as { hash: string } | undefined;
+    const prevHash = lastRow?.hash ?? "genesis";
 
-  lastAuditHash = hash;
+    const record = JSON.stringify({
+      agentId, traceId, action, detail, prevHash,
+      timestamp: new Date().toISOString(),
+    });
+    const hash = createHash("sha256").update(prevHash + record).digest("hex");
+
+    db.prepare(
+      "INSERT INTO audit_log (agent_id, trace_id, action, detail, prev_hash, hash) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(agentId, traceId, action, detail, prevHash, hash);
+
+    lastAuditHash = hash;
+  });
+
+  // .immediate() acquires a write lock upfront, preventing concurrent writers
+  // from interleaving their reads and writes within the transaction.
+  insertAudit.immediate();
 }
 
 // ── Event Bus Helpers (#13) ──

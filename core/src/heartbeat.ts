@@ -89,16 +89,28 @@ export class HeartbeatScheduler {
   private async healthCheck(): Promise<void> {
     const issues: string[] = [];
 
-    // Check pixel-office PID
+    // Check pixel-office: PID file first, then HTTP fallback
     const pidFile = path.join(this.projectDir, "pixel-office", "pixel.pid");
     if (fs.existsSync(pidFile)) {
+      let pidAlive = false;
       try {
         const pid = parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
         process.kill(pid, 0); // Test if process exists
+        pidAlive = true;
       } catch {
-        issues.push("Pixel Office process is dead");
-        // Attempt auto-restart
-        this.restartPixelOffice();
+        // PID dead — but server might still be running under a different PID
+      }
+
+      if (!pidAlive) {
+        // HTTP health check as fallback before declaring dead
+        const serverAlive = await this.checkPixelOfficeHttp();
+        if (!serverAlive) {
+          issues.push("Pixel Office process is dead — restarting");
+          this.restartPixelOffice();
+        } else {
+          // Server is alive but PID file is stale — find real PID and update
+          await this.fixStalePidFile(pidFile);
+        }
       }
     }
 
@@ -121,7 +133,7 @@ export class HeartbeatScheduler {
       await this.checkPendingAudits();
     }
 
-    // Only alert on failure
+    // Alert on genuine failures — no cooldown needed because issues are resolved at source
     if (issues.length > 0) {
       try {
         await this.adapter.sendEmbed("alerts", {
@@ -160,19 +172,52 @@ export class HeartbeatScheduler {
         const failStmt = db.prepare(
           "UPDATE tasks SET status = 'failed', updated_at = datetime('now') WHERE id = ?"
         );
+        const autoCompleteStmt = db.prepare(
+          "UPDATE tasks SET status = 'completed', updated_at = datetime('now') WHERE id = ?"
+        );
         const freeAgentStmt = db.prepare(
           "UPDATE agents SET status = 'idle', current_task_id = NULL WHERE agent_id = ? AND current_task_id = ?"
         );
+        const getAgentStatus = db.prepare(
+          "SELECT status FROM agents WHERE agent_id = ?"
+        );
+
+        const failedTasks: string[] = [];
+        const autoCompletedTasks: string[] = [];
 
         for (const task of staleTasks) {
-          failStmt.run(task.id);
+          // Safety net: if the assigned agent is already idle, the worker likely
+          // finished its work but forgot to call task_update(completed).
+          // Auto-complete instead of marking failed to avoid false alarms.
+          let agentIsIdle = false;
           if (task.assigned_to) {
-            freeAgentStmt.run(task.assigned_to, task.id);
+            const agent = getAgentStatus.get(task.assigned_to) as { status: string } | undefined;
+            agentIsIdle = agent?.status === "idle";
           }
-          console.log(`[Heartbeat] Marked stale task as failed: "${task.title}" (${task.id})`);
+
+          if (agentIsIdle) {
+            autoCompleteStmt.run(task.id);
+            if (task.assigned_to) {
+              freeAgentStmt.run(task.assigned_to, task.id);
+            }
+            autoCompletedTasks.push(task.title);
+            console.log(`[Heartbeat] Auto-completed stale task (agent idle): "${task.title}" (${task.id})`);
+          } else {
+            failStmt.run(task.id);
+            if (task.assigned_to) {
+              freeAgentStmt.run(task.assigned_to, task.id);
+            }
+            failedTasks.push(task.title);
+            console.log(`[Heartbeat] Marked stale task as failed: "${task.title}" (${task.id})`);
+          }
         }
 
-        issues.push(`${staleTasks.length} stale task(s) marked as failed: ${staleTasks.map(t => t.title).join(", ")}`);
+        if (autoCompletedTasks.length > 0) {
+          issues.push(`${autoCompletedTasks.length} stale task(s) auto-completed (agent idle): ${autoCompletedTasks.join(", ")}`);
+        }
+        if (failedTasks.length > 0) {
+          issues.push(`${failedTasks.length} stale task(s) marked as failed: ${failedTasks.join(", ")}`);
+        }
       }
 
       // Free any agents stuck in "busy" with no recent heartbeat (>10 min)
@@ -307,6 +352,33 @@ export class HeartbeatScheduler {
     try {
       const output = await runClaude(prompt, this.claudeConfig);
       return output.toUpperCase().includes("PASS");
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Find the real PID listening on port 3847 and update the stale PID file.
+   */
+  private async fixStalePidFile(pidFile: string): Promise<void> {
+    try {
+      const { execSync } = await import("node:child_process");
+      const output = execSync("lsof -ti :3847", { encoding: "utf-8", timeout: 5000 }).trim();
+      if (output) {
+        const realPid = output.split("\n")[0].trim();
+        fs.writeFileSync(pidFile, realPid, "utf-8");
+        console.log(`[Heartbeat] Updated stale PID file → ${realPid}`);
+      }
+    } catch {
+      // lsof failed — server might use a different method; just log
+      console.log("[Heartbeat] Pixel Office HTTP alive but could not resolve PID — skipping PID update");
+    }
+  }
+
+  private async checkPixelOfficeHttp(): Promise<boolean> {
+    try {
+      const resp = await fetch("http://localhost:3847/api/status", { signal: AbortSignal.timeout(3000) });
+      return resp.ok;
     } catch {
       return false;
     }

@@ -4,6 +4,7 @@ import {
   ThreadChannel,
   Message,
   Collection,
+  MessageCreateOptions,
 } from "discord.js";
 import { findTextChannel } from "./channel-manager.js";
 import { EmbedInput, ChannelMessage } from "./types.js";
@@ -43,13 +44,22 @@ function splitContent(text: string, maxLen: number = DISCORD_MAX_LENGTH): string
   return chunks;
 }
 
-export async function sendMessage(channelName: string, content: string): Promise<string> {
+export async function sendMessage(
+  channelName: string,
+  content: string,
+  replyToMessageId?: string
+): Promise<string> {
   const channel = await findTextChannel(channelName);
   const chunks = splitContent(content);
   let lastMsgId = "";
 
   for (const chunk of chunks) {
-    const msg = await channel.send(chunk);
+    const options: MessageCreateOptions = { content: chunk };
+    if (replyToMessageId && lastMsgId === "") {
+      // Only apply the reply reference on the first chunk
+      options.reply = { messageReference: replyToMessageId, failIfNotExists: false };
+    }
+    const msg = await channel.send(options);
     lastMsgId = msg.id;
   }
 

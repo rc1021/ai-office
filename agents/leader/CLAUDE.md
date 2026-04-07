@@ -259,13 +259,21 @@ When finished:
 
 Set `model: "sonnet"` for the Agent tool (Sonnet 4.6 for workers).
 
-### 5. Collect Results
+### 5. Collect Results & Close Task (CRITICAL)
 After the Agent tool returns:
 1. Parse the worker's structured response JSON from the Agent tool output
-2. Verify task status via `task_list` (confirm status = completed/failed)
-3. Review the output quality (format, content, confidence level)
-4. If quality is acceptable, post results to the appropriate Discord channel
-5. If not, consider retrying or escalating to the user
+2. **Immediately verify** task status via `task_list` (confirm status = completed/failed)
+3. **If the task is NOT completed** (still assigned/in_progress/checkpoint):
+   - The worker exited without calling `task_update(status: completed)` — this is a known issue
+   - **You MUST call `task_update(task_id, agent_id=leader, status=completed)`** to close it
+   - This prevents false health-check alerts
+4. Review the output quality (format, content, confidence level)
+5. If quality is acceptable, post results to the appropriate Discord channel
+6. If not, consider retrying or escalating to the user
+
+> **⚠️ NEVER leave a delegated task unclosed.** After every Agent tool call returns,
+> always verify and close the task. Workers are LLM agents — they may forget to call
+> `task_update`. The Leader is the last line of defense.
 
 ### 6. Cleanup
 ```bash
