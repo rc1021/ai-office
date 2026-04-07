@@ -188,7 +188,7 @@ async function handleMessage(message: Message): Promise<void> {
     try {
       const replied = await channel.messages.fetch(message.reference.messageId);
       const replyAuthor = replied.author.username;
-      const replyContent = replied.content.substring(0, 500);
+      const replyContent = replied.content;
       replyContext = `\n\nThis message is a REPLY to a previous message:\n` +
         `Reply-to author: ${replyAuthor}\n` +
         `Reply-to content: ${replyContent}\n`;
