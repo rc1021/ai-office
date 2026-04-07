@@ -182,8 +182,42 @@ async function handleMessage(message: Message): Promise<void> {
   // 1. Acknowledge with ⏳
   try { await message.react("⏳"); } catch { /* non-fatal */ }
 
-  // 2. Build prompt + run claude -p
-  const prompt = buildPrompt(message.author.username, userContent);
+  // 2. Resolve reply context (if user replied to a message)
+  let replyContext = "";
+  if (message.reference?.messageId) {
+    try {
+      const replied = await channel.messages.fetch(message.reference.messageId);
+      const replyAuthor = replied.author.username;
+      const replyContent = replied.content.substring(0, 500);
+      replyContext = `\n\nThis message is a REPLY to a previous message:\n` +
+        `Reply-to author: ${replyAuthor}\n` +
+        `Reply-to content: ${replyContent}\n`;
+    } catch { /* non-fatal — original message may be deleted */ }
+  }
+
+  // 3. Save attachments (files, images, PDFs) to shared/inbox for agents to Read
+  const savedAttachments: string[] = [];
+  if (message.attachments.size > 0) {
+    const inboxDir = path.join(PROJECT_DIR, ".ai-office", "shared", "inbox", "user-uploads");
+    fs.mkdirSync(inboxDir, { recursive: true });
+
+    for (const [, attachment] of message.attachments) {
+      try {
+        const res = await fetch(attachment.url);
+        const buffer = Buffer.from(await res.arrayBuffer());
+        const safeName = attachment.name?.replace(/[^a-zA-Z0-9._-]/g, "_") ?? "file";
+        const filePath = path.join(inboxDir, `${Date.now()}-${safeName}`);
+        fs.writeFileSync(filePath, buffer);
+        savedAttachments.push(filePath);
+        console.log(`[Listener] Saved attachment: ${filePath} (${buffer.length} bytes)`);
+      } catch (err) {
+        console.warn(`[Listener] Failed to save attachment ${attachment.name}:`, err);
+      }
+    }
+  }
+
+  // 4. Build prompt + run claude -p
+  const prompt = buildPrompt(message.author.username, userContent, replyContext, savedAttachments);
 
   try {
     const output = await runClaude(prompt, CLAUDE_CONFIG);
@@ -208,7 +242,18 @@ async function handleMessage(message: Message): Promise<void> {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function buildPrompt(username: string, content: string): string {
+function buildPrompt(
+  username: string,
+  content: string,
+  replyContext: string = "",
+  attachments: string[] = [],
+): string {
+  let attachmentInfo = "";
+  if (attachments.length > 0) {
+    attachmentInfo = "\n\nUser uploaded files (saved to disk — use Read tool to access):\n" +
+      attachments.map(p => `- ${p}`).join("\n") + "\n";
+  }
+
   return (
     "You are the AI Office Leader. A user has sent you a message in Discord #general.\n" +
     "\n" +
@@ -216,6 +261,8 @@ function buildPrompt(username: string, content: string): string {
     "--- BEGIN MESSAGE ---\n" +
     content + "\n" +
     "--- END MESSAGE ---\n" +
+    replyContext +
+    attachmentInfo +
     "\n" +
     "Process this request according to your role instructions (agents/leader/CLAUDE.md). " +
     "Read agents/leader/CLAUDE.md first for your full identity and instructions.\n" +
