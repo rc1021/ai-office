@@ -156,6 +156,11 @@ if [ -f "$PIXEL_PID_FILE" ]; then
 fi
 
 pkill -f "$PROJECT_DIR/discord-bot/dist/listener" 2>/dev/null && echo "  [OK] Cleaned up stale listener processes" || true
+
+# Kill ALL listener.js processes system-wide (prevents duplicate responses from old installs)
+for pid in $(ps aux | grep "[l]istener.js" | awk '{print $2}'); do
+  kill "$pid" 2>/dev/null && echo "  [OK] Killed stale listener (PID $pid)"
+done
 pkill -f "$PROJECT_DIR/pixel-office" 2>/dev/null && echo "  [OK] Cleaned up stale pixel-office processes" || true
 
 # Start new listener

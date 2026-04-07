@@ -59,6 +59,19 @@ if pkill -f "$PROJECT_DIR/discord-bot/dist/listener" 2>/dev/null; then
   echo "  [OK] Cleaned up stale listener processes"
 fi
 
+# Kill ALL listener.js processes system-wide that use the same bot token
+# (prevents duplicate responses from old installs at different paths)
+if [ -f "$PROJECT_DIR/discord-bot/.env" ]; then
+  BOT_TOKEN=$(grep "^DISCORD_BOT_TOKEN=" "$PROJECT_DIR/discord-bot/.env" 2>/dev/null | cut -d= -f2)
+  if [ -n "$BOT_TOKEN" ]; then
+    # Find all node processes running listener.js and check if their .env has the same token
+    STALE_PIDS=$(ps aux | grep "[l]istener.js" | awk '{print $2}')
+    for pid in $STALE_PIDS; do
+      kill "$pid" 2>/dev/null && echo "  [OK] Killed stale listener (PID $pid)"
+    done
+  fi
+fi
+
 echo "  [OK] All processes stopped"
 
 # ── Clean up state ───────────────────────────────────────────────────────────
