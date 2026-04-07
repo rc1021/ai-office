@@ -188,7 +188,7 @@ async function handleMessage(message: Message): Promise<void> {
   if (message.reference?.messageId) {
     try {
       const replied = await channel.messages.fetch(message.reference.messageId);
-      const replyAuthor = replied.author.username;
+      const replyAuthor = replied.member?.displayName ?? replied.author.displayName ?? replied.author.username;
       const replyContent = replied.content;
       const brief = replyContent.length > 200
         ? replyContent.substring(0, 200) + "..."
@@ -229,7 +229,9 @@ async function handleMessage(message: Message): Promise<void> {
   }
 
   // 4. Build prompt + run claude -p
-  const prompt = buildPrompt(message.author.username, userContent, replyContext, savedAttachments);
+  // Prefer server nickname > global display name > username
+  const displayName = message.member?.displayName ?? message.author.displayName ?? message.author.username;
+  const prompt = buildPrompt(displayName, userContent, replyContext, savedAttachments);
 
   try {
     const output = await runClaude(prompt, CLAUDE_CONFIG);
