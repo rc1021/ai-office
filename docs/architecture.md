@@ -82,19 +82,34 @@
 
 ## 2. Module Descriptions
 
-### discord-bot
+### core
 
-**Purpose**: Human-facing interface and the only write path to Discord. Runs as an MCP Server on stdio so the Leader can call its tools directly via Claude Code's MCP integration.
+**Purpose**: Platform-agnostic orchestration logic. Contains everything that does not depend on a specific chat platform (Discord/Slack/etc.). Published as `@ai-office/core`, referenced via `file:../core`.
 
 **Key files**:
-- `src/index.ts` — Bot login, slash-command registration, approval button handler
-- `src/mcp-server.ts` — 17 MCP tools exposed to agents (channels, messaging, approvals, setup)
-- `src/output-gate.ts` — 4-layer security check before any Discord send
-- `src/agent-registry.ts` — Resolves `agent_id` → security profile by loading role YAML
+- `src/chat-adapter.ts` — `ChatAdapter` interface: sendMessage, sendEmbed, editEmbed, channelExists, createCategory, createChannel
+- `src/claude-runner.ts` — Spawns `claude -p` with configurable projectDir, mcpConfigPath, and allowedTools
+- `src/event-bridge.ts` — Polls coordination DB every 3s, routes events to chat channels via ChatAdapter
+- `src/heartbeat.ts` — Health checks (1min), system status (30min), daily brief (08:30), stale task cleanup — all via ChatAdapter
+- `src/config-loader.ts` — Reads `config/office.yaml`, returns timezone/language/statePath
+- `src/output-gate.ts` — 4-layer security check before any message send
 - `src/throttle-manager.ts` — Rate limiting: buffer, reject, embed-edit strategies per channel
-- `src/department-manager.ts` — Auto-creates `dept-{name}` channels on agent registration
-- `src/approval-manager.ts` — File-based approval state (JSON); Discord buttons resolve to approved/rejected via deferred interaction replies
+- `src/agent-registry.ts` — Resolves `agent_id` → security profile by loading role YAML
+- `src/types.ts` — Shared types (EmbedInput, RiskLevel, AgentProfile, etc.) + COLORS
+
+### discord-bot
+
+**Purpose**: Discord-specific adapter. Implements `ChatAdapter` for Discord, runs the MCP Server for Discord tools, and hosts the listener daemon that connects everything.
+
+**Key files**:
+- `src/listener.ts` — Thin-shell daemon: Discord Client + message queue + wires core subsystems via `DiscordChatAdapter`
+- `src/discord-adapter.ts` — Implements `ChatAdapter` for Discord (delegates to message-manager/channel-manager)
+- `src/mcp-server.ts` — 16 MCP tools exposed to agents (channels, messaging, approvals, setup)
+- `src/message-manager.ts` — Discord.js message sending/reading
+- `src/channel-manager.ts` — Discord.js channel creation/lookup
+- `src/approval-manager.ts` — File-based approval state (JSON); Discord buttons via deferred interaction replies
 - `src/setup-server.ts` — Idempotent setup of 11 fixed channels across 4 categories
+- `src/department-manager.ts` — Auto-creates `dept-{name}` channels on agent registration
 
 ### coordination
 
@@ -155,9 +170,10 @@ The following numbered steps trace a complete user request from Discord message 
 
 ```
  1. User types a message in Discord #general
- 2. discord-bot receives the message via discord.js event listener
- 3. Leader reads #general via read_new_messages MCP tool
- 4. Leader parses the request and calls orchestrator CLI:
+ 2. Listener daemon receives the message via discord.js MessageCreate event
+ 3. Listener queues the message (one at a time), adds ⏳ reaction
+ 4. Listener spawns `claude -p` with structured prompt envelope
+ 5. Leader parses the request and calls orchestrator CLI:
       node orchestrator/dist/index.js prepare-worker --role software-engineer
  5. Orchestrator:
     a. Loads role template YAML
@@ -271,6 +287,8 @@ Leader calls orchestrator stop-worker --agent-id {agent_id}
 | Leader model | Claude Opus 4.6 | via Max 20x | Task routing, QA, escalation |
 | Worker model | Claude Sonnet 4.6 | via Max 20x | Task execution |
 | Agent runtime | Claude Code | latest | MCP tool access, Agent tool |
+| Core library | `@ai-office/core` | 1.0 | Platform-agnostic orchestration |
+| Chat abstraction | ChatAdapter interface | — | Pluggable chat platform (Discord/Slack) |
 | Discord client | discord.js | v14 | Bot and guild interaction |
 | Discord MCP | `@modelcontextprotocol/sdk` | 1.x | stdio MCP server |
 | Coordination MCP | `@modelcontextprotocol/sdk` | 1.x | stdio MCP server |

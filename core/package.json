@@ -1,0 +1,22 @@
+{
+  "name": "@ai-office/core",
+  "version": "1.0.0",
+  "description": "AI Office core — platform-agnostic orchestration logic",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "npx tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "js-yaml": "^4.1.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3"
+  }
+}

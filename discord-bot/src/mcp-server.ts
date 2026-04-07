@@ -27,16 +27,16 @@ import {
   checkApproval,
 } from "./approval-manager.js";
 import { setupServer } from "./setup-server.js";
-import { checkOutputGate } from "./output-gate.js";
+import { ensureDepartmentChannels } from "./department-manager.js";
 import {
+  checkOutputGate,
   throttle,
   recordEmbedMessageId,
   forceFlush,
   setFlushCallback,
-} from "./throttle-manager.js";
-import { resolveAgent } from "./agent-registry.js";
-import { ensureDepartmentChannels } from "./department-manager.js";
-import { RiskLevel, EmbedInput, ThrottleOptions } from "./types.js";
+  resolveAgent,
+} from "@ai-office/core";
+import type { RiskLevel, EmbedInput, ThrottleOptions } from "@ai-office/core";
 
 // ─── Input Schemas ────────────────────────────────────────────────────────────
 

@@ -3,18 +3,11 @@
  */
 
 import { EmbedBuilder } from "discord.js";
-import { EmbedInput } from "./types.js";
+import { COLORS } from "@ai-office/core";
+import type { EmbedInput } from "@ai-office/core";
 
-// ── Color Constants ──────────────────────────────────────────────────────────
-
-export const COLORS = {
-  GREEN:   0x2ECC71,
-  YELLOW:  0xF39C12,
-  RED:     0xE74C3C,
-  BLUE:    0x3498DB,
-  GRAY:    0x95A5A6,
-  BLURPLE: 0x5865F2,
-} as const;
+// Re-export COLORS for backward compatibility within discord-bot
+export { COLORS };
 
 // ── Embed Builder ────────────────────────────────────────────────────────────
 

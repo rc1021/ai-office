@@ -44,22 +44,27 @@ Docker is only needed if you want to run the Pixel Office UI or the setup wizard
 
 ## 2. Installation
 
-### Clone and run the setup script
+### One-command install
 
 ```sh
-git clone https://github.com/rc1021/ai-office.git
-cd ai-office
+bash <(curl -fsSL https://raw.githubusercontent.com/rc1021/ai-office/main/setup.sh)
+```
+
+Or if you already have the project:
+
+```sh
 ./setup.sh
 ```
 
 The `setup.sh` script performs six steps automatically:
 
-1. **Checks prerequisites** — verifies Node.js >= 22, npm, and Docker (optional).
-2. **Installs dependencies** — runs `npm install` in `discord-bot`, `coordination`, `orchestrator`, `pixel-office`, and `setup`.
-3. **Builds TypeScript** — compiles all packages to `dist/`.
-4. **Launches the configuration wizard** — interactive prompts to create your office config (see [Section 4](#4-configuration-wizard)).
-5. **Stops old processes** — kills any existing listener/Pixel Office daemons to prevent duplicates.
-6. **Starts the Discord Listener daemon** — background process that keeps the bot online.
+1. **Downloads AI Office** — fetches the latest tarball from GitHub (no git required).
+2. **Checks prerequisites** — verifies Node.js >= 22, npm, curl, Claude Code, and Docker/ngrok (optional).
+3. **Installs dependencies** — runs `npm install` in `core`, `discord-bot`, `coordination`, `orchestrator`, `pixel-office`, and `setup`.
+4. **Builds TypeScript** — compiles all packages to `dist/` (`core` first, then the rest).
+5. **Launches the configuration wizard** — interactive prompts to create your office config (see [Section 4](#4-configuration-wizard)).
+6. **Stops old processes** — kills any existing listener/Pixel Office daemons to prevent duplicates.
+7. **Starts the Discord Listener daemon** — background process that keeps the bot online.
 
 If any step fails, the script exits with an error message indicating which package failed. Fix the issue and re-run `./setup.sh`.
 
@@ -280,9 +285,9 @@ Then re-run the wizard or set `AI_OFFICE_WORKSPACE` to point to an existing dire
 2. Confirm the bot was invited to that specific server using the OAuth2 URL from the Developer Portal.
 3. Ensure the bot has Administrator permissions in the server.
 
-### Build errors after pulling updates
+### Build errors after updating
 
-**Symptom:** TypeScript compilation errors after `git pull`.
+**Symptom:** TypeScript compilation errors after `./update.sh`.
 
 **Fix:** Re-run the full setup to reinstall dependencies and rebuild:
 
@@ -290,7 +295,7 @@ Then re-run the wizard or set `AI_OFFICE_WORKSPACE` to point to an existing dire
 ./setup.sh
 ```
 
-This is idempotent — it is safe to run multiple times.
+This is idempotent — it is safe to run multiple times. Note: `core/` must build before `discord-bot/` (the build scripts handle this automatically).
 
 ### MCP servers not connecting
 

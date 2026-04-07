@@ -2,7 +2,7 @@
 
 A multi-agent virtual office powered by Claude Code. "Hire" AI agents with specialized roles that collaborate via Discord to accomplish complex tasks under human supervision.
 
-**71 role templates** across 22 industries. **34 MCP tools**. **77 automated tests**. End-to-end verified.
+**77 role templates** across 22 industries. **34 MCP tools**. **77 automated tests**. End-to-end verified.
 
 ## Quick Start
 
@@ -10,19 +10,11 @@ A multi-agent virtual office powered by Claude Code. "Hire" AI agents with speci
 bash <(curl -fsSL https://raw.githubusercontent.com/rc1021/ai-office/main/setup.sh)
 ```
 
-Or clone manually:
-
-```bash
-git clone https://github.com/rc1021/ai-office.git
-cd ai-office
-./setup.sh
-```
-
 The setup script will:
-1. Clone the repo (if needed)
-2. Check prerequisites (Node.js, npm, git, Claude Code, ngrok)
-3. Install dependencies and build (server + client)
-4. Run the configuration wizard (office name, Discord bot, ngrok, starter pack)
+1. Download AI Office (tarball, no git required)
+2. Check prerequisites (Node.js, npm, curl, Claude Code, ngrok)
+3. Install dependencies and build all packages (`core` → `discord-bot` → others)
+4. Run the configuration wizard (office name, Discord bot, ngrok mode, starter pack)
 5. Stop old processes (if any — prevents duplicate daemons)
 6. Start the **Discord Listener daemon** in the background
 
@@ -34,7 +26,7 @@ After setup, the bot is online in Discord. Send a message in `#general` — the 
 ./update.sh
 ```
 
-Pulls latest code, reinstalls dependencies, rebuilds, and **restarts the listener** — preserves your configuration.
+Downloads latest source, rebuilds, and **restarts the listener**. Your configuration is preserved (`config/office.yaml`, `discord-bot/.env`, `pixel-office/.env`, `.mcp.json`).
 
 ### Uninstalling
 
@@ -47,6 +39,7 @@ Stops all processes (listener + Pixel Office), removes state/build/node_modules.
 ## Prerequisites
 
 - **Node.js** >= 22
+- **curl** (for downloading)
 - **Claude Code** (Max subscription recommended for parallel workers)
 - **Discord Bot** — [create one here](https://discord.com/developers/applications)
   - Enable **MESSAGE CONTENT** intent
@@ -62,21 +55,29 @@ User ──→ Discord #general
               ↓
          claude -p (per message)
               ↓
-         Leader (Opus) ──→ Orchestrator ──→ Workers (Sonnet)
-              ↓                                  ↓
-         Coordination MCP (SQLite) ←─────────────┘
+         Leader (Opus) ──→ Workers (Sonnet) via Agent tool
+              ↓                    ↓
+         @ai-office/core ←────────┘
+         (ChatAdapter → Discord / Slack / ...)
+              ↓
+         Coordination MCP (SQLite)
               ↓
          Pixel Office UI (ngrok)
 ```
 
 | Module | Purpose | Tools |
 |--------|---------|-------|
-| `discord-bot/` | Discord Bot + MCP Server + **Listener Daemon** | 16 tools |
+| `core/` | **Platform-agnostic core** — claude runner, event bridge, heartbeat, config, auth | — |
+| `discord-bot/` | Discord adapter + MCP Server + **Listener Daemon** | 16 tools |
 | `coordination/` | Shared state, tasks, events, audit | 18 tools |
 | `orchestrator/` | Agent lifecycle CLI | 6 commands |
 | `pixel-office/` | Real-time visualization (Phaser.js + ngrok) | — |
 | `setup/` | Configuration wizard (i18n) | — |
-| `roles/` | 71 role templates (YAML) | — |
+| `roles/` | 77 role templates (YAML) | — |
+
+### Platform Separation
+
+The `core/` package contains all platform-agnostic logic (ChatAdapter interface, event bridge, heartbeat, claude runner, output gate, throttle). `discord-bot/` implements `DiscordChatAdapter` for Discord. A future `slack-bot/` can implement `SlackChatAdapter` and reuse the same core.
 
 ## Starter Packs
 
@@ -94,11 +95,11 @@ User ──→ Discord #general
 
 ## Role Templates
 
-71 roles across 4 categories:
+77 roles across 4 categories:
 
 - **1 Default** — Leader (always present)
 - **20 General** — PM, Engineer, Analyst, Designer, QA, DevOps, etc.
-- **45 Industry** — Tech, Finance, E-Commerce, Healthcare, Legal, Education, Media, Gaming, Crypto, Government, and more
+- **51 Industry** — Tech, Finance, E-Commerce, Healthcare, Legal, Education, Media, Gaming, Crypto, Government, and more
 - **5 Emerging** — AI Prompt Engineer, ESG Analyst, Crisis PR, Accessibility Consultant, Personal Brand
 
 See [docs/role-catalog.md](docs/role-catalog.md) for the complete catalog.
@@ -122,13 +123,13 @@ User: "研究蝦皮 API 的聊天功能"
 
 The listener daemon runs background subsystems:
 
-- **Event Bridge** — Polls coordination DB every 3s, routes events to Discord channels:
+- **Event Bridge** (`core/`) — Polls coordination DB every 3s, routes events to chat channels via ChatAdapter:
   - `task.created/completed/failed` → `#task-board`
   - `anomaly.reported` → `#alerts`
   - `agent.online/offline` → `#bot-status` + `#config`
   - `audit_log` entries → `#audit-log`
-- **Heartbeat** — Periodic health monitoring:
-  - Every 5 min: check Pixel Office + DB health, auto-restart if needed
+- **Heartbeat** (`core/`) — Periodic health monitoring via ChatAdapter:
+  - Every 1 min: check Pixel Office + DB health, auto-restart if needed, cleanup stale tasks
   - Every 30 min: system status embed to `#bot-status`
   - Daily at 08:30 (user timezone): generate daily brief to `#daily-brief`
 
@@ -171,13 +172,18 @@ Features:
 - **Brainstorm Panel** — toggle with `B` key, shows brainstorming sessions grouped by round
 - **Speech bubbles** — agents show status change messages ("Working...", "Done!", "Online")
 
-## Remote Access (ngrok)
+## Remote Access
 
-Enable during setup to access Pixel Office from anywhere:
+Four modes available during setup:
 
-- **ngrok tunnel** with Basic Auth — browser prompts for username/password
-- Leader auto-publishes the public URL to Discord `#bot-status` on startup
-- Configure ngrok auth token at [dashboard.ngrok.com](https://dashboard.ngrok.com/get-started/your-authtoken)
+| Mode | Description |
+|------|-------------|
+| **Internal ngrok** | AI Office auto-starts ngrok tunnel with Basic Auth |
+| **External ngrok** | You manage ngrok yourself; AI Office auto-detects the tunnel URL |
+| **Custom URL** | Your own domain / Cloudflare Tunnel / reverse proxy |
+| **Disabled** | Localhost only (`http://localhost:3847`) |
+
+Leader auto-publishes the public URL to Discord `#bot-status` on startup.
 
 ## Brainstorming Mode
 
@@ -232,9 +238,10 @@ docker compose run setup          # Configuration wizard
 |----------|-------------|
 | [Getting Started](docs/getting-started.md) | Installation, setup, first run |
 | [Architecture](docs/architecture.md) | System design, data flow, agent lifecycle |
+| [Role Template Schema](docs/role-template-schema.md) | Role YAML structure, behavior system, security model |
+| [Role Catalog](docs/role-catalog.md) | All 77 role templates |
 | [Security Model](docs/security-model.md) | Authentication, authorization, audit |
 | [API Reference](docs/api-reference.md) | 34 MCP tools + CLI commands |
-| [Role Catalog](docs/role-catalog.md) | All 71 role templates |
 
 ## Configuration
 

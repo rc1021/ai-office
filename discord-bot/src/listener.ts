@@ -1,15 +1,10 @@
 /**
  * listener.ts — Standalone Discord Bot Daemon
  *
- * This is a SEPARATE entry point from index.ts (the MCP server).
- * It runs as an independent long-lived process that:
- *  1. Connects to Discord and stays online
- *  2. Listens for user messages in #general
- *  3. Spawns `claude -p` for each message
- *  4. Posts Claude's response back to Discord
+ * Thin shell: connects to Discord, delegates core logic to @ai-office/core.
+ * This is the entry point for the Discord listener daemon.
  *
  * Start with: node discord-bot/dist/listener.js
- * (from the project root directory)
  */
 
 import dotenv from "dotenv";
@@ -21,6 +16,7 @@ import { fileURLToPath } from "node:url";
 const __listener_file = fileURLToPath(import.meta.url);
 const __discord_bot_dir = path.resolve(path.dirname(__listener_file), "..");
 dotenv.config({ path: path.join(__discord_bot_dir, ".env") });
+
 import { spawn } from "node:child_process";
 import {
   Client,
@@ -32,43 +28,32 @@ import {
 } from "discord.js";
 import { registerApprovalInteractionHandler } from "./approval-manager.js";
 import { setDiscordClient } from "./discord-client.js";
-import { loadOfficeConfig } from "./config-loader.js";
-import { EventBridge } from "./event-bridge.js";
-import { HeartbeatScheduler } from "./heartbeat.js";
-import { sendEmbed } from "./message-manager.js";
-import { COLORS } from "./embed-helpers.js";
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const GENERAL_CHANNEL = "general";
-// Onboarded flag is per-project (in .ai-office/ under project root), not global
-// Resolved after PROJECT_DIR is computed (see below)
-let ONBOARDED_FLAG = "";
-const STARTUP_CHECKLIST_PROMPT =
-  "You are the AI Office Leader. This is the first launch. " +
-  "Follow your Startup Checklist in agents/leader/CLAUDE.md: " +
-  "initialize the orchestrator, report status, setup Discord server channels, " +
-  "check for interrupted tasks, post bot-status update, " +
-  "and run the Welcome Flow to greet the user in #general.";
+import { DiscordChatAdapter } from "./discord-adapter.js";
+import {
+  loadOfficeConfig,
+  runClaude,
+  EventBridge,
+  HeartbeatScheduler,
+  COLORS,
+} from "@ai-office/core";
+import type { ClaudeRunnerConfig } from "@ai-office/core";
 
 // ── Resolve project root (two levels up from dist/listener.js) ────────────────
 
 const __filename = fileURLToPath(import.meta.url);
-// __filename is discord-bot/src/listener.ts at compile time; at runtime it's
-// discord-bot/dist/listener.js — two levels up from dist/ gives the repo root.
 const DIST_DIR = path.dirname(__filename);
 const DISCORD_BOT_DIR = path.resolve(DIST_DIR, "..");   // discord-bot/
 const PROJECT_DIR = path.resolve(DISCORD_BOT_DIR, ".."); // repo root
 
 const MCP_CONFIG = path.join(PROJECT_DIR, ".mcp.json");
-ONBOARDED_FLAG = path.join(PROJECT_DIR, ".ai-office", "state", ".onboarded");
+const ONBOARDED_FLAG = path.join(PROJECT_DIR, ".ai-office", "state", ".onboarded");
+const GENERAL_CHANNEL = "general";
 
 console.log("[Listener] Project dir:", PROJECT_DIR);
 console.log("[Listener] MCP config:", MCP_CONFIG);
 
-// ── Spawn claude -p ───────────────────────────────────────────────────────────
+// ── Allowed tools for Leader ─────────────────────────────────────────────────
 
-// Tools the Leader needs access to (pre-approved for non-interactive mode)
 const ALLOWED_TOOLS = [
   "Agent",
   "Bash",
@@ -108,58 +93,18 @@ const ALLOWED_TOOLS = [
   "mcp__ai-office-discord__list_channels",
 ];
 
-function runClaude(prompt: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const args: string[] = [
-      "-p", prompt,
-      "--allowedTools", ...ALLOWED_TOOLS,
-    ];
+const CLAUDE_CONFIG: ClaudeRunnerConfig = {
+  projectDir: PROJECT_DIR,
+  mcpConfigPath: MCP_CONFIG,
+  allowedTools: ALLOWED_TOOLS,
+};
 
-    // Only pass --mcp-config if the file actually exists (avoids confusing errors)
-    if (fs.existsSync(MCP_CONFIG)) {
-      args.push("--mcp-config", MCP_CONFIG);
-    } else {
-      console.warn("[Listener] .mcp.json not found at", MCP_CONFIG, "— running without MCP tools");
-    }
-
-    console.log("[Listener] Spawning claude with prompt:", prompt.substring(0, 80));
-
-    const proc = spawn("claude", args, {
-      cwd: PROJECT_DIR,
-      env: { ...process.env },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let output = "";
-    let stderrOutput = "";
-
-    proc.stdout.on("data", (data: Buffer) => {
-      output += data.toString();
-    });
-
-    proc.stderr.on("data", (data: Buffer) => {
-      const chunk = data.toString();
-      stderrOutput += chunk;
-      console.error("[Claude]", chunk.trimEnd());
-    });
-
-    proc.on("error", (err) => {
-      reject(new Error(`Failed to spawn claude: ${err.message}. Is Claude Code installed?`));
-    });
-
-    proc.on("close", (code) => {
-      if (code === 0) {
-        resolve(output.trim());
-      } else {
-        reject(
-          new Error(
-            `claude exited with code ${code}. stderr: ${stderrOutput.slice(-500)}`
-          )
-        );
-      }
-    });
-  });
-}
+const STARTUP_CHECKLIST_PROMPT =
+  "You are the AI Office Leader. This is the first launch. " +
+  "Follow your Startup Checklist in agents/leader/CLAUDE.md: " +
+  "initialize the orchestrator, report status, setup Discord server channels, " +
+  "check for interrupted tasks, post bot-status update, " +
+  "and run the Welcome Flow to greet the user in #general.";
 
 // ── First-run check ───────────────────────────────────────────────────────────
 
@@ -170,28 +115,18 @@ async function checkFirstRun(): Promise<void> {
   }
 
   console.log("");
-  console.log("[Listener] 🚀 First run detected!");
-  console.log("[Listener] Setting up your AI Office — this takes 1-2 minutes...");
-  console.log("[Listener]   • Creating Discord channels");
-  console.log("[Listener]   • Registering Leader agent");
-  console.log("[Listener]   • Sending welcome message to #general");
+  console.log("[Listener] First run detected! Setting up AI Office...");
   console.log("");
 
   try {
-    const response = await runClaude(STARTUP_CHECKLIST_PROMPT);
-    console.log("");
-    console.log("[Listener] ✅ Setup complete! Check Discord #general for the welcome message.");
-    console.log("[Listener] You can now send messages in Discord — the bot will respond.");
-    console.log("");
+    const response = await runClaude(STARTUP_CHECKLIST_PROMPT, CLAUDE_CONFIG);
+    console.log("[Listener] Setup complete! Check Discord #general.");
     if (response) {
       console.log("[Listener] Leader output:", response.substring(0, 300));
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("");
-    console.error("[Listener] ❌ First-run setup failed:", msg);
-    console.error("[Listener] To retry: delete .ai-office/state/.onboarded (in project root) and restart the listener.");
-    console.error("");
+    console.error("[Listener] First-run setup failed:", msg);
   }
 }
 
@@ -202,18 +137,15 @@ let processing = false;
 const processedMessageIds = new Set<string>();
 
 async function enqueueMessage(message: Message): Promise<void> {
-  // Safety checks (fast, before queuing)
   if (message.author.bot) return;
   if (!(message.channel instanceof TextChannel)) return;
   if (message.channel.name !== GENERAL_CHANNEL) return;
   if (!message.content.trim()) return;
 
-  // Dedup: Discord may fire MessageCreate multiple times for the same message
-  // (reconnect, partial message hydration, etc.)
+  // Dedup: Discord may fire MessageCreate multiple times
   if (processedMessageIds.has(message.id)) return;
   processedMessageIds.add(message.id);
 
-  // Keep the set from growing forever (retain last 200)
   if (processedMessageIds.size > 200) {
     const first = processedMessageIds.values().next().value;
     if (first) processedMessageIds.delete(first);
@@ -246,26 +178,16 @@ async function handleMessage(message: Message): Promise<void> {
   const userContent = message.content.trim();
   const channel = message.channel as TextChannel;
 
-  console.log(
-    `[Listener] Processing message from ${message.author.username}: ${userContent.substring(0, 80)}`
-  );
+  console.log(`[Listener] Processing message from ${message.author.username}: ${userContent.substring(0, 80)}`);
 
   // 1. Acknowledge with ⏳
-  try {
-    await message.react("⏳");
-  } catch (err) {
-    console.warn("[Listener] Could not add ⏳ reaction:", err);
-  }
+  try { await message.react("⏳"); } catch { /* non-fatal */ }
 
-  // 2. Build prompt — include author context so Claude knows who is speaking
-  //    Sanitize to prevent trivial injection: wrap in a structured envelope.
+  // 2. Build prompt + run claude -p
   const prompt = buildPrompt(message.author.username, userContent);
 
-  // 3. Run claude -p
-  //    Claude sends responses directly via MCP send_message tool during execution.
-  //    We do NOT post stdout to Discord — that caused duplicate/out-of-order messages.
   try {
-    const output = await runClaude(prompt);
+    const output = await runClaude(prompt, CLAUDE_CONFIG);
     if (output) {
       console.log("[Listener] Claude output (not posted to Discord):", output.substring(0, 200));
     }
@@ -273,7 +195,6 @@ async function handleMessage(message: Message): Promise<void> {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error("[Listener] claude failed:", errMsg);
 
-    // Remove ⏳ and post error
     await removeReaction(message, "⏳");
     await channel
       .send(`❌ Error processing your request: ${errMsg.substring(0, 1000)}`)
@@ -281,62 +202,14 @@ async function handleMessage(message: Message): Promise<void> {
     return;
   }
 
-  // 4. Replace ⏳ with ✅ (add ✅ first so there's no gap)
-  try {
-    await message.react("✅");
-  } catch (err) {
-    console.warn("[Listener] Could not add ✅ reaction:", err);
-  }
+  // 3. Replace ⏳ with ✅
+  try { await message.react("✅"); } catch { /* non-fatal */ }
   await removeReaction(message, "⏳");
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/**
- * Post the ngrok public URL to #bot-status on every startup.
- * Reads from PROJECT_DIR/.ai-office/state/ngrok-url.txt (written by pixel-office).
- */
-async function postNgrokUrl(readyClient: import("discord.js").Client<true>): Promise<void> {
-  const ngrokFile = path.join(PROJECT_DIR, ".ai-office", "state", "ngrok-url.txt");
-
-  let url = "";
-  if (fs.existsSync(ngrokFile)) {
-    url = fs.readFileSync(ngrokFile, "utf-8").trim();
-  }
-
-  if (!url) {
-    console.log("[Listener] No ngrok URL found — skipping #bot-status post.");
-    return;
-  }
-
-  const guildId = process.env.DISCORD_GUILD_ID;
-  if (!guildId) return;
-
-  try {
-    const guild = await readyClient.guilds.fetch(guildId);
-    const channels = await guild.channels.fetch();
-    const botStatus = channels.find(
-      (ch) => ch !== null && "name" in ch && ch.name === "bot-status"
-    );
-    if (botStatus && botStatus.isTextBased()) {
-      await (botStatus as TextChannel).send(
-        `🌐 **Pixel Office** is online: ${url}`
-      );
-      console.log(`[Listener] Posted ngrok URL to #bot-status: ${url}`);
-    } else {
-      console.log("[Listener] #bot-status channel not found — skipping ngrok URL post.");
-    }
-  } catch (err) {
-    console.warn("[Listener] Failed to post ngrok URL:", err);
-  }
-}
-
-/**
- * Wrap the user message in a structured envelope to reduce injection risk.
- * The Leader's CLAUDE.md instructs it to sanitize input before delegation.
- */
 function buildPrompt(username: string, content: string): string {
-  // Use a delimited structure so it is harder to escape the envelope context.
   return (
     "You are the AI Office Leader. A user has sent you a message in Discord #general.\n" +
     "\n" +
@@ -373,42 +246,42 @@ function buildPrompt(username: string, content: string): string {
   );
 }
 
-/**
- * Remove a specific reaction emoji from a message (best-effort).
- */
 async function removeReaction(message: Message, emoji: string): Promise<void> {
   try {
-    // Call the Discord REST API directly to remove the bot's own reaction.
-    // Using the REST route avoids stale reaction cache issues that caused flickering.
     const encodedEmoji = encodeURIComponent(emoji);
     await message.client.rest.delete(
       `/channels/${message.channelId}/messages/${message.id}/reactions/${encodedEmoji}/@me`
     );
-  } catch {
-    // Non-fatal — permissions may not allow reaction removal
-  }
+  } catch { /* non-fatal */ }
 }
 
-/**
- * Split a long string into <=maxLen chunks at newline boundaries when possible.
- */
-function splitMessage(text: string, maxLen: number): string[] {
-  if (text.length <= maxLen) return [text];
-
-  const chunks: string[] = [];
-  let remaining = text;
-
-  while (remaining.length > maxLen) {
-    // Try to split at last newline within limit
-    let splitAt = remaining.lastIndexOf("\n", maxLen);
-    if (splitAt <= 0) splitAt = maxLen;
-
-    chunks.push(remaining.slice(0, splitAt));
-    remaining = remaining.slice(splitAt).trimStart();
+async function postNgrokUrl(readyClient: import("discord.js").Client<true>): Promise<void> {
+  const ngrokFile = path.join(PROJECT_DIR, ".ai-office", "state", "ngrok-url.txt");
+  let url = "";
+  if (fs.existsSync(ngrokFile)) {
+    url = fs.readFileSync(ngrokFile, "utf-8").trim();
+  }
+  if (!url) {
+    console.log("[Listener] No ngrok URL found — skipping #bot-status post.");
+    return;
   }
 
-  if (remaining.length > 0) chunks.push(remaining);
-  return chunks;
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (!guildId) return;
+
+  try {
+    const guild = await readyClient.guilds.fetch(guildId);
+    const channels = await guild.channels.fetch();
+    const botStatus = channels.find(
+      (ch) => ch !== null && "name" in ch && ch.name === "bot-status"
+    );
+    if (botStatus && botStatus.isTextBased()) {
+      await (botStatus as TextChannel).send(`🌐 **Pixel Office** is online: ${url}`);
+      console.log(`[Listener] Posted ngrok URL to #bot-status: ${url}`);
+    }
+  } catch (err) {
+    console.warn("[Listener] Failed to post ngrok URL:", err);
+  }
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -416,35 +289,28 @@ function splitMessage(text: string, maxLen: number): string[] {
 async function main(): Promise<void> {
   const token = process.env.DISCORD_BOT_TOKEN;
   if (!token) {
-    console.error(
-      "[Listener] DISCORD_BOT_TOKEN is not set. " +
-        "Set it in discord-bot/.env or as an environment variable."
-    );
+    console.error("[Listener] DISCORD_BOT_TOKEN is not set.");
     process.exit(1);
   }
-
   if (!process.env.DISCORD_GUILD_ID) {
-    console.error("[Listener] DISCORD_GUILD_ID is not set. Exiting.");
+    console.error("[Listener] DISCORD_GUILD_ID is not set.");
     process.exit(1);
   }
 
   console.log("[Listener] Starting AI Office Discord Listener...");
 
-  // Start Pixel Office server in background (for ngrok + visualization)
+  // Start Pixel Office server in background
   const pixelServerPath = path.join(PROJECT_DIR, "pixel-office", "server", "index.ts");
   const pixelPidFile = path.join(PROJECT_DIR, "pixel-office", "pixel.pid");
   if (fs.existsSync(pixelServerPath)) {
-    // Check if already running (via PID file)
     let alreadyRunning = false;
     if (fs.existsSync(pixelPidFile)) {
       try {
         const oldPid = parseInt(fs.readFileSync(pixelPidFile, "utf-8").trim(), 10);
-        process.kill(oldPid, 0); // Test if process exists
+        process.kill(oldPid, 0);
         alreadyRunning = true;
         console.log(`[Listener] Pixel Office already running (PID ${oldPid})`);
-      } catch {
-        // PID file stale — process not running
-      }
+      } catch { /* PID stale */ }
     }
 
     if (!alreadyRunning) {
@@ -461,14 +327,10 @@ async function main(): Promise<void> {
         if (line) console.log("[PixelOffice]", line);
       });
       pixelProc.unref();
-
-      // Save PID for cleanup
       if (pixelProc.pid) {
         fs.writeFileSync(pixelPidFile, String(pixelProc.pid), "utf-8");
         console.log(`[Listener] Pixel Office started (PID ${pixelProc.pid})`);
       }
-
-      // Give it a moment to start + open ngrok tunnel
       await new Promise((r) => setTimeout(r, 4000));
     }
   }
@@ -483,37 +345,32 @@ async function main(): Promise<void> {
     partials: [Partials.Channel, Partials.Message, Partials.Reaction],
   });
 
-  // Set the listener's client as the shared singleton so approval-manager
-  // can use findTextChannel to update approval messages after button clicks.
   setDiscordClient(client);
-
-  // Register approval button handler on the listener's client (persistent process)
   registerApprovalInteractionHandler(client);
 
-  // Subsystem instances (for graceful shutdown)
+  // Subsystem instances
   let eventBridge: EventBridge | null = null;
   let heartbeat: HeartbeatScheduler | null = null;
 
   client.once(Events.ClientReady, async (readyClient) => {
     console.log(`[Listener] Bot ready! Logged in as ${readyClient.user.tag}`);
-    console.log(`[Listener] Serving ${readyClient.guilds.cache.size} guild(s)`);
     console.log(`[Listener] Listening for messages in #${GENERAL_CHANNEL}`);
 
-    // First-run: Leader will create channels + post welcome via claude -p
     await checkFirstRun();
-
-    // Post ngrok URL to #bot-status on every startup (not just first run)
     await postNgrokUrl(readyClient);
 
-    // Start Event Bridge + Heartbeat subsystems
+    // Start core subsystems with Discord adapter
     try {
       const config = loadOfficeConfig(PROJECT_DIR);
+      const adapter = new DiscordChatAdapter();
 
-      eventBridge = new EventBridge(config.statePath);
+      eventBridge = new EventBridge(config.statePath, adapter);
       eventBridge.start();
-      console.log("[Listener] EventBridge started — polling every 3s");
+      console.log("[Listener] EventBridge started");
 
-      heartbeat = new HeartbeatScheduler(config.timezone, config.statePath);
+      heartbeat = new HeartbeatScheduler(
+        config.timezone, config.statePath, PROJECT_DIR, CLAUDE_CONFIG, adapter
+      );
       heartbeat.start();
       console.log("[Listener] HeartbeatScheduler started");
     } catch (err) {
@@ -535,30 +392,24 @@ async function main(): Promise<void> {
     console.warn("[Listener] Discord warning:", info);
   });
 
-  // ── Graceful shutdown ──────────────────────────────────────────────────────
-
+  // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {
-    console.log(`\n[Listener] Received ${signal}. Shutting down gracefully...`);
+    console.log(`\n[Listener] Received ${signal}. Shutting down...`);
     if (eventBridge) eventBridge.stop();
     if (heartbeat) heartbeat.stop();
     client.destroy();
-    console.log("[Listener] Discord client destroyed. Goodbye.");
+    console.log("[Listener] Goodbye.");
     process.exit(0);
   };
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
-
   process.on("uncaughtException", (err) => {
     console.error("[Listener] Uncaught exception:", err);
-    // Keep running — don't let a single bad message kill the daemon
   });
-
   process.on("unhandledRejection", (reason) => {
     console.error("[Listener] Unhandled promise rejection:", reason);
   });
-
-  // ── Login ──────────────────────────────────────────────────────────────────
 
   try {
     await client.login(token);

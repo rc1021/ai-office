@@ -38,14 +38,9 @@ function getNextInstance(roleId: string): number {
 
 // ─── Worker Workspace ────────────────────────────────────────────────────────
 
-function getWorkersDir(): string {
-  const dir = path.join(getStateDir(), "workers");
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
-}
-
-function createWorkerWorkspace(agentId: string): string {
-  const dir = path.join(getWorkersDir(), agentId);
+function createWorkerWorkspace(agentId: string, department: string): string {
+  const root = getProjectRootPath();
+  const dir = path.join(root, ".ai-office", "departments", department, "workspace", agentId);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -162,11 +157,15 @@ export function prepareWorker(roleId: string): WorkerRecord {
   const instance = getNextInstance(roleId);
   const agentId = `${roleId}-${instance}`;
 
+  // Load role template to get department
+  const role = loadRoleTemplate(roleId);
+  const department = role.department;
+
   // Issue identity token
   const token = issueToken(roleId, instance);
 
-  // Create workspace directory
-  const workspaceDir = createWorkerWorkspace(agentId);
+  // Create workspace directory under department
+  const workspaceDir = createWorkerWorkspace(agentId, department);
 
   // Assemble CLAUDE.md
   const claudeMd = assembleWorkerClaude(roleId, instance, config, token);

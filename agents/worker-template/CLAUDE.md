@@ -91,6 +91,17 @@ When your task includes a `perspective` field, you are in a brainstorm session:
 - Keep responses focused and concise (under 500 words per event)
 - Do not attempt to "win" — the goal is to surface diverse viewpoints for the Leader to synthesize
 
+### 8. Workspace Isolation
+
+Your working directory and file access boundaries are defined at spawn time.
+- **Your department directory**: the absolute path injected above in "Workspace Isolation" section
+- **Read allowed**: your department dir, `shared/public/`, `shared/inbox/{{AGENT_ID}}/`, `shared/cross-dept/` (only traces listed in manifest where you have access)
+- **Write allowed**: your department dir, your outbox (`departments/{{DEPARTMENT}}/outbox/`)
+- **FORBIDDEN**: other department directories (e.g., if you are engineering, never access `departments/finance/`)
+- Use **absolute paths** for all file operations to avoid CWD ambiguity
+- Place outputs intended for other departments in your outbox — the Leader will route them
+- Check `shared/inbox/{{AGENT_ID}}/` for input files from the Leader before starting work
+
 ## Structured Response Format
 
 When returning task results to the Leader:

@@ -133,6 +133,41 @@ When two agents produce contradictory outputs:
 4. If both are plausible, present both to the user with your analysis
 5. Never silently pick one — transparency is mandatory
 
+## Workspace & Data Sharing
+
+### Directory Structure
+Each department has an isolated workspace under `.ai-office/departments/{dept}/`:
+- `workspace/` — working files (per-worker subdirectories)
+- `artifacts/` — department outputs
+- `memory/` — department persistent memory
+- `outbox/` — files to be shared with other departments (you review before routing)
+
+Shared areas under `.ai-office/shared/`:
+- `inbox/{agent-id}/` — you place input files here for specific workers
+- `public/briefs/` — task briefs visible to all agents
+- `public/announcements/` — office-wide announcements
+- `cross-dept/{trace-id}/` — cross-department collaboration spaces
+
+### Data Sharing Protocol
+1. **Assigning work**: Place input files in `shared/inbox/{agent-id}/` before spawning the worker
+2. **Collecting results**: After worker completes, check their department's `outbox/` for deliverables
+3. **Publishing**: Move approved outputs from outbox to `shared/public/` or the requesting worker's inbox
+4. **Cross-department collaboration**: Create `shared/cross-dept/{trace-id}/manifest.yaml` defining:
+   ```yaml
+   trace_id: trace-{uuid}
+   title: "collaboration title"
+   created_by: leader
+   participants:
+     - agent: {agent-id}
+       access: read | write | read-write
+   ```
+5. **Never** let workers access other departments directly — all cross-department data flows through you or a manifest
+
+### When Spawning Workers
+Include the department workspace path in the worker prompt:
+- Compute: `{PROJECT_DIR}/.ai-office/departments/{department}/`
+- Worker must use this as their base directory for all file operations
+
 ## Brainstorming Protocol (Two-Round)
 
 When the user requests brainstorming or multi-perspective analysis:

@@ -99,10 +99,33 @@ export function writeMcpJson(projectRoot: string, config: SetupConfig): void {
  * Create the .ai-office directory structure.
  */
 export function createWorkspaceDirs(projectRoot: string): void {
-  const dirs = ["state", "artifacts", "events", "logs", "memory", "questions", "answers", "brainstorm"];
   const base = path.join(projectRoot, ".ai-office");
 
-  for (const dir of dirs) {
+  // Top-level dirs (kept from original)
+  const topLevelDirs = ["state", "events", "logs", "questions", "answers", "brainstorm"];
+
+  // Shared workspace dirs
+  const sharedDirs = [
+    "shared/inbox",
+    "shared/public/briefs",
+    "shared/public/announcements",
+    "shared/cross-dept",
+  ];
+
+  // Department list matches the `department` enum in role-template.schema.json
+  const departments = [
+    "management", "engineering", "finance", "marketing",
+    "hr", "legal", "research", "design",
+    "operations", "sales", "support", "audit",
+  ];
+  const deptSubdirs = ["workspace", "artifacts", "memory", "outbox"];
+  const deptDirs = departments.flatMap((dept) =>
+    deptSubdirs.map((sub) => `departments/${dept}/${sub}`)
+  );
+
+  const allDirs = [...topLevelDirs, ...sharedDirs, ...deptDirs];
+
+  for (const dir of allDirs) {
     fs.mkdirSync(path.join(base, dir), { recursive: true });
   }
 

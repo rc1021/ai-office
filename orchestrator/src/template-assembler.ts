@@ -69,6 +69,27 @@ export function assembleWorkerClaude(
     assembled = assembled.replaceAll(placeholder, value);
   }
 
+  // Compute department-based workspace paths
+  const deptDir = path.join(root, ".ai-office", "departments", role.department);
+  const sharedDir = path.join(root, ".ai-office", "shared");
+
+  const workspaceSection = `
+## Workspace Isolation
+
+Your working directory: ${deptDir}
+- All file operations MUST use absolute paths under this directory
+- You may read: your department dir + ${sharedDir}/public/ + ${sharedDir}/inbox/${agentId}/ + ${sharedDir}/cross-dept/ (if manifest allows)
+- You may write: your department dir + ${sharedDir}/inbox/ (for outbox to Leader)
+- FORBIDDEN: accessing other department directories
+
+Department paths:
+- Your workspace: ${deptDir}/workspace/${agentId}/
+- Department artifacts: ${deptDir}/artifacts/
+- Department memory: ${deptDir}/memory/
+- Your outbox: ${deptDir}/outbox/
+- Your inbox: ${sharedDir}/inbox/${agentId}/
+`;
+
   // Append office context and identity
   const officeSection = `
 ## Office Context
@@ -88,6 +109,7 @@ ${identityToken}
 Include this token as \`identity_token\` in every Coordination MCP tool call for authentication.
 `;
 
+  assembled += workspaceSection;
   assembled += officeSection;
 
   return assembled;

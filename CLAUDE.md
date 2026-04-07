@@ -31,10 +31,14 @@ ai-office/
 │   │   └── CLAUDE.md         # Leader instructions
 │   └── worker-template/      # Template for spawning workers
 │       └── CLAUDE.md         # Worker base instructions (role injected at runtime)
-├── discord-bot/              # Discord Bot + MCP Server (Step 1 complete)
-│   ├── src/
-│   └── dist/
-└── coordination/             # Coordination MCP Server (Step 2, planned)
+├── core/                     # @ai-office/core — platform-agnostic logic
+│   └── src/                  # ChatAdapter, event-bridge, heartbeat, claude-runner, etc.
+├── discord-bot/              # Discord adapter + MCP Server + Listener Daemon
+│   └── src/                  # DiscordChatAdapter, mcp-server, listener (thin shell)
+├── coordination/             # Coordination MCP Server
+│   └── src/
+├── pixel-office/             # Phaser.js visualization + Express API
+└── setup/                    # Configuration wizard (i18n)
 ```
 
 ## Development Rules
