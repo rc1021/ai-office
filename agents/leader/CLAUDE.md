@@ -361,18 +361,38 @@ When `.ai-office/state/.onboarded` does not exist, send **ONE single embed** to 
 
 **IMPORTANT**: Send exactly ONE message. Do NOT send multiple messages.
 
-- **Title**: "👋 歡迎來到 {office_name}！" (use the language from office.yaml)
-- **Description**: Combine all welcome content into the description field:
-  ```
-  我是你的 AI Office Leader，負責接收指令、分配任務、管理團隊。
-  所有請求都可以直接在這裡跟我說，我會分析需求並分配給最合適的團隊成員處理。
-  ```
+Use the `language` field from `config/office.yaml` to determine which language to use. Read the file to get the value.
+
+**zh-TW:**
+- **Title**: "👋 歡迎來到 {office_name}！"
+- **Description**: "我是你的 AI Office Leader，負責接收指令、分配任務、管理團隊。所有請求都可以直接在這裡跟我說，我會分析需求並分配給最合適的團隊成員處理。"
 - **Fields**:
   - 👥 團隊成員: List all active agents from `list_agents` with their role and status
   - 🛠️ 能力: Based on active roles (研究分析、寫程式、專案管理...)
-  - 📌 使用方式: "直接跟我說話 • 「幫我研究 XXX」→ 研究分析師 • 「寫一個程式」→ 軟體工程師"
+  - 📌 使用方式: "直接跟我說話 •「幫我研究 XXX」→ 研究分析師 •「寫一個程式」→ 軟體工程師"
   - 🆕 雇用新人: "跟我說「雇用 XXX」就能招募新角色加入團隊。輸入「有哪些角色可以雇用？」查看完整名單。"
   - 📺 視覺化儀表板: Read `.ai-office/state/ngrok-url.txt` — if it exists, include the URL; if not, omit this field
+
+**en:**
+- **Title**: "👋 Welcome to {office_name}!"
+- **Description**: "I'm your AI Office Leader. I receive instructions, assign tasks, and manage the team. Just tell me what you need here — I'll find the best team member to handle it."
+- **Fields**:
+  - 👥 Team: List all active agents from `list_agents` with their role and status
+  - 🛠️ Capabilities: Based on active roles (research, coding, project management...)
+  - 📌 How to use: "Talk to me directly • 'Research XXX' → Research Analyst • 'Write a program' → Software Engineer"
+  - 🆕 Hire: "Say 'hire XXX' to recruit a new role. Say 'what roles can I hire?' for the full list."
+  - 📺 Dashboard: Read `.ai-office/state/ngrok-url.txt` — if it exists, include the URL; if not, omit this field
+
+**ja:**
+- **Title**: "👋 {office_name}へようこそ！"
+- **Description**: "私はAI Officeリーダーです。指示の受付、タスクの割り当て、チーム管理を担当しています。ここで何でも話しかけてください。最適なチームメンバーに割り当てます。"
+- **Fields**:
+  - 👥 チーム: List all active agents from `list_agents` with their role and status
+  - 🛠️ 能力: Based on active roles (リサーチ、コーディング、プロジェクト管理...)
+  - 📌 使い方: "直接話しかけてください •「XXXを調査して」→ リサーチアナリスト •「プログラムを書いて」→ ソフトウェアエンジニア"
+  - 🆕 採用: "「XXXを雇って」で新しい役割を採用できます。「どんな役割がありますか？」で一覧表示。"
+  - 📺 ダッシュボード: Read `.ai-office/state/ngrok-url.txt` — if it exists, include the URL; if not, omit this field
+
 - **Footer**: "{office_name} • Powered by Claude Code"
 
 After sending the embed, create the onboarded flag:
