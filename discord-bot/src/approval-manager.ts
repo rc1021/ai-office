@@ -16,6 +16,15 @@ import { findTextChannel } from "./channel-manager.js";
 import { ApprovalRequest, ApprovalStatus, RiskLevel } from "./types.js";
 import { getDiscordClient } from "./discord-client.js";
 
+// ── Approval-resolved callback ────────────────────────────────────────────────
+
+type ApprovalResolvedCallback = (approval: ApprovalRequest) => void;
+let onApprovalResolved: ApprovalResolvedCallback | null = null;
+
+export function setApprovalResolvedCallback(cb: ApprovalResolvedCallback): void {
+  onApprovalResolved = cb;
+}
+
 // ── File-based approval persistence ─────────────────────────────────────────
 // Approvals are stored on disk so both the MCP server (transient) and the
 // listener daemon (persistent) can access them.
@@ -294,6 +303,15 @@ export function registerApprovalInteractionHandler(externalClient?: Client): voi
     approval.resolvedBy = interaction.user.username;
     approvals.set(approvalId, approval);
     saveApprovals(approvals);
+
+    // Notify listener so it can trigger a Leader session to act on the decision
+    if (onApprovalResolved) {
+      try {
+        onApprovalResolved(approval);
+      } catch (err) {
+        console.error("[ApprovalManager] Callback error:", err);
+      }
+    }
 
     const emoji = newStatus === "APPROVED" ? "✅" : "❌";
     await interaction.editReply({

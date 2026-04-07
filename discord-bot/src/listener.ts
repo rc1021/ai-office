@@ -26,7 +26,8 @@ import {
   TextChannel,
   Message,
 } from "discord.js";
-import { registerApprovalInteractionHandler } from "./approval-manager.js";
+import { registerApprovalInteractionHandler, setApprovalResolvedCallback } from "./approval-manager.js";
+import type { ApprovalRequest } from "./types.js";
 import { setDiscordClient } from "./discord-client.js";
 import { DiscordChatAdapter } from "./discord-adapter.js";
 import {
@@ -130,9 +131,15 @@ async function checkFirstRun(): Promise<void> {
   }
 }
 
-// ── Message Queue — process one message at a time ────────────────────────────
+// ── Job Queue — process one job at a time (messages + approval triggers) ─────
 
-const messageQueue: Message[] = [];
+interface QueueJob {
+  type: "message" | "approval";
+  message?: Message;
+  approval?: ApprovalRequest;
+}
+
+const jobQueue: QueueJob[] = [];
 let processing = false;
 const processedMessageIds = new Set<string>();
 
@@ -151,22 +158,37 @@ async function enqueueMessage(message: Message): Promise<void> {
     if (first) processedMessageIds.delete(first);
   }
 
-  messageQueue.push(message);
-  console.log(`[Listener] Queued message from ${message.author.username} (queue size: ${messageQueue.length})`);
+  jobQueue.push({ type: "message", message });
+  console.log(`[Listener] Queued message from ${message.author.username} (queue size: ${jobQueue.length})`);
 
   if (!processing) {
     await drainQueue();
   }
 }
 
+function enqueueApprovalTrigger(approval: ApprovalRequest): void {
+  jobQueue.push({ type: "approval", approval });
+  console.log(`[Listener] Queued approval trigger for ${approval.id} (${approval.status}) (queue size: ${jobQueue.length})`);
+
+  if (!processing) {
+    drainQueue().catch((err) => {
+      console.error("[Listener] Unhandled error in drainQueue (approval):", err);
+    });
+  }
+}
+
 async function drainQueue(): Promise<void> {
   processing = true;
-  while (messageQueue.length > 0) {
-    const msg = messageQueue.shift()!;
+  while (jobQueue.length > 0) {
+    const job = jobQueue.shift()!;
     try {
-      await handleMessage(msg);
+      if (job.type === "message" && job.message) {
+        await handleMessage(job.message);
+      } else if (job.type === "approval" && job.approval) {
+        await handleApproval(job.approval);
+      }
     } catch (err) {
-      console.error("[Listener] Unhandled error in handleMessage:", err);
+      console.error("[Listener] Unhandled error in drainQueue:", err);
     }
   }
   processing = false;
@@ -269,6 +291,56 @@ async function handleMessage(message: Message): Promise<void> {
   // 3. Replace ⏳ with ✅
   try { await message.react("✅"); } catch { /* non-fatal */ }
   await removeReaction(message, "⏳");
+}
+
+// ── Handle approval resolution ────────────────────────────────────────────────
+
+async function handleApproval(approval: ApprovalRequest): Promise<void> {
+  console.log(`[Listener] Processing approval trigger: ${approval.id} (${approval.status})`);
+
+  const prompt = buildApprovalPrompt(approval);
+
+  try {
+    const output = await runClaude(prompt, CLAUDE_CONFIG);
+    if (output) {
+      console.log("[Listener] Claude approval output (not posted to Discord):", output.substring(0, 200));
+    }
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error("[Listener] claude failed for approval trigger:", errMsg);
+  }
+}
+
+function buildApprovalPrompt(approval: ApprovalRequest): string {
+  const resolvedBy = approval.resolvedBy ?? "unknown";
+  const resolvedAt = approval.resolvedAt ? approval.resolvedAt.toISOString() : "unknown";
+
+  return (
+    "You are the AI Office Leader. An approval has been resolved in Discord.\n" +
+    "\n" +
+    `Approval ID: ${approval.id}\n` +
+    `Status: ${approval.status}\n` +
+    `Action: ${approval.action}\n` +
+    `Description: ${approval.description}\n` +
+    `Risk Level: ${approval.riskLevel}\n` +
+    `Resolved By: ${resolvedBy}\n` +
+    `Resolved At: ${resolvedAt}\n` +
+    "\n" +
+    "If APPROVED: execute the action described above.\n" +
+    "If REJECTED: acknowledge the rejection and inform the user.\n" +
+    "\n" +
+    "Process this according to your role instructions (agents/leader/CLAUDE.md).\n" +
+    "Read agents/leader/CLAUDE.md first for your full identity and instructions.\n" +
+    "RULES:\n" +
+    "- Use send_message MCP tool to respond in #general. stdout is NOT posted to Discord.\n" +
+    "- Long messages are auto-paginated — just send the full content in one call.\n" +
+    "- When spawning workers via Agent tool, include in their prompt: " +
+    "'FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool.'\n" +
+    "- Do NOT register new agents with report_status — only use existing agents from list_agents.\n" +
+    "- Every task you create MUST be closed with task_update(status: completed) before you exit.\n" +
+    "- Call report_status(busy) at start, report_status(idle) at end.\n" +
+    "- Call task_checkpoint with context_summary before exiting."
+  );
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -410,6 +482,9 @@ async function main(): Promise<void> {
 
   setDiscordClient(client);
   registerApprovalInteractionHandler(client);
+  setApprovalResolvedCallback((approval) => {
+    enqueueApprovalTrigger(approval);
+  });
 
   // Subsystem instances
   let heartbeat: HeartbeatScheduler | null = null;
