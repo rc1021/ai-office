@@ -32,7 +32,6 @@ import { DiscordChatAdapter } from "./discord-adapter.js";
 import {
   loadOfficeConfig,
   runClaude,
-  EventBridge,
   HeartbeatScheduler,
   COLORS,
 } from "@ai-office/core";
@@ -103,7 +102,7 @@ const STARTUP_CHECKLIST_PROMPT =
   "You are the AI Office Leader. This is the first launch. " +
   "Follow your Startup Checklist in agents/leader/CLAUDE.md: " +
   "initialize the orchestrator, report status, setup Discord server channels, " +
-  "check for interrupted tasks, post bot-status update, " +
+  "check for interrupted tasks, " +
   "and run the Welcome Flow to greet the user in #general.";
 
 // ── First-run check ───────────────────────────────────────────────────────────
@@ -262,7 +261,7 @@ async function postNgrokUrl(readyClient: import("discord.js").Client<true>): Pro
     url = fs.readFileSync(ngrokFile, "utf-8").trim();
   }
   if (!url) {
-    console.log("[Listener] No ngrok URL found — skipping #bot-status post.");
+    console.log("[Listener] No ngrok URL found — skipping #general post.");
     return;
   }
 
@@ -272,12 +271,12 @@ async function postNgrokUrl(readyClient: import("discord.js").Client<true>): Pro
   try {
     const guild = await readyClient.guilds.fetch(guildId);
     const channels = await guild.channels.fetch();
-    const botStatus = channels.find(
-      (ch) => ch !== null && "name" in ch && ch.name === "bot-status"
+    const general = channels.find(
+      (ch) => ch !== null && "name" in ch && ch.name === "general"
     );
-    if (botStatus && botStatus.isTextBased()) {
-      await (botStatus as TextChannel).send(`🌐 **Pixel Office** is online: ${url}`);
-      console.log(`[Listener] Posted ngrok URL to #bot-status: ${url}`);
+    if (general && general.isTextBased()) {
+      await (general as TextChannel).send(`🌐 **Pixel Office** is online: ${url}`);
+      console.log(`[Listener] Posted ngrok URL to #general: ${url}`);
     }
   } catch (err) {
     console.warn("[Listener] Failed to post ngrok URL:", err);
@@ -349,7 +348,6 @@ async function main(): Promise<void> {
   registerApprovalInteractionHandler(client);
 
   // Subsystem instances
-  let eventBridge: EventBridge | null = null;
   let heartbeat: HeartbeatScheduler | null = null;
 
   client.once(Events.ClientReady, async (readyClient) => {
@@ -363,10 +361,6 @@ async function main(): Promise<void> {
     try {
       const config = loadOfficeConfig(PROJECT_DIR);
       const adapter = new DiscordChatAdapter();
-
-      eventBridge = new EventBridge(config.statePath, adapter);
-      eventBridge.start();
-      console.log("[Listener] EventBridge started");
 
       heartbeat = new HeartbeatScheduler(
         config.timezone, config.statePath, PROJECT_DIR, CLAUDE_CONFIG, adapter
@@ -395,7 +389,6 @@ async function main(): Promise<void> {
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {
     console.log(`\n[Listener] Received ${signal}. Shutting down...`);
-    if (eventBridge) eventBridge.stop();
     if (heartbeat) heartbeat.stop();
     client.destroy();
     console.log("[Listener] Goodbye.");

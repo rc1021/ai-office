@@ -2,7 +2,7 @@
  * chat-adapter.ts — Platform-agnostic chat interface
  *
  * Implemented by discord-bot (DiscordChatAdapter), slack-bot (SlackChatAdapter), etc.
- * Used by EventBridge and HeartbeatScheduler to send messages without
+ * Used by HeartbeatScheduler to send messages without
  * knowing which chat platform is active.
  */
 

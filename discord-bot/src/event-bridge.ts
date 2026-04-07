@@ -1,2 +1,1 @@
-// Re-export from @ai-office/core
-export { EventBridge } from "@ai-office/core";
+// EventBridge removed — three-layer separation: Core records, Pixel Office queries DB

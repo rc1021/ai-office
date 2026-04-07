@@ -32,22 +32,11 @@ function parseThrottleRule(rule: string): ThrottleRule {
 // ─── Channel Throttle Config (from channels.yaml) ────────────────────────────
 
 const CHANNEL_THROTTLE_RULES: Record<string, string> = {
-  // Fixed channels
-  "welcome": "none",
   "general": "none",
   "approvals": "none",
-  "daily-brief": "1/day",
   "alerts": "none",
-  "ai-internal": "batch:5msg/10s",
-  "task-board": "embed-edit",
-  "watercooler": "batch:1msg/30s",
-  "audit-log": "batch:10msg/30s",
-  "bot-status": "batch:1msg/5min",
-  "config": "none",
+  "daily-brief": "1/day",
 };
-
-// Default throttle for dynamic department channels
-const DEPT_CHANNEL_THROTTLE = "batch:3msg/15s";
 
 // ─── Throttle State ──────────────────────────────────────────────────────────
 
@@ -81,11 +70,6 @@ export function setFlushCallback(cb: (channelName: string, combinedContent: stri
 function getThrottleRule(channelName: string): ThrottleRule {
   const ruleStr = CHANNEL_THROTTLE_RULES[channelName];
   if (ruleStr) return parseThrottleRule(ruleStr);
-
-  // Department channels default
-  if (channelName.startsWith("dept-")) {
-    return parseThrottleRule(DEPT_CHANNEL_THROTTLE);
-  }
 
   return { type: "none" };
 }

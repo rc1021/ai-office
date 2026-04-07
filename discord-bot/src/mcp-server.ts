@@ -27,7 +27,7 @@ import {
   checkApproval,
 } from "./approval-manager.js";
 import { setupServer } from "./setup-server.js";
-import { ensureDepartmentChannels } from "./department-manager.js";
+// department-manager removed — three-layer separation: no dept-* Discord channels
 import {
   checkOutputGate,
   throttle,
@@ -701,7 +701,6 @@ export function createMcpServer(): Server {
         case "register_agent": {
           const input = RegisterAgentSchema.parse(args);
           const profile = resolveAgent(input.agent_id);
-          const deptResult = await ensureDepartmentChannels(input.agent_id);
 
           const lines = [
             `Agent registered: ${profile.agent_id}`,
@@ -710,31 +709,6 @@ export function createMcpServer(): Server {
             `  Clearance: ${profile.clearance_level}`,
             `  Scopes: ${profile.scopes.length} granted, ${profile.denied_scopes.length} denied`,
           ];
-
-          if (deptResult.created.length > 0) {
-            lines.push(`  Department channels created: ${deptResult.created.join(", ")}`);
-          }
-          if (deptResult.skipped.length > 0) {
-            lines.push(`  Department channels: ${deptResult.skipped.join(", ")}`);
-          }
-
-          // Post agent registration info to #config
-          try {
-            await sendEmbed("config", {
-              title: `Agent Registered: ${profile.agent_id}`,
-              description: `A new agent has been registered in the system.`,
-              color: 0x2ECC71, // GREEN
-              fields: [
-                { name: "Role", value: profile.role_id },
-                { name: "Department", value: profile.department },
-                { name: "Clearance", value: String(profile.clearance_level) },
-              ],
-              footer: new Date().toISOString(),
-            });
-          } catch (embedErr) {
-            // Non-fatal — #config channel may not exist yet
-            console.warn("[MCP] Failed to post registration embed to #config:", embedErr);
-          }
 
           return makeTextContent(lines.join("\n"));
         }

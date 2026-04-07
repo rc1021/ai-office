@@ -1,11 +1,10 @@
 /**
- * heartbeat.ts — Health checks, status updates, and daily brief scheduler
+ * heartbeat.ts — Health checks and daily brief scheduler
  *
  * Platform-agnostic: uses ChatAdapter and ClaudeRunnerConfig.
  *
- * Three timers:
+ * Two timers:
  *  - Every 1 min: health check (pixel-office PID, coordination DB, stale task cleanup)
- *  - Every 30 min: system status embed to #bot-status
  *  - Daily 08:30 (user timezone): spawn claude -p for Leader daily brief
  */
 
@@ -16,7 +15,6 @@ import type { ChatAdapter } from "./chat-adapter.js";
 import { runClaude } from "./claude-runner.js";
 import type { ClaudeRunnerConfig } from "./claude-runner.js";
 import { COLORS } from "./types.js";
-import type { EmbedInput } from "./types.js";
 
 // ── HeartbeatScheduler ───────────────────────────────────────────────────────
 
@@ -27,10 +25,7 @@ export class HeartbeatScheduler {
   private claudeConfig: ClaudeRunnerConfig;
   private adapter: ChatAdapter;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
-  private statusTimer: ReturnType<typeof setInterval> | null = null;
   private dailyTimeout: ReturnType<typeof setTimeout> | null = null;
-  private startTime: number;
-  private statusMessageId: string | null = null;
   private running = false;
 
   constructor(
@@ -45,7 +40,6 @@ export class HeartbeatScheduler {
     this.projectDir = projectDir;
     this.claudeConfig = claudeConfig;
     this.adapter = adapter;
-    this.startTime = Date.now();
   }
 
   start(): void {
@@ -59,17 +53,10 @@ export class HeartbeatScheduler {
       );
     }, 1 * 60 * 1000);
 
-    // System status every 30 minutes
-    this.statusTimer = setInterval(() => {
-      this.postSystemStatus().catch((err) =>
-        console.error("[Heartbeat] Status update error:", err)
-      );
-    }, 30 * 60 * 1000);
-
     // Schedule daily brief
     this.scheduleDailyBrief();
 
-    console.log(`[Heartbeat] Started — health/1min, status/30min, daily-brief@08:30 ${this.timezone}`);
+    console.log(`[Heartbeat] Started — health/1min, daily-brief@08:30 ${this.timezone}`);
   }
 
   stop(): void {
@@ -77,10 +64,6 @@ export class HeartbeatScheduler {
     if (this.healthTimer) {
       clearInterval(this.healthTimer);
       this.healthTimer = null;
-    }
-    if (this.statusTimer) {
-      clearInterval(this.statusTimer);
-      this.statusTimer = null;
     }
     if (this.dailyTimeout) {
       clearTimeout(this.dailyTimeout);
@@ -231,68 +214,6 @@ export class HeartbeatScheduler {
     }
   }
 
-  // ── System Status (every 30 min) ───────────────────────────────────────
-
-  private async postSystemStatus(): Promise<void> {
-    const uptimeMs = Date.now() - this.startTime;
-    const uptimeStr = this.formatUptime(uptimeMs);
-    const memUsage = process.memoryUsage();
-    const memMB = Math.round(memUsage.rss / 1024 / 1024);
-
-    // Count active agents and tasks from DB
-    const dbPath = path.join(this.statePath, "coordination.db");
-    let activeAgents = 0;
-    let activeTasks = 0;
-    if (fs.existsSync(dbPath)) {
-      try {
-        const Database = (await import("better-sqlite3")).default;
-        const db = new Database(dbPath, { readonly: true });
-        db.pragma("busy_timeout = 2000");
-        try {
-          const agentRow = db.prepare("SELECT COUNT(*) as cnt FROM agents WHERE status != 'offline'").get() as { cnt: number } | undefined;
-          activeAgents = agentRow?.cnt ?? 0;
-        } catch { /* table may not exist */ }
-        try {
-          const taskRow = db.prepare("SELECT COUNT(*) as cnt FROM tasks WHERE status IN ('pending', 'in_progress')").get() as { cnt: number } | undefined;
-          activeTasks = taskRow?.cnt ?? 0;
-        } catch { /* table may not exist */ }
-        db.close();
-      } catch {
-        // DB open failed — fine
-      }
-    }
-
-    const embed: EmbedInput = {
-      title: "System Status",
-      description: "Periodic system health report",
-      color: COLORS.BLUE,
-      fields: [
-        { name: "Uptime", value: uptimeStr },
-        { name: "Memory (RSS)", value: `${memMB} MB` },
-        { name: "Active Agents", value: String(activeAgents) },
-        { name: "Active Tasks", value: String(activeTasks) },
-      ],
-      footer: new Date().toISOString(),
-    };
-
-    try {
-      if (this.statusMessageId) {
-        // Try to edit existing status message
-        await this.adapter.editEmbed("bot-status", this.statusMessageId, embed);
-      } else {
-        // First time: send new
-        this.statusMessageId = await this.adapter.sendEmbed("bot-status", embed);
-      }
-    } catch {
-      // If edit fails, send new
-      try {
-        this.statusMessageId = await this.adapter.sendEmbed("bot-status", embed);
-      } catch (err) {
-        console.error("[Heartbeat] Failed to post status:", err);
-      }
-    }
-  }
-
   // ── Daily Brief (08:30 in user timezone) ────────────────────────────────
 
   private scheduleDailyBrief(): void {
@@ -376,16 +297,4 @@ export class HeartbeatScheduler {
     return deltaMinutes * 60 * 1000 - tzSecond * 1000;
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
-
-  private formatUptime(ms: number): string {
-    const seconds = Math.floor(ms / 1000);
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-
-    if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-    if (hours > 0) return `${hours}h ${minutes}m`;
-    return `${minutes}m`;
-  }
 }

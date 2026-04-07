@@ -43,5 +43,4 @@ export {
 } from "./throttle-manager.js";
 
 // Subsystems
-export { EventBridge } from "./event-bridge.js";
 export { HeartbeatScheduler } from "./heartbeat.js";

@@ -67,7 +67,7 @@ User ──→ Discord #general
 
 | Module | Purpose | Tools |
 |--------|---------|-------|
-| `core/` | **Platform-agnostic core** — claude runner, event bridge, heartbeat, config, auth | — |
+| `core/` | **Platform-agnostic core** — claude runner, heartbeat, config, auth | — |
 | `discord-bot/` | Discord adapter + MCP Server + **Listener Daemon** | 16 tools |
 | `coordination/` | Shared state, tasks, events, audit | 18 tools |
 | `orchestrator/` | Agent lifecycle CLI | 6 commands |
@@ -77,7 +77,7 @@ User ──→ Discord #general
 
 ### Platform Separation
 
-The `core/` package contains all platform-agnostic logic (ChatAdapter interface, event bridge, heartbeat, claude runner, output gate, throttle). `discord-bot/` implements `DiscordChatAdapter` for Discord. A future `slack-bot/` can implement `SlackChatAdapter` and reuse the same core.
+The `core/` package contains all platform-agnostic logic (ChatAdapter interface, heartbeat, claude runner, output gate, throttle). `discord-bot/` implements `DiscordChatAdapter` for Discord. A future `slack-bot/` can implement `SlackChatAdapter` and reuse the same core.
 
 ## Starter Packs
 
@@ -119,19 +119,15 @@ User: "研究蝦皮 API 的聊天功能"
 - Parallel spawning supported (e.g., 3 workers for brainstorming)
 - Context preserved across messages via `task_checkpoint` / `task_resume`
 
-## Event Bridge + Heartbeat
+## Heartbeat
 
-The listener daemon runs background subsystems:
+The listener daemon runs a background heartbeat subsystem (`core/`):
 
-- **Event Bridge** (`core/`) — Polls coordination DB every 3s, routes events to chat channels via ChatAdapter:
-  - `task.created/completed/failed` → `#task-board`
-  - `anomaly.reported` → `#alerts`
-  - `agent.online/offline` → `#bot-status` + `#config`
-  - `audit_log` entries → `#audit-log`
-- **Heartbeat** (`core/`) — Periodic health monitoring via ChatAdapter:
-  - Every 1 min: check Pixel Office + DB health, auto-restart if needed, cleanup stale tasks
-  - Every 30 min: system status embed to `#bot-status`
-  - Daily at 08:30 (user timezone): generate daily brief to `#daily-brief`
+- Every 1 min: check Pixel Office + DB health, auto-restart if needed, cleanup stale tasks
+- Health alerts (anomalies, errors) → `#alerts`
+- Daily at 08:30 (user timezone): generate daily brief → `#daily-brief`
+
+System events (task state changes, agent status, audit logs) are stored in the coordination DB and visible in the Pixel Office UI — they are not pushed to Discord channels.
 
 ## Discord Listener Daemon
 
@@ -159,7 +155,7 @@ Pixel Office starts automatically with the listener. Or run manually:
 cd pixel-office && npx tsx server/index.ts
 ```
 
-Open via ngrok public URL (shown in Discord `#bot-status`), or `http://localhost:3847` locally.
+Open via ngrok public URL (shown in Discord `#general` on startup), or `http://localhost:3847` locally.
 
 Features:
 - **Agent sprites** with spawn portal VFX, idle bobbing, busy typing indicator
@@ -183,7 +179,7 @@ Four modes available during setup:
 | **Custom URL** | Your own domain / Cloudflare Tunnel / reverse proxy |
 | **Disabled** | Localhost only (`http://localhost:3847`) |
 
-Leader auto-publishes the public URL to Discord `#bot-status` on startup.
+Leader auto-publishes the public URL to Discord `#general` on startup.
 
 ## Brainstorming Mode
 

@@ -3,32 +3,15 @@ import { getDiscordClient } from "./discord-client.js";
 import { createCategory, createChannel } from "./channel-manager.js";
 import { ServerSetupResult } from "./types.js";
 
-// Fixed AI Office server layout
+// Fixed AI Office server layout — only human-facing channels
 const SERVER_STRUCTURE = [
   {
-    category: "OFFICE",
+    category: "AI OFFICE",
     channels: [
-      { name: "welcome", topic: "Welcome to AI Office — start here" },
-      { name: "general", topic: "General conversation and announcements" },
-      { name: "approvals", topic: "AI action approval requests" },
-      { name: "daily-brief", topic: "Daily AI activity summaries" },
-      { name: "alerts", topic: "System alerts and warnings" },
-    ],
-  },
-  {
-    category: "AI-WORKSPACE",
-    channels: [
-      { name: "ai-internal", topic: "AI-to-AI coordination messages" },
-      { name: "task-board", topic: "Active tasks and their status" },
-      { name: "watercooler", topic: "Casual AI thoughts and observations" },
-    ],
-  },
-  {
-    category: "SYSTEM",
-    channels: [
-      { name: "audit-log", topic: "Immutable log of all AI actions" },
-      { name: "bot-status", topic: "Bot health and connectivity status" },
-      { name: "config", topic: "Bot configuration and settings" },
+      { name: "general", topic: "Chat with your AI Office Leader" },
+      { name: "approvals", topic: "Human approval requests" },
+      { name: "alerts", topic: "Critical alerts requiring attention" },
+      { name: "daily-brief", topic: "Daily office summary" },
     ],
   },
 ];

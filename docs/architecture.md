@@ -16,15 +16,15 @@
 │  └────────────────┘  └──────────────┘  └───────────────────────┘   │
 │  ┌────────────────┐  ┌──────────────┐  ┌───────────────────────┐   │
 │  │ Approval Mgr   │  │ Agent Registry│  │ Department Manager    │   │
-│  │ (YELLOW/RED UI)│  │ (YAML→profile)│  │ (dept-* channels)    │   │
+│  │ (YELLOW/RED UI)│  │ (YAML→profile)│  │ (dept tracking)      │   │
 │  └────────────────┘  └──────────────┘  └───────────────────────┘   │
 └───────┬──────────────────────────────────────────────────┬──────────┘
         │ MCP stdio (ai-office-discord)                    │ Discord.js
         ▼                                                  ▼
 ┌───────────────────┐                           ┌──────────────────────┐
 │  Leader Agent     │                           │  Discord API / Guild │
-│  (Opus 4.6)       │◄──────────────────────────│  11 fixed channels   │
-│  agents/leader/   │   reads #general          │  + dynamic dept-*    │
+│  (Opus 4.6)       │◄──────────────────────────│  4 channels          │
+│  agents/leader/   │   reads #general          │                      │
 │  CLAUDE.md        │                           └──────────────────────┘
 └───────┬───────────┘
         │ orchestrator CLI (prepare-worker / stop-worker)
@@ -89,8 +89,7 @@
 **Key files**:
 - `src/chat-adapter.ts` — `ChatAdapter` interface: sendMessage, sendEmbed, editEmbed, channelExists, createCategory, createChannel
 - `src/claude-runner.ts` — Spawns `claude -p` with configurable projectDir, mcpConfigPath, and allowedTools
-- `src/event-bridge.ts` — Polls coordination DB every 3s, routes events to chat channels via ChatAdapter
-- `src/heartbeat.ts` — Health checks (1min), system status (30min), daily brief (08:30), stale task cleanup — all via ChatAdapter
+- `src/heartbeat.ts` — Health checks (1min), health alerts to #alerts, daily brief (08:30) to #daily-brief, stale task cleanup — all via ChatAdapter
 - `src/config-loader.ts` — Reads `config/office.yaml`, returns timezone/language/statePath
 - `src/output-gate.ts` — 4-layer security check before any message send
 - `src/throttle-manager.ts` — Rate limiting: buffer, reject, embed-edit strategies per channel
@@ -102,14 +101,14 @@
 **Purpose**: Discord-specific adapter. Implements `ChatAdapter` for Discord, runs the MCP Server for Discord tools, and hosts the listener daemon that connects everything.
 
 **Key files**:
-- `src/listener.ts` — Thin-shell daemon: Discord Client + message queue + wires core subsystems via `DiscordChatAdapter`
+- `src/listener.ts` — Thin-shell daemon: Discord Client + message queue + heartbeat via `DiscordChatAdapter`
 - `src/discord-adapter.ts` — Implements `ChatAdapter` for Discord (delegates to message-manager/channel-manager)
 - `src/mcp-server.ts` — 16 MCP tools exposed to agents (channels, messaging, approvals, setup)
 - `src/message-manager.ts` — Discord.js message sending/reading
 - `src/channel-manager.ts` — Discord.js channel creation/lookup
 - `src/approval-manager.ts` — File-based approval state (JSON); Discord buttons via deferred interaction replies
-- `src/setup-server.ts` — Idempotent setup of 11 fixed channels across 4 categories
-- `src/department-manager.ts` — Auto-creates `dept-{name}` channels on agent registration
+- `src/setup-server.ts` — Idempotent setup of 4 channels (general, approvals, alerts, daily-brief)
+- `src/department-manager.ts` — Tracks department membership on agent registration
 
 ### coordination
 
