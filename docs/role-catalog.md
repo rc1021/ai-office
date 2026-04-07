@@ -1,6 +1,6 @@
 # Role Catalog
 
-71 roles across 22 industries. Every role is a YAML template validated against `roles/schemas/role-template.schema.json`. Leader is always present; all other roles are hired by the user at runtime.
+77 roles across 22 industries. Every role is a YAML template validated against `roles/schemas/role-template.schema.json`. Leader is always present; all other roles are hired by the user at runtime.
 
 Clearance levels: 0 (public) · 1 (internal) · 2 (confidential) · 3 (restricted, Leader only)
 

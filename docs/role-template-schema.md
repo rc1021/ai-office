@@ -63,11 +63,10 @@ security:
     - "write:coordination:tasks"
     - "read:filesystem:src"
     - "write:filesystem:src"
-    - "read:discord:ai-internal"
-    - "write:discord:ai-internal"
+    - "read:discord:alerts"
+    - "write:discord:alerts"
   denied_scopes:
     - "write:discord:general"      # only Leader writes to #general
-    - "write:discord:audit-log"
     - "execute:shell:rm"
     - "execute:shell:sudo"
   requires_approval:               # actions requiring human Approve/Reject
@@ -287,16 +286,15 @@ Targets: * (wildcard), specific channel/path, dept-* (glob)
 ```
 
 Examples:
-- `write:discord:ai-internal` — can write to #ai-internal
+- `write:discord:alerts` — can write to #alerts
 - `read:filesystem:src` — can read src/ directory
 - `execute:shell:npm` — can run npm commands
-- `write:discord:dept-*` — can write to any department channel
 
 ### OutputGate Checks (in order)
 
 1. **Denied scopes** — explicit deny always wins
 2. **Write scope** — agent must have matching `write:discord:{channel}` scope
-3. **Channel clearance** — some channels require minimum clearance (e.g., #audit-log = 3)
+3. **Clearance check** — confidential channels require minimum clearance level
 4. **Data classification** — content scan for `[RESTRICTED]`, `[CONFIDENTIAL]` markers
 
 ---

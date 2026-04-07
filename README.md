@@ -2,7 +2,7 @@
 
 A multi-agent virtual office powered by Claude Code. "Hire" AI agents with specialized roles that collaborate via Discord to accomplish complex tasks under human supervision.
 
-**77 role templates** across 22 industries. **34 MCP tools**. **77 automated tests**. End-to-end verified.
+**77 role templates** across 22 industries. **35 MCP tools**. **46 automated tests**. End-to-end verified.
 
 ## Quick Start
 
@@ -69,7 +69,7 @@ User ──→ Discord #general
 |--------|---------|-------|
 | `core/` | **Platform-agnostic core** — claude runner, heartbeat, config, auth | — |
 | `discord-bot/` | Discord adapter + MCP Server + **Listener Daemon** | 16 tools |
-| `coordination/` | Shared state, tasks, events, audit | 18 tools |
+| `coordination/` | Shared state, tasks, events, audit | 19 tools |
 | `orchestrator/` | Agent lifecycle CLI | 6 commands |
 | `pixel-office/` | Real-time visualization (Phaser.js + ngrok) | — |
 | `setup/` | Configuration wizard (i18n) | — |

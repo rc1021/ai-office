@@ -2,8 +2,8 @@
 
 This document covers the three API surfaces exposed by AI Office:
 
-1. **Coordination MCP Server** (`ai-office-coordination`) — 18 tools for task management, event bus, observability, and validation. Used by all agents.
-2. **Discord MCP Server** (`ai-office-discord-bot`) — 16 tools for channel management, messaging, threads, approvals, and admin. Used by agents to interact with Discord.
+1. **Coordination MCP Server** (`ai-office-coordination`) — 19 tools for task management, event bus, observability, and validation. Used by all agents.
+2. **Discord MCP Server** (`ai-office-discord`) — 16 tools for channel management, messaging, threads, approvals, and admin. Used by agents to interact with Discord.
 3. **Orchestrator CLI** — 6 commands for managing worker lifecycle and session state. Called by the Leader agent via shell.
 
 All tools require agents to identify themselves via `agent_id`. The Coordination server additionally enforces JWT-based identity tokens; tools that access sensitive data require a minimum clearance level.
