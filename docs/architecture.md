@@ -3,79 +3,86 @@
 ## 1. System Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                           Human User                                │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │ Discord messages (#general, #approvals)
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Discord Bot (MCP Server)                     │
-│  ┌────────────────┐  ┌──────────────┐  ┌───────────────────────┐   │
-│  │ Channel Manager│  │ OutputGate   │  │ Throttle Manager      │   │
-│  │ (create/delete)│  │ (4-layer ACL)│  │ (rate + embed-edit)   │   │
-│  └────────────────┘  └──────────────┘  └───────────────────────┘   │
-│  ┌────────────────┐  ┌──────────────┐  ┌───────────────────────┐   │
-│  │ Approval Mgr   │  │ Agent Registry│  │ Department Manager    │   │
-│  │ (YELLOW/RED UI)│  │ (YAML→profile)│  │ (dept tracking)      │   │
-│  └────────────────┘  └──────────────┘  └───────────────────────┘   │
-└───────┬──────────────────────────────────────────────────┬──────────┘
-        │ MCP stdio (ai-office-discord)                    │ Discord.js
-        ▼                                                  ▼
-┌───────────────────┐                           ┌──────────────────────┐
-│  Leader Agent     │                           │  Discord API / Guild │
-│  (Opus 4.6)       │◄──────────────────────────│  4 channels          │
-│  agents/leader/   │   reads #general          │                      │
-│  CLAUDE.md        │                           └──────────────────────┘
-└───────┬───────────┘
-        │ orchestrator CLI (prepare-worker / stop-worker)
-        ▼
-┌───────────────────────────────────────────────────────────────────────┐
-│                         Orchestrator                                  │
-│  ┌──────────────┐  ┌────────────────┐  ┌─────────────────────────┐   │
-│  │ Identity     │  │ Lifecycle      │  │ Config Reader            │   │
-│  │ (HMAC tokens)│  │ (spawn/stop)   │  │ (office.yaml → runtime) │   │
-│  └──────────────┘  └────────────────┘  └─────────────────────────┘   │
-└───────┬───────────────────────────────────────────────────────────────┘
-        │ Claude Code Agent tool (Sonnet 4.6 per worker)
-        ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                       Worker Agents (N concurrent)                  │
-│  agents/worker-template/CLAUDE.md + injected role template          │
-│  ┌─────────────────┐  ┌──────────────────┐  ┌────────────────────┐ │
-│  │ software-       │  │ pm-1             │  │ research-analyst-1 │ │
-│  │ engineer-1      │  │                  │  │                    │ │
-│  └────────┬────────┘  └────────┬─────────┘  └─────────┬──────────┘ │
-└───────────┼────────────────────┼─────────────────────┼─────────────┘
-            │                   │                       │
-            └───────────────────┼───────────────────────┘
-                                │ MCP stdio (ai-office-coordination)
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    Coordination MCP Server                           │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────────┐ │
-│  │ Task Tools   │  │ Event Bus /  │  │ Observability Tools        │ │
-│  │ (create/     │  │ Inbox Tools  │  │ (traces, audit, status)    │ │
-│  │ update/      │  │ (pub/sub)    │  │                            │ │
-│  │ checkpoint/  │  └──────────────┘  └───────────────────────────┘ │
-│  │ resume/list) │  ┌──────────────┐  ┌───────────────────────────┐ │
-│  └──────────────┘  │ Validation   │  │ Auth Middleware            │ │
-│                    │ Tools        │  │ (enforceIdentity /         │ │
-│                    │ (numeric/    │  │  enforceClearance)         │ │
-│                    │ cross-verify)│  └───────────────────────────┘ │
-│                    └──────────────┘                                 │
-└───────────────────────────────┬─────────────────────────────────────┘
-                                │ SQLite WAL
-                                ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│  .ai-office/state/coordination.db                                   │
-│  tasks | agents | events | inbox | audit_log | artifacts | traces   │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                            Human User                                │
+└──────────────────────────────┬───────────────────────────────────────┘
+                               │ Discord (#general, #approvals)
+                               ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                    Listener Daemon (discord-bot)                      │
+│  Always-online process — receives messages, spawns claude -p          │
+│                                                                      │
+│  ┌─────────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
+│  │ Message Queue   │  │ Discord      │  │ Approval Manager       │  │
+│  │ (dedup + serial)│  │ ChatAdapter  │  │ (buttons + file state) │  │
+│  └────────┬────────┘  └──────────────┘  └────────────────────────┘  │
+│           │                                                          │
+│  ┌────────▼────────────────────────────────────────────────────────┐ │
+│  │ @ai-office/core                                                 │ │
+│  │  ┌──────────────┐  ┌───────────────┐  ┌─────────────────────┐  │ │
+│  │  │ Claude Runner│  │ Heartbeat     │  │ Output Gate          │  │ │
+│  │  │ (spawn -p)   │  │ (health/audit)│  │ (4-layer ACL)        │  │ │
+│  │  └──────────────┘  └───────────────┘  └─────────────────────┘  │ │
+│  │  ┌──────────────┐  ┌───────────────┐  ┌─────────────────────┐  │ │
+│  │  │ Config Loader│  │ Throttle Mgr  │  │ Agent Registry      │  │ │
+│  │  │ (office.yaml)│  │ (rate limit)  │  │ (YAML → profile)    │  │ │
+│  │  └──────────────┘  └───────────────┘  └─────────────────────┘  │ │
+│  └─────────────────────────────────────────────────────────────────┘ │
+└──────────┬──────────────────────────────────────────────┬────────────┘
+           │ claude -p (per message)                      │ Discord.js
+           ▼                                              ▼
+┌────────────────────┐                        ┌─────────────────────┐
+│ Leader Agent       │                        │ Discord API / Guild │
+│ (Opus 4.6)         │                        │ 4 channels:         │
+│                    │                        │  #general            │
+│ agents/leader/     │                        │  #approvals          │
+│ CLAUDE.md          │                        │  #alerts             │
+└────────┬───────────┘                        │  #daily-brief        │
+         │ Agent tool (Sonnet 4.6)            └─────────────────────┘
+         ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                    Worker Agents (N concurrent)                       │
+│  CLAUDE.md = worker-template + role persona + behavior rules         │
+│  Workspace: .ai-office/departments/{dept}/workspace/{agent-id}/      │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────────┐  │
+│  │ software-    │  │ pm-1         │  │ research-analyst-1         │  │
+│  │ engineer-1   │  │              │  │                            │  │
+│  └──────┬───────┘  └──────┬───────┘  └────────────┬──────────────┘  │
+└─────────┼─────────────────┼───────────────────────┼──────────────────┘
+          └─────────────────┼───────────────────────┘
+                            │ MCP stdio (ai-office-coordination)
+                            ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                   Coordination MCP Server (19 tools)                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────────┐  │
+│  │ Task Tools   │  │ Event Bus /  │  │ Observability Tools        │  │
+│  │ (CRUD +      │  │ Inbox Tools  │  │ (traces, audit, status)    │  │
+│  │ checkpoint)  │  │ (pub/sub)    │  │                             │  │
+│  └──────────────┘  └──────────────┘  └───────────────────────────┘  │
+│  ┌──────────────┐  ┌────────────────────────────────────────────┐   │
+│  │ Validation   │  │ Auth Middleware                              │   │
+│  │ (numeric /   │  │ (enforceIdentity / enforceClearance)        │   │
+│  │ cross-verify)│  └────────────────────────────────────────────┘   │
+│  └──────────────┘                                                    │
+└──────────────────────────────┬───────────────────────────────────────┘
+                               │ SQLite WAL
+                               ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  .ai-office/state/coordination.db                                    │
+│  tasks | agents | events | inbox | audit_log | artifacts | traces    │
+└──────────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Pixel Office (optional UI)                      │
-│  Express API (:3847) + SSE stream + Phaser.js client (:3848)        │
-│  Reads coordination.db (read-only seed) — no write path to agents  │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│                   Pixel Office (visualization)                        │
+│  Express API (:3847) + SSE + Phaser.js client                        │
+│  Queries coordination.db directly (pull) — no push from Core         │
+│  Receives fire-and-forget broadcasts for animations                  │
+└──────────────────────────────────────────────────────────────────────┘
+
+Three-Layer Separation:
+  Core (DB)  ──record──→  coordination.db  ←──query──  Pixel Office
+  Leader     ──reply───→  Discord (4 ch)               (pull + broadcast)
+  Heartbeat  ──alert───→  #alerts, #daily-brief
 ```
 
 ---
