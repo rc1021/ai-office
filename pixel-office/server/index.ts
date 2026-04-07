@@ -65,7 +65,7 @@ app.listen(PORT, "0.0.0.0", async () => {
   console.log(`[PixelOffice] Open http://localhost:3848 for dev client (vite)`);
 
   // Remote access based on NGROK_MODE
-  const ngrokMode = process.env.NGROK_MODE ?? (process.env.NGROK_ENABLED === "true" ? "internal" : "disabled");
+  const ngrokMode = process.env.NGROK_MODE ?? "disabled";
 
   if (ngrokMode === "internal" && process.env.NGROK_AUTHTOKEN) {
     try {

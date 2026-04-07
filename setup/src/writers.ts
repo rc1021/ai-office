@@ -170,7 +170,6 @@ export function writePixelOfficeEnv(projectRoot: string, config: SetupConfig): v
   const envPath = path.join(projectRoot, "pixel-office", ".env");
   const lines = [
     `NGROK_MODE=${mode}`,
-    `NGROK_ENABLED=${mode === "internal" ? "true" : "false"}`,
   ];
 
   if (mode === "internal") {
