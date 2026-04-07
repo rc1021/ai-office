@@ -203,21 +203,23 @@ async function handleMessage(message: Message): Promise<void> {
         if (embed.footer?.text) embedParts.push(`_${embed.footer.text}_`);
         if (embedParts.length > 0) parts.push(embedParts.join("\n"));
       }
-      const fullContent = parts.join("\n\n") || "(empty message)";
-      const brief = fullContent.length > 200
-        ? fullContent.substring(0, 200) + "..."
-        : fullContent;
+      const fullContent = parts.join("\n\n");
+      if (fullContent) {
+        const brief = fullContent.length > 200
+          ? fullContent.substring(0, 200) + "..."
+          : fullContent;
 
-      // Save full reply content as file
-      const replyDir = path.join(PROJECT_DIR, ".ai-office", "shared", "inbox", "reply-context");
-      fs.mkdirSync(replyDir, { recursive: true });
-      const replyFile = path.join(replyDir, `${message.reference.messageId}.md`);
-      fs.writeFileSync(replyFile, `# Reply from ${replyAuthor}\n\n${fullContent}`, "utf-8");
+        // Save full reply content as file
+        const replyDir = path.join(PROJECT_DIR, ".ai-office", "shared", "inbox", "reply-context");
+        fs.mkdirSync(replyDir, { recursive: true });
+        const replyFile = path.join(replyDir, `${message.reference.messageId}.md`);
+        fs.writeFileSync(replyFile, `# Reply from ${replyAuthor}\n\n${fullContent}`, "utf-8");
 
-      replyContext = `\n\nThis message is a REPLY to a previous message:\n` +
-        `Reply-to author: ${replyAuthor}\n` +
-        `Reply-to brief: ${brief}\n` +
-        `Full content saved at: ${replyFile} (use Read tool if you need the complete text)\n`;
+        replyContext = `\n\nThis message is a REPLY to a previous message:\n` +
+          `Reply-to author: ${replyAuthor}\n` +
+          `Reply-to brief: ${brief}\n` +
+          `Full content saved at: ${replyFile} (use Read tool if you need the complete text)\n`;
+      }
     } catch { /* non-fatal — original message may be deleted */ }
   }
 
