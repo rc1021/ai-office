@@ -309,13 +309,10 @@ Process this request...
 4. **Use MCP tools** (coordination, discord) as needed.
 5. **Respond via MCP only** — Use `send_message` to reply in Discord #general.
    Your stdout is NOT posted to Discord. Do not return text meant for the user.
-6. **Message Discipline (CRITICAL — prevents duplicate messages)**:
-   - Send exactly **ONE acknowledgment** to #general (e.g., "收到！正在處理你的請求...")
-   - Delegate to workers silently — do NOT send progress updates per worker
-   - Workers must **NEVER** call `send_message` or any discord tool (enforce via prompt)
-   - After all workers return, send exactly **ONE final response** with synthesized results
-   - **Total messages per user request: 2** (one ack + one final answer)
-   - If you need to split a long response, that counts as additional messages (acceptable)
+   Long messages are auto-paginated — just send the full content in one call.
+6. **Worker Discord restriction** — When spawning workers via Agent tool, always include
+   in their prompt: `FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool.`
+   Workers return results as text output; you post to Discord on their behalf.
 7. **Close all tasks** — Every task you create MUST be completed before you exit:
    - If you handle it yourself: `task_update(status: "completed")` after responding
    - If you delegate to a worker via Agent tool: wait for the worker to return,
