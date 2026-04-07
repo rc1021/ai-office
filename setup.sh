@@ -232,11 +232,14 @@ echo ""
 echo "  • Stop the listener:"
 echo "     kill $LISTENER_PID"
 echo ""
-if [ -f "$PROJECT_DIR/pixel-office/.env" ] && grep -q "NGROK_ENABLED=true" "$PROJECT_DIR/pixel-office/.env" 2>/dev/null; then
-echo "  • Pixel Office will start automatically with ngrok"
-echo "    (public URL will be posted to Discord #bot-status)"
+NGROK_MODE=$(grep "^NGROK_MODE=" "$PROJECT_DIR/pixel-office/.env" 2>/dev/null | cut -d= -f2)
+if [ -n "$NGROK_MODE" ] && [ "$NGROK_MODE" != "disabled" ]; then
+echo "  • Pixel Office starts automatically with the listener"
+echo "    (ngrok mode: $NGROK_MODE — public URL will be posted to Discord #general)"
 else
-echo "  • Start Pixel Office (optional):"
-echo "    cd $PROJECT_DIR/pixel-office && npm run dev"
+echo "  • Pixel Office is running locally at http://localhost:3847"
 fi
 echo ""
+echo "  Showing listener logs (Ctrl+C to stop watching)..."
+echo ""
+tail -f "$LISTENER_LOG"
