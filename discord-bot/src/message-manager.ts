@@ -21,11 +21,40 @@ function formatMessage(msg: Message): ChannelMessage {
   };
 }
 
+const DISCORD_MAX_LENGTH = 2000;
+
+/**
+ * Split text into chunks that fit within Discord's 2000-char limit.
+ * Splits at newline boundaries when possible.
+ */
+function splitContent(text: string, maxLen: number = DISCORD_MAX_LENGTH): string[] {
+  if (text.length <= maxLen) return [text];
+
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > maxLen) {
+    let splitAt = remaining.lastIndexOf("\n", maxLen);
+    if (splitAt <= 0) splitAt = maxLen;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt).trimStart();
+  }
+  if (remaining.length > 0) chunks.push(remaining);
+  return chunks;
+}
+
 export async function sendMessage(channelName: string, content: string): Promise<string> {
   const channel = await findTextChannel(channelName);
-  const msg = await channel.send(content);
-  console.log(`[MessageManager] Sent message to #${channelName}: ${content.substring(0, 60)}`);
-  return msg.id;
+  const chunks = splitContent(content);
+  let lastMsgId = "";
+
+  for (const chunk of chunks) {
+    const msg = await channel.send(chunk);
+    lastMsgId = msg.id;
+  }
+
+  console.log(`[MessageManager] Sent message to #${channelName} (${chunks.length} part${chunks.length > 1 ? "s" : ""}): ${content.substring(0, 60)}`);
+  return lastMsgId;
 }
 
 export async function sendEmbed(channelName: string, embedInput: EmbedInput): Promise<string> {

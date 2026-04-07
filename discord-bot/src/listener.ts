@@ -232,10 +232,9 @@ function buildPrompt(username: string, content: string): string {
     "RESPONSE RULE (CRITICAL — you MUST follow this EXACTLY): " +
     "You may call send_message AT MOST 2 times total for this request. " +
     "  Call 1: ONE short acknowledgment (e.g. '收到！正在處理...'). " +
-    "  Call 2: ONE final answer with all results. " +
-    "NEVER call send_message more than 2 times. If your response is too long for 1800 chars, " +
-    "SUMMARIZE it — do NOT split into multiple messages. Brevity is mandatory. " +
-    "For list-type answers (e.g. available roles), show a compact summary, not every item. " +
+    "  Call 2: ONE final answer with all results in a SINGLE send_message call. " +
+    "The system will auto-paginate if your message exceeds Discord's character limit. " +
+    "So put ALL content in ONE send_message call — NEVER split manually into multiple calls. " +
     "Workers must NEVER call send_message, send_embed, or ANY discord MCP tool. " +
     "When spawning workers via Agent tool, include in their prompt: " +
     "'FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool.' " +
