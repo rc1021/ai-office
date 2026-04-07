@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { setupTestDb, TestDbContext } from "./helpers/db-setup.js";
+import { setupTestDb, TestDbContext, registerTestAgent } from "./helpers/db-setup.js";
 import {
   reportStatus,
   listAgents,
@@ -17,7 +17,8 @@ describe("observability-tools", () => {
   afterEach(() => { ctx.cleanup(); });
 
   describe("reportStatus", () => {
-    it("inserts a new agent", () => {
+    it("updates a pre-registered agent", () => {
+      registerTestAgent(ctx.db, "eng-1", "software-engineer", "engineering");
       const result = reportStatus({
         agent_id: "eng-1",
         role_id: "software-engineer",
@@ -28,7 +29,8 @@ describe("observability-tools", () => {
       expect(result.agent.status).toBe("online");
     });
 
-    it("updates an existing agent", () => {
+    it("updates status from idle to busy", () => {
+      registerTestAgent(ctx.db, "eng-1", "software-engineer", "engineering");
       reportStatus({
         agent_id: "eng-1", role_id: "software-engineer",
         department: "engineering", status: "online",
@@ -39,10 +41,18 @@ describe("observability-tools", () => {
       });
       expect(result.agent.status).toBe("busy");
     });
+
+    it("rejects unregistered agent", () => {
+      expect(() => {
+        reportStatus({ agent_id: "ghost-1", role_id: "ghost", status: "online" });
+      }).toThrow(/not registered/);
+    });
   });
 
   describe("listAgents", () => {
     it("returns all agents", () => {
+      registerTestAgent(ctx.db, "a1", "r1");
+      registerTestAgent(ctx.db, "a2", "r2");
       reportStatus({ agent_id: "a1", role_id: "r1", status: "online" });
       reportStatus({ agent_id: "a2", role_id: "r2", status: "idle" });
       const agents = listAgents({});
@@ -50,6 +60,8 @@ describe("observability-tools", () => {
     });
 
     it("filters by status", () => {
+      registerTestAgent(ctx.db, "a1", "r1");
+      registerTestAgent(ctx.db, "a2", "r2");
       reportStatus({ agent_id: "a1", role_id: "r1", status: "online" });
       reportStatus({ agent_id: "a2", role_id: "r2", status: "idle" });
       const agents = listAgents({ status: "online" });
@@ -58,6 +70,8 @@ describe("observability-tools", () => {
     });
 
     it("filters by department", () => {
+      registerTestAgent(ctx.db, "a1", "r1", "eng");
+      registerTestAgent(ctx.db, "a2", "r2", "ops");
       reportStatus({ agent_id: "a1", role_id: "r1", department: "eng", status: "online" });
       reportStatus({ agent_id: "a2", role_id: "r2", department: "ops", status: "online" });
       const agents = listAgents({ department: "eng" });

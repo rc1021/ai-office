@@ -23,3 +23,20 @@ export function setupTestDb(): TestDbContext {
     },
   };
 }
+
+/**
+ * Pre-register an agent directly in the DB (bypasses reportStatus validation).
+ * Use this in test beforeEach to satisfy the "agent must be registered" check.
+ */
+export function registerTestAgent(
+  db: Database.Database,
+  agentId: string,
+  roleId: string = "test-role",
+  department: string = "engineering",
+  clearanceLevel: number = 1,
+): void {
+  db.prepare(`
+    INSERT OR IGNORE INTO agents (agent_id, role_id, department, status, clearance_level, last_heartbeat)
+    VALUES (?, ?, ?, 'idle', ?, datetime('now'))
+  `).run(agentId, roleId, department, clearanceLevel);
+}

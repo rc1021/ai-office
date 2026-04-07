@@ -1,16 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { setupTestDb, TestDbContext } from "./helpers/db-setup.js";
+import { setupTestDb, TestDbContext, registerTestAgent } from "./helpers/db-setup.js";
 import { taskCreate, taskUpdate, taskCheckpoint, taskResume, taskList } from "../src/tools/task-tools.js";
-import { reportStatus } from "../src/tools/observability-tools.js";
 
 describe("task-tools", () => {
   let ctx: TestDbContext;
 
   beforeEach(() => {
     ctx = setupTestDb();
-    // Register a test agent so FK constraints are satisfied
-    reportStatus({ agent_id: "worker-1", role_id: "worker", department: "engineering", status: "idle" });
-    reportStatus({ agent_id: "leader", role_id: "leader", department: "management", status: "online" });
+    // Pre-register agents directly in DB (bypasses reportStatus validation)
+    registerTestAgent(ctx.db, "worker-1", "worker", "engineering");
+    registerTestAgent(ctx.db, "leader", "leader", "management", 3);
   });
   afterEach(() => { ctx.cleanup(); });
 
