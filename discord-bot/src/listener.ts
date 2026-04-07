@@ -84,6 +84,7 @@ const ALLOWED_TOOLS = [
   "mcp__ai-office-discord__send_embed",
   "mcp__ai-office-discord__read_messages",
   "mcp__ai-office-discord__read_new_messages",
+  "mcp__ai-office-discord__read_message_by_id",
   "mcp__ai-office-discord__create_thread",
   "mcp__ai-office-discord__send_thread_message",
   "mcp__ai-office-discord__create_approval",

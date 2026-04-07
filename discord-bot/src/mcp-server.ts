@@ -18,6 +18,7 @@ import {
   sendMessage,
   sendEmbed,
   readMessages,
+  readMessageById,
   readNewMessages,
   createThread,
   sendThreadMessage,
@@ -252,6 +253,18 @@ const TOOLS = [
         channel_name: { type: "string" },
       },
       required: ["channel_name"],
+    },
+  },
+  {
+    name: "read_message_by_id",
+    description: "Read a specific message by its ID from a channel. Includes embed content.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        channel_name: { type: "string", description: "Channel to read from" },
+        message_id: { type: "string", description: "Discord message ID" },
+      },
+      required: ["channel_name", "message_id"],
     },
   },
   {
@@ -604,6 +617,20 @@ export function createMcpServer(): Server {
             .join("\n");
           return makeTextContent(
             `New messages in #${input.channel_name} (${messages.length}):\n\n${formatted}`
+          );
+        }
+
+        case "read_message_by_id": {
+          const input = z.object({
+            channel_name: z.string(),
+            message_id: z.string(),
+          }).parse(args);
+          const msg = await readMessageById(input.channel_name, input.message_id);
+          return makeTextContent(
+            `Message ${msg.id} from #${input.channel_name}:\n` +
+            `Author: ${msg.isBot ? "BOT" : "USER"} ${msg.author}\n` +
+            `Time: ${msg.timestamp}\n` +
+            `Content:\n${msg.content}`
           );
         }
 

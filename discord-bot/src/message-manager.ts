@@ -136,6 +136,34 @@ export async function readNewMessages(channelName: string): Promise<ChannelMessa
   return result;
 }
 
+export async function readMessageById(channelName: string, messageId: string): Promise<ChannelMessage> {
+  const channel = await findTextChannel(channelName);
+  const msg = await channel.messages.fetch(messageId);
+
+  // Include embed content if message text is empty
+  let content = msg.content;
+  if (!content && msg.embeds.length > 0) {
+    const parts: string[] = [];
+    for (const embed of msg.embeds) {
+      if (embed.title) parts.push(`## ${embed.title}`);
+      if (embed.description) parts.push(embed.description);
+      for (const field of embed.fields) {
+        parts.push(`**${field.name}**: ${field.value}`);
+      }
+      if (embed.footer?.text) parts.push(`_${embed.footer.text}_`);
+    }
+    content = parts.join("\n");
+  }
+
+  return {
+    id: msg.id,
+    author: msg.author.username,
+    content: content || "[No content]",
+    timestamp: msg.createdAt.toISOString(),
+    isBot: msg.author.bot,
+  };
+}
+
 export async function createThread(
   channelName: string,
   messageId: string,
