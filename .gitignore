@@ -8,6 +8,10 @@ dist/
 # MCP config contains secrets (bot tokens)
 .mcp.json
 
+# Runtime files
+*.pid
+*.log
+
 # AI Office runtime data
 .ai-office/
 
