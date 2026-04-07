@@ -13,6 +13,7 @@ export interface OfficeConfig {
   timezone: string;
   language: string;
   statePath: string;
+  dailyBriefTime: string; // "HH:MM" format, default "08:00"
 }
 
 let cached: OfficeConfig | null = null;
@@ -33,6 +34,7 @@ export function loadOfficeConfig(projectDir: string): OfficeConfig {
     timezone: office.timezone ?? "Asia/Taipei",
     language: office.language ?? "zh-TW",
     statePath: path.resolve(projectDir, paths.state ?? ".ai-office/state"),
+    dailyBriefTime: office.daily_brief_time ?? "08:00",
   };
 
   console.log(`[ConfigLoader] Loaded config: timezone=${cached.timezone}, language=${cached.language}, state=${cached.statePath}`);

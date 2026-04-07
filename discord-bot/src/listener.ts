@@ -363,7 +363,8 @@ async function main(): Promise<void> {
       const adapter = new DiscordChatAdapter();
 
       heartbeat = new HeartbeatScheduler(
-        config.timezone, config.statePath, PROJECT_DIR, CLAUDE_CONFIG, adapter
+        config.timezone, config.statePath, PROJECT_DIR, CLAUDE_CONFIG, adapter,
+        config.dailyBriefTime,
       );
       heartbeat.start();
       console.log("[Listener] HeartbeatScheduler started");

@@ -5,7 +5,7 @@
  *
  * Two timers:
  *  - Every 1 min: health check (pixel-office PID, coordination DB, stale task cleanup)
- *  - Daily 08:30 (user timezone): spawn claude -p for Leader daily brief
+ *  - Daily brief (default 08:00, configurable): spawn claude -p for Leader daily brief
  */
 
 import fs from "node:fs";
@@ -27,6 +27,8 @@ export class HeartbeatScheduler {
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private dailyTimeout: ReturnType<typeof setTimeout> | null = null;
   private running = false;
+  private dailyBriefHour: number;
+  private dailyBriefMinute: number;
 
   constructor(
     timezone: string,
@@ -34,12 +36,16 @@ export class HeartbeatScheduler {
     projectDir: string,
     claudeConfig: ClaudeRunnerConfig,
     adapter: ChatAdapter,
+    dailyBriefTime: string = "08:00",
   ) {
     this.timezone = timezone;
     this.statePath = statePath;
     this.projectDir = projectDir;
     this.claudeConfig = claudeConfig;
     this.adapter = adapter;
+    const [h, m] = dailyBriefTime.split(":").map(Number);
+    this.dailyBriefHour = h;
+    this.dailyBriefMinute = m;
   }
 
   start(): void {
@@ -56,7 +62,8 @@ export class HeartbeatScheduler {
     // Schedule daily brief
     this.scheduleDailyBrief();
 
-    console.log(`[Heartbeat] Started — health/1min, daily-brief@08:30 ${this.timezone}`);
+    const timeStr = `${String(this.dailyBriefHour).padStart(2, "0")}:${String(this.dailyBriefMinute).padStart(2, "0")}`;
+    console.log(`[Heartbeat] Started — health/1min, daily-brief@${timeStr} ${this.timezone}`);
   }
 
   stop(): void {
@@ -214,10 +221,10 @@ export class HeartbeatScheduler {
     }
   }
 
-  // ── Daily Brief (08:30 in user timezone) ────────────────────────────────
+  // ── Daily Brief (configurable time in user timezone) ─────────────────────
 
   private scheduleDailyBrief(): void {
-    const msUntil = this.msUntilNext0830();
+    const msUntil = this.msUntilNextBrief();
     console.log(`[Heartbeat] Next daily brief in ${Math.round(msUntil / 60000)} minutes`);
 
     this.dailyTimeout = setTimeout(async () => {
@@ -259,9 +266,9 @@ export class HeartbeatScheduler {
   }
 
   /**
-   * Compute milliseconds until next 08:30 in the configured timezone.
+   * Compute milliseconds until next daily brief time in the configured timezone.
    */
-  private msUntilNext0830(): number {
+  private msUntilNextBrief(): number {
     const now = new Date();
 
     const fmt = new Intl.DateTimeFormat("en-US", {
@@ -285,7 +292,7 @@ export class HeartbeatScheduler {
     const tzSecond = get("second");
 
     const currentMinutes = tzHour * 60 + tzMinute;
-    const targetMinutes = 8 * 60 + 30; // 08:30
+    const targetMinutes = this.dailyBriefHour * 60 + this.dailyBriefMinute;
 
     let deltaMinutes: number;
     if (currentMinutes < targetMinutes) {
