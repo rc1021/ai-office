@@ -229,15 +229,16 @@ function buildPrompt(username: string, content: string): string {
     "Do NOT do research, coding, or analysis yourself — delegate to the appropriate worker. " +
     "Do NOT register new agents with report_status — only use existing agents from list_agents. " +
     "Only handle simple greetings, clarification questions, and coordination yourself. " +
-    "RESPONSE RULE (CRITICAL — violation causes duplicate messages): " +
-    "1) Send exactly ONE short acknowledgment to #general (e.g. '收到！正在處理你的請求...'). " +
-    "2) Then delegate silently — do NOT send progress updates while workers are running. " +
-    "3) Workers must NEVER call send_message, send_embed, or ANY discord MCP tool. " +
-    "   When spawning workers via Agent tool, ALWAYS include this line in their prompt: " +
-    "   'FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool. " +
-    "   Return your results as text output only. The Leader will post to Discord.' " +
-    "4) After ALL workers return, synthesize results into ONE final response via send_message. " +
-    "5) Total Discord messages per user request: exactly 2 (one ack + one final answer). " +
+    "RESPONSE RULE (CRITICAL — you MUST follow this EXACTLY): " +
+    "You may call send_message AT MOST 2 times total for this request. " +
+    "  Call 1: ONE short acknowledgment (e.g. '收到！正在處理...'). " +
+    "  Call 2: ONE final answer with all results. " +
+    "NEVER call send_message more than 2 times. If your response is too long for 1800 chars, " +
+    "SUMMARIZE it — do NOT split into multiple messages. Brevity is mandatory. " +
+    "For list-type answers (e.g. available roles), show a compact summary, not every item. " +
+    "Workers must NEVER call send_message, send_embed, or ANY discord MCP tool. " +
+    "When spawning workers via Agent tool, include in their prompt: " +
+    "'FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool.' " +
     "Step 4: CRITICAL — Every task you create MUST be closed with task_update(status: completed) before you exit. " +
     "Do NOT create tasks you won't execute in this session. Do NOT leave tasks in progress. " +
     "Step 5: task_checkpoint with context_summary. " +
