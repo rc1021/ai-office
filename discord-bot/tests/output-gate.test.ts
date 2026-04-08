@@ -103,4 +103,77 @@ describe("checkOutputGate", () => {
     const result = checkOutputGate("test-1", "general", "[RESTRICTED] secret data");
     expect(result.allowed).toBe(true);
   });
+
+  // ── Check field on denied results ──────────────────────────────────────────
+
+  it("check1: sets check field on denied-scope block", () => {
+    mockedResolveAgent.mockReturnValue(makeAgent({
+      scopes: ["write:channel:*"],
+      denied_scopes: ["write:channel:alerts"],
+    }));
+    const result = checkOutputGate("test-1", "alerts", "test");
+    expect(result.allowed).toBe(false);
+    expect(result.check).toBe("check1_denied_scope");
+  });
+
+  it("check2: sets check field on missing-scope block", () => {
+    mockedResolveAgent.mockReturnValue(makeAgent({ scopes: [] }));
+    const result = checkOutputGate("test-1", "general", "hello");
+    expect(result.allowed).toBe(false);
+    expect(result.check).toBe("check2_write_scope");
+  });
+
+  // ── Check 3: Channel clearance ─────────────────────────────────────────────
+
+  it("check3: denies audit-log channel when clearance < 3", () => {
+    mockedResolveAgent.mockReturnValue(makeAgent({
+      scopes: ["write:channel:*"],
+      clearance_level: 2,
+    }));
+    const result = checkOutputGate("test-1", "audit-log", "hello");
+    expect(result.allowed).toBe(false);
+    expect(result.check).toBe("check3_channel_clearance");
+    expect(result.reason).toContain("below the minimum");
+  });
+
+  it("check3: allows audit-log channel when clearance = 3", () => {
+    mockedResolveAgent.mockReturnValue(makeAgent({
+      scopes: ["write:channel:*"],
+      clearance_level: 3,
+    }));
+    const result = checkOutputGate("test-1", "audit-log", "hello");
+    expect(result.allowed).toBe(true);
+  });
+
+  it("check3: denies -confidential channel when clearance < 2", () => {
+    mockedResolveAgent.mockReturnValue(makeAgent({
+      scopes: ["write:channel:*"],
+      clearance_level: 1,
+    }));
+    const result = checkOutputGate("test-1", "dept-engineering-confidential", "hello");
+    expect(result.allowed).toBe(false);
+    expect(result.check).toBe("check3_channel_clearance");
+  });
+
+  it("check3: allows -confidential channel when clearance >= 2", () => {
+    mockedResolveAgent.mockReturnValue(makeAgent({
+      scopes: ["write:channel:*"],
+      clearance_level: 2,
+    }));
+    const result = checkOutputGate("test-1", "dept-engineering-confidential", "hello");
+    expect(result.allowed).toBe(true);
+  });
+
+  // ── Check 4: Data classification ──────────────────────────────────────────
+
+  it("check4: sets check field on data-classification block", () => {
+    mockedResolveAgent.mockReturnValue(makeAgent({
+      scopes: ["write:channel:*"],
+      clearance_level: 1,
+    }));
+    const result = checkOutputGate("test-1", "general", "[RESTRICTED] secret data");
+    expect(result.allowed).toBe(false);
+    expect(result.check).toBe("check4_data_classification");
+    expect(result.classification).toBe("RESTRICTED");
+  });
 });

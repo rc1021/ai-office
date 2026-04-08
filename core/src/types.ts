@@ -21,6 +21,7 @@ export interface OutputGateResult {
   allowed: boolean;
   reason?: string;
   classification?: DataClassification;
+  check?: string;
 }
 
 // ─── Throttle ────────────────────────────────────────────────────────────────

@@ -7,6 +7,10 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import Database from "better-sqlite3";
+import { createHash } from "node:crypto";
+import path from "node:path";
+import fs from "node:fs";
 import {
   createCategory,
   createChannel,
@@ -40,6 +44,78 @@ import {
 } from "@ai-office/core";
 import type { RiskLevel, EmbedInput, ThrottleOptions } from "@ai-office/core";
 
+// ─── Audit DB (inline — shares coordination.db via WAL) ──────────────────────
+
+let _auditDb: Database.Database | null = null;
+
+function getAuditDb(): Database.Database | null {
+  return _auditDb;
+}
+
+export function initAuditDb(): void {
+  const workspace =
+    process.env.AI_OFFICE_WORKSPACE ?? path.join(process.cwd(), ".ai-office");
+  const dbDir = path.join(workspace, "state");
+
+  // Do not fail if the workspace doesn't exist yet — audit writes will be no-ops
+  if (!fs.existsSync(dbDir)) {
+    console.warn(
+      `[MCP] Audit DB directory not found at ${dbDir}. OutputGate audit events will not be persisted.`
+    );
+    return;
+  }
+
+  const dbPath = path.join(dbDir, "coordination.db");
+  try {
+    _auditDb = new Database(dbPath);
+    _auditDb.pragma("journal_mode = WAL");
+    _auditDb.pragma("busy_timeout = 5000");
+  } catch (err) {
+    console.error("[MCP] Failed to open audit DB:", err);
+    _auditDb = null;
+  }
+}
+
+function appendAuditEvent(
+  agentId: string,
+  traceId: string,
+  action: string,
+  detail: string
+): void {
+  const db = getAuditDb();
+  if (!db) return; // Silently skip if DB is unavailable
+
+  try {
+    const insertAudit = db.transaction(() => {
+      const lastRow = db
+        .prepare("SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1")
+        .get() as { hash: string } | undefined;
+      const prevHash = lastRow?.hash ?? "genesis";
+
+      const record = JSON.stringify({
+        agentId,
+        traceId,
+        action,
+        detail,
+        prevHash,
+        timestamp: new Date().toISOString(),
+      });
+      const hash = createHash("sha256")
+        .update(prevHash + record)
+        .digest("hex");
+
+      db.prepare(
+        "INSERT INTO audit_log (agent_id, trace_id, action, detail, prev_hash, hash) VALUES (?, ?, ?, ?, ?, ?)"
+      ).run(agentId, traceId, action, detail, prevHash, hash);
+    });
+
+    insertAudit.immediate();
+  } catch (err) {
+    // Never let audit failures surface to the caller
+    console.error("[MCP] appendAuditEvent failed:", err);
+  }
+}
+
 // ─── Input Schemas ────────────────────────────────────────────────────────────
 
 const AgentIdField = z.string().min(1).describe("Agent ID of the caller (e.g. leader-1, software-engineer-1)");
@@ -69,6 +145,7 @@ const SendMessageSchema = z.object({
   content: z.string().min(1).max(2000),
   reply_to_message_id: z.string().optional(),
   page_label: z.string().max(50).optional(),
+  trace_id: z.string().optional().describe("Trace ID for audit correlation"),
 });
 
 const SendEmbedSchema = z.object({
@@ -84,6 +161,7 @@ const SendEmbedSchema = z.object({
     })).max(25).optional(),
     footer: z.string().max(2048).optional(),
   }),
+  trace_id: z.string().optional().describe("Trace ID for audit correlation"),
 });
 
 const ReadMessagesSchema = z.object({
@@ -100,6 +178,7 @@ const CreateThreadSchema = z.object({
   channel_name: z.string().min(1),
   message_id: z.string().min(1),
   thread_name: z.string().min(1).max(100),
+  trace_id: z.string().optional().describe("Trace ID for audit correlation"),
 });
 
 const SendThreadMessageSchema = z.object({
@@ -214,6 +293,7 @@ const TOOLS = [
         content: { type: "string", description: "Message text (max 2000 chars)" },
         reply_to_message_id: { type: "string", description: "Discord message ID to reply to (creates a threaded reply)" },
         page_label: { type: "string", description: "Optional label shown in page footer (max 50 chars), e.g. task ID brief. Only shown when message spans multiple pages." },
+        trace_id: { type: "string", description: "Trace ID for audit correlation" },
       },
       required: ["agent_id", "channel_name", "content"],
     },
@@ -244,6 +324,7 @@ const TOOLS = [
           },
           required: ["title", "description"],
         },
+        trace_id: { type: "string", description: "Trace ID for audit correlation" },
       },
       required: ["agent_id", "channel_name", "embed"],
     },
@@ -293,6 +374,7 @@ const TOOLS = [
         channel_name: { type: "string" },
         message_id: { type: "string", description: "ID of the message to thread from" },
         thread_name: { type: "string", description: "Name for the new thread" },
+        trace_id: { type: "string", description: "Trace ID for audit correlation" },
       },
       required: ["agent_id", "channel_name", "message_id", "thread_name"],
     },
@@ -427,11 +509,23 @@ async function gatedSendMessage(
   content: string,
   options?: ThrottleOptions,
   replyToMessageId?: string,
-  pageLabel?: string
+  pageLabel?: string,
+  traceId?: string
 ): Promise<string> {
   // OutputGate check
   const gate = checkOutputGate(agentId, channelName, content);
   if (!gate.allowed) {
+    appendAuditEvent(
+      agentId,
+      traceId ?? "",
+      "outputgate.denied",
+      JSON.stringify({
+        channel: channelName,
+        check: gate.check ?? null,
+        reason: gate.reason,
+        classification: gate.classification ?? null,
+      })
+    );
     throw new GateError(gate.reason!);
   }
 
@@ -458,11 +552,23 @@ async function gatedSendMessage(
 async function gatedSendEmbed(
   agentId: string,
   channelName: string,
-  embedInput: EmbedInput
+  embedInput: EmbedInput,
+  traceId?: string
 ): Promise<string> {
   // OutputGate check (use embed description as content for classification check)
   const gate = checkOutputGate(agentId, channelName, embedInput.description);
   if (!gate.allowed) {
+    appendAuditEvent(
+      agentId,
+      traceId ?? "",
+      "outputgate.denied",
+      JSON.stringify({
+        channel: channelName,
+        check: gate.check ?? null,
+        reason: gate.reason,
+        classification: gate.classification ?? null,
+      })
+    );
     throw new GateError(gate.reason!);
   }
 
@@ -600,7 +706,8 @@ export function createMcpServer(): Server {
             input.content,
             opts,
             input.reply_to_message_id,
-            input.page_label
+            input.page_label,
+            input.trace_id
           );
           if (result.startsWith("BUFFERED:")) {
             return makeTextContent(result);
@@ -615,7 +722,8 @@ export function createMcpServer(): Server {
           const result = await gatedSendEmbed(
             input.agent_id,
             input.channel_name,
-            input.embed as EmbedInput
+            input.embed as EmbedInput,
+            input.trace_id
           );
           if (result.startsWith("BUFFERED:")) {
             return makeTextContent(result);
@@ -680,6 +788,17 @@ export function createMcpServer(): Server {
           // OutputGate check for the parent channel
           const gate = checkOutputGate(input.agent_id, input.channel_name, input.thread_name);
           if (!gate.allowed) {
+            appendAuditEvent(
+              input.agent_id,
+              input.trace_id ?? "",
+              "outputgate.denied",
+              JSON.stringify({
+                channel: input.channel_name,
+                check: gate.check ?? null,
+                reason: gate.reason,
+                classification: gate.classification ?? null,
+              })
+            );
             return makeGateError(gate.reason!);
           }
           const result = await createThread(
@@ -710,6 +829,17 @@ export function createMcpServer(): Server {
           // OutputGate check for the approval channel
           const gate = checkOutputGate(input.agent_id, input.channel_name, input.description);
           if (!gate.allowed) {
+            appendAuditEvent(
+              input.agent_id,
+              input.trace_id ?? "",
+              "outputgate.denied",
+              JSON.stringify({
+                channel: input.channel_name,
+                check: gate.check ?? null,
+                reason: gate.reason,
+                classification: gate.classification ?? null,
+              })
+            );
             return makeGateError(gate.reason!);
           }
           const commonOptions = {
@@ -861,6 +991,9 @@ export function createMcpServer(): Server {
 }
 
 export async function startMcpServer(): Promise<void> {
+  // Initialize audit DB connection (shares coordination.db via WAL)
+  initAuditDb();
+
   const server = createMcpServer();
   const transport = new StdioServerTransport();
   await server.connect(transport);
