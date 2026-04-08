@@ -1,6 +1,6 @@
 {
   "name": "ai-office-setup",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "AI Office setup wizard",
   "type": "module",
   "main": "dist/wizard.js",

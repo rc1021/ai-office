@@ -1,6 +1,6 @@
 {
   "name": "ai-office-coordination",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "AI Office Coordination MCP Server — shared state, task management, event bus, observability",
   "type": "module",
   "main": "dist/index.js",

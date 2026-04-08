@@ -1,6 +1,6 @@
 {
   "name": "@ai-office/core",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "AI Office core — platform-agnostic orchestration logic",
   "type": "module",
   "main": "dist/index.js",

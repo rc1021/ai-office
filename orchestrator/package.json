@@ -1,6 +1,6 @@
 {
   "name": "ai-office-orchestrator",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "AI Office Orchestrator — agent lifecycle, identity, template assembly",
   "type": "module",
   "main": "dist/index.js",

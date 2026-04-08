@@ -1,6 +1,6 @@
 {
   "name": "ai-office-discord-bot",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "AI Office Discord Bot with MCP Server",
   "type": "module",
   "main": "dist/index.js",

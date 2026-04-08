@@ -1,6 +1,6 @@
 {
   "name": "ai-office-pixel-office",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "AI Office Pixel Office — real-time agent visualization",
   "type": "module",
   "scripts": {
