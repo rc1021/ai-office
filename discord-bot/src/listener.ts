@@ -34,6 +34,7 @@ import {
   loadOfficeConfig,
   runClaude,
   HeartbeatScheduler,
+  SessionStore,
   COLORS,
 } from "@ai-office/core";
 import type { ClaudeRunnerConfig } from "@ai-office/core";
@@ -103,6 +104,11 @@ const BASE_CLAUDE_CONFIG: ClaudeRunnerConfig = {
 // Will be set to include model once config is loaded in ClientReady
 let leaderClaudeConfig: ClaudeRunnerConfig = BASE_CLAUDE_CONFIG;
 
+// Session store — persists claude --resume session IDs per user per channel
+const sessionStore = new SessionStore(
+  path.join(PROJECT_DIR, ".ai-office", "state", "sessions.json")
+);
+
 const STARTUP_CHECKLIST_PROMPT =
   "You are the AI Office Leader. This is the first launch. " +
   "Follow your Startup Checklist in agents/leader/CLAUDE.md: " +
@@ -125,8 +131,8 @@ async function checkFirstRun(): Promise<void> {
   try {
     const response = await runClaude(STARTUP_CHECKLIST_PROMPT, leaderClaudeConfig);
     console.log("[Listener] Setup complete! Check Discord #general.");
-    if (response) {
-      console.log("[Listener] Leader output:", response.substring(0, 300));
+    if (response.output) {
+      console.log("[Listener] Leader output:", response.output.substring(0, 300));
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -175,6 +181,9 @@ async function enqueueMessage(message: Message): Promise<void> {
   jobQueue.push({ type: "message", message });
   console.log(`[Listener] Queued message from ${message.author.username} (queue size: ${jobQueue.length}, active: ${activeJobs}/${maxConcurrent})`);
 
+  // Acknowledge immediately so the user sees ⏳ even if the job has to wait in queue
+  try { await message.react("⏳"); } catch { /* non-fatal */ }
+
   processQueue();
 }
 
@@ -220,8 +229,7 @@ async function handleMessage(message: Message): Promise<void> {
 
   console.log(`[Listener] Processing message from ${message.author.username}: ${userContent.substring(0, 80)}`);
 
-  // 1. Acknowledge with ⏳
-  try { await message.react("⏳"); } catch { /* non-fatal */ }
+  // 1. (⏳ already added at enqueue time in enqueueMessage)
 
   // 2. Resolve reply context (if user replied to a message)
   //    Extract text + embeds, save full content as file, put brief in prompt
@@ -290,10 +298,23 @@ async function handleMessage(message: Message): Promise<void> {
   const displayName = message.member?.displayName ?? message.author.displayName ?? message.author.username;
   const prompt = buildPrompt(displayName, userContent, message.id, replyContext, savedAttachments, workerModel);
 
+  // Resolve session key and attach existing session ID for --resume
+  const sessionKey = `channel:${message.channelId}:${message.author.id}`;
+  const existingSessionId = sessionStore.get(sessionKey);
+  const sessionConfig = existingSessionId
+    ? { ...leaderClaudeConfig, resumeSessionId: existingSessionId }
+    : leaderClaudeConfig;
+
   try {
-    const output = await runClaude(prompt, leaderClaudeConfig);
-    if (output) {
-      console.log("[Listener] Claude output (not posted to Discord):", output.substring(0, 200));
+    const result = await runClaude(prompt, sessionConfig);
+
+    // Persist the returned session ID for the next message from this user
+    if (result.sessionId) {
+      sessionStore.upsert(sessionKey, result.sessionId);
+    }
+
+    if (result.output) {
+      console.log("[Listener] Claude output (not posted to Discord):", result.output.substring(0, 200));
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -319,9 +340,9 @@ async function handleApproval(approval: ApprovalRequest): Promise<void> {
   const prompt = buildApprovalPrompt(approval, workerModel);
 
   try {
-    const output = await runClaude(prompt, leaderClaudeConfig);
-    if (output) {
-      console.log("[Listener] Claude approval output (not posted to Discord):", output.substring(0, 200));
+    const result = await runClaude(prompt, leaderClaudeConfig);
+    if (result.output) {
+      console.log("[Listener] Claude approval output (not posted to Discord):", result.output.substring(0, 200));
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -551,6 +572,8 @@ async function main(): Promise<void> {
       );
       heartbeat.start();
       console.log("[Listener] HeartbeatScheduler started");
+
+      sessionStore.start();
     } catch (err) {
       console.error("[Listener] Failed to start subsystems:", err);
     }
@@ -617,6 +640,7 @@ async function main(): Promise<void> {
     console.log(`\n[Listener] Received ${signal}. Shutting down...`);
     if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
     if (heartbeat) heartbeat.stop();
+    sessionStore.stop();
     client.destroy();
     console.log("[Listener] Goodbye.");
     process.exit(0);

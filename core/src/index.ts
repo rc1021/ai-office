@@ -27,7 +27,10 @@ export type { OfficeConfig, AuditConfig, ModelsConfig } from "./config-loader.js
 
 // Claude runner
 export { runClaude } from "./claude-runner.js";
-export type { ClaudeRunnerConfig } from "./claude-runner.js";
+export type { ClaudeRunnerConfig, ClaudeRunResult } from "./claude-runner.js";
+
+// Session store
+export { SessionStore } from "./session-store.js";
 
 // Security
 export { checkOutputGate } from "./output-gate.js";

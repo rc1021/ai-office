@@ -14,9 +14,15 @@ export interface ClaudeRunnerConfig {
   mcpConfigPath: string;
   allowedTools: string[];
   model?: string;
+  resumeSessionId?: string; // if set, pass --resume <id> to claude
 }
 
-export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<string> {
+export interface ClaudeRunResult {
+  output: string;    // the assistant's text response
+  sessionId: string; // session UUID from claude's JSON output (empty string if unavailable)
+}
+
+export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<ClaudeRunResult> {
   return new Promise((resolve, reject) => {
     const args: string[] = [
       "-p", prompt,
@@ -24,6 +30,13 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<s
 
     if (config.model) {
       args.push("--model", config.model);
+    }
+
+    // Always request JSON output so we can extract session_id
+    args.push("--output-format", "json");
+
+    if (config.resumeSessionId) {
+      args.push("--resume", config.resumeSessionId);
     }
 
     args.push("--allowedTools", ...config.allowedTools);
@@ -43,11 +56,11 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<s
       stdio: ["ignore", "pipe", "pipe"],
     });
 
-    let output = "";
+    let rawOutput = "";
     let stderrOutput = "";
 
     proc.stdout.on("data", (data: Buffer) => {
-      output += data.toString();
+      rawOutput += data.toString();
     });
 
     proc.stderr.on("data", (data: Buffer) => {
@@ -62,7 +75,17 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<s
 
     proc.on("close", (code) => {
       if (code === 0) {
-        resolve(output.trim());
+        const trimmed = rawOutput.trim();
+        try {
+          const parsed = JSON.parse(trimmed);
+          resolve({
+            output: typeof parsed.result === "string" ? parsed.result : trimmed,
+            sessionId: typeof parsed.session_id === "string" ? parsed.session_id : "",
+          });
+        } catch {
+          // JSON parse failed — return raw output with empty sessionId
+          resolve({ output: trimmed, sessionId: "" });
+        }
       } else {
         reject(
           new Error(

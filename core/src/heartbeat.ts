@@ -412,8 +412,8 @@ export class HeartbeatScheduler {
       "Return PASS or FAIL as your final output.";
 
     try {
-      const output = await runClaude(prompt, this.auditClaudeConfig);
-      return output.toUpperCase().includes("PASS");
+      const result = await runClaude(prompt, this.auditClaudeConfig);
+      return result.output.toUpperCase().includes("PASS");
     } catch {
       return false;
     }
@@ -642,7 +642,7 @@ export class HeartbeatScheduler {
       "Keep it concise and actionable. Use zh-TW language." +
       catchUpNote;
 
-    await runClaude(prompt, this.claudeConfig);
+    await runClaude(prompt, this.claudeConfig); // result unused — daily brief posts via MCP
   }
 
   /**
