@@ -25,6 +25,7 @@ import {
 } from "./message-manager.js";
 import {
   createApproval,
+  createBatchApproval,
   checkApproval,
 } from "./approval-manager.js";
 import { setupServer } from "./setup-server.js";
@@ -113,6 +114,17 @@ const CreateApprovalSchema = z.object({
   action: z.string().min(1),
   description: z.string().min(1),
   risk_level: z.enum(["GREEN", "YELLOW", "RED"]),
+  batch_items: z.array(z.object({
+    id: z.string(),
+    label: z.string(),
+    detail: z.string().optional(),
+    reversible: z.boolean(),
+  })).optional(),
+  trace_id: z.string().optional(),
+  task_id: z.string().optional(),
+  requesting_agent_id: z.string().optional(),
+  timeout_seconds: z.number().optional(),
+  idempotency_key: z.string().optional(),
 });
 
 const CheckApprovalSchema = z.object({
@@ -309,6 +321,25 @@ const TOOLS = [
         action: { type: "string", description: "What is being approved" },
         description: { type: "string", description: "Detailed explanation" },
         risk_level: { type: "string", enum: ["GREEN", "YELLOW", "RED"] },
+        batch_items: {
+          type: "array",
+          description: "Optional list of batch items for batch approval",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              label: { type: "string" },
+              detail: { type: "string" },
+              reversible: { type: "boolean" },
+            },
+            required: ["id", "label", "reversible"],
+          },
+        },
+        trace_id: { type: "string" },
+        task_id: { type: "string" },
+        requesting_agent_id: { type: "string" },
+        timeout_seconds: { type: "number" },
+        idempotency_key: { type: "string" },
       },
       required: ["agent_id", "channel_name", "action", "description", "risk_level"],
     },
@@ -681,12 +712,31 @@ export function createMcpServer(): Server {
           if (!gate.allowed) {
             return makeGateError(gate.reason!);
           }
-          const approval = await createApproval(
-            input.channel_name,
-            input.action,
-            input.description,
-            input.risk_level as RiskLevel
-          );
+          const commonOptions = {
+            traceId: input.trace_id,
+            taskId: input.task_id ?? null,
+            requestingAgentId: input.requesting_agent_id,
+            timeoutSeconds: input.timeout_seconds,
+            idempotencyKey: input.idempotency_key ?? null,
+          };
+          let approval;
+          if (input.batch_items && input.batch_items.length > 0) {
+            approval = await createBatchApproval(
+              input.channel_name,
+              input.action,
+              input.batch_items,
+              input.risk_level as RiskLevel,
+              commonOptions
+            );
+          } else {
+            approval = await createApproval(
+              input.channel_name,
+              input.action,
+              input.description,
+              input.risk_level as RiskLevel,
+              commonOptions
+            );
+          }
           return makeTextContent(
             `Approval request created.\nApproval ID: ${approval.id}\nStatus: ${approval.status}\nChannel: #${approval.channelName}\nRisk: ${approval.riskLevel}\n\nUse check_approval with ID "${approval.id}" to poll for a response.`
           );

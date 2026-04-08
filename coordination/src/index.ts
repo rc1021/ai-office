@@ -12,6 +12,7 @@ import {
 import {
   validateNumeric, crossVerify, reportAnomaly, pipelineGate,
 } from "./tools/validation-tools.js";
+import { resolveRisk, requestApprovalEscalation } from "./tools/approval-tools.js";
 import { initAuth, enforceIdentity, enforceClearance } from "./auth.js";
 
 // ── Resolve workspace path ──
@@ -336,6 +337,46 @@ server.tool(
     })),
   },
   async (params) => ({ content: [{ type: "text" as const, text: JSON.stringify(pipelineGate(params), null, 2) }] })
+);
+
+// ════════════════════════════════════════
+// Approval Escalation Tools (P2)
+// ════════════════════════════════════════
+
+server.tool(
+  "request_approval_escalation",
+  "Worker signals a high-risk operation to the Leader for approval routing",
+  {
+    agent_id: z.string(),
+    task_id: z.string(),
+    trace_id: z.string(),
+    action: z.string(),
+    description: z.string(),
+    suggested_risk_level: z.enum(["GREEN", "YELLOW", "RED", "UNKNOWN"]),
+    risk_justification: z.string(),
+    preview_data: z.string().optional(),
+    timeout_preference: z.enum(["block", "auto_cancel"]).optional(),
+  },
+  async (params) => {
+    enforceIdentity(params.agent_id);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(requestApprovalEscalation(params), null, 2) }],
+    };
+  }
+);
+
+server.tool(
+  "resolve_risk",
+  "Resolve risk level for an operation using the risk matrix",
+  {
+    operation: z.string(),
+    scope: z.string(),
+    agent_role_id: z.string(),
+    batch_count: z.number().optional(),
+  },
+  async (params) => ({
+    content: [{ type: "text" as const, text: JSON.stringify(resolveRisk(params.operation, params.scope, params.agent_role_id, params.batch_count), null, 2) }],
+  })
 );
 
 // ════════════════════════════════════════

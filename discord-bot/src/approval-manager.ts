@@ -66,6 +66,7 @@ export function initApprovalsDb(): Database.Database {
       message_id TEXT,
       idempotency_key TEXT UNIQUE,
       batch_count INTEGER,
+      preview_artifact_path TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       resolved_at TEXT,
       resolved_by TEXT
@@ -191,6 +192,7 @@ interface ApprovalRow {
   message_id: string | null;
   idempotency_key: string | null;
   batch_count: number | null;
+  preview_artifact_path: string | null;
   created_at: string;
   resolved_at: string | null;
   resolved_by: string | null;
@@ -215,6 +217,7 @@ function rowToApproval(row: ApprovalRow): ApprovalRequest {
     deadlineAt: row.deadline_at ? new Date(row.deadline_at) : null,
     idempotencyKey: row.idempotency_key,
     batchCount: row.batch_count,
+    previewArtifactPath: row.preview_artifact_path ?? null,
   };
 }
 
@@ -256,6 +259,7 @@ export async function createApproval(
     timeoutSeconds?: number;
     idempotencyKey?: string | null;
     batchCount?: number | null;
+    previewArtifactPath?: string | null;
   }
 ): Promise<ApprovalRequest> {
   const db = getApprovalDb();
@@ -273,6 +277,7 @@ export async function createApproval(
   const requestingAgentId = options?.requestingAgentId ?? "leader";
   const idempotencyKey = options?.idempotencyKey ?? null;
   const batchCount = options?.batchCount ?? null;
+  const previewArtifactPath = options?.previewArtifactPath ?? null;
 
   // Idempotency: if a key is provided and already exists, return that approval
   if (idempotencyKey) {
@@ -289,8 +294,9 @@ export async function createApproval(
   db.prepare(`
     INSERT INTO approvals
       (id, trace_id, task_id, requesting_agent_id, channel_name, action, description,
-       risk_level, status, timeout_seconds, deadline_at, message_id, idempotency_key, batch_count, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, NULL, ?, ?, datetime('now'))
+       risk_level, status, timeout_seconds, deadline_at, message_id, idempotency_key, batch_count,
+       preview_artifact_path, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, NULL, ?, ?, ?, datetime('now'))
   `).run(
     approvalId,
     traceId,
@@ -303,7 +309,8 @@ export async function createApproval(
     timeoutSeconds,
     deadlineAt ? deadlineAt.toISOString() : null,
     idempotencyKey,
-    batchCount
+    batchCount,
+    previewArtifactPath
   );
 
   const approval: ApprovalRequest = {
@@ -324,6 +331,7 @@ export async function createApproval(
     deadlineAt,
     idempotencyKey,
     batchCount,
+    previewArtifactPath,
   };
 
   const embed = buildApprovalEmbed(approval);
@@ -359,6 +367,45 @@ export function listApprovals(): ApprovalRequest[] {
     .prepare("SELECT * FROM approvals ORDER BY created_at DESC")
     .all() as ApprovalRow[];
   return rows.map(rowToApproval);
+}
+
+export async function createBatchApproval(
+  channelName: string,
+  action: string,
+  items: Array<{ id: string; label: string; detail?: string; reversible: boolean }>,
+  riskLevel: RiskLevel,
+  options?: {
+    traceId?: string;
+    taskId?: string | null;
+    requestingAgentId?: string;
+    timeoutSeconds?: number;
+    idempotencyKey?: string | null;
+    previewTruncateAt?: number;
+  }
+): Promise<ApprovalRequest> {
+  const approvalId = generateApprovalId();
+  const stateDir = path.join(projectRoot, ".ai-office", "state");
+  fs.mkdirSync(stateDir, { recursive: true });
+  const previewPath = path.join(stateDir, `batch-preview-${approvalId}.json`);
+  fs.writeFileSync(previewPath, JSON.stringify(items, null, 2), "utf-8");
+
+  const truncateAt = options?.previewTruncateAt ?? 10;
+  const shown = items.slice(0, truncateAt);
+  const remaining = items.length - shown.length;
+  const lines = shown.map((item, i) => {
+    const detail = item.detail ? ` — ${item.detail}` : "";
+    return `${i + 1}. ${item.label}${detail}`;
+  });
+  if (remaining > 0) {
+    lines.push(`...and ${remaining} more (see preview file)`);
+  }
+  const description = lines.join("\n");
+
+  return createApproval(channelName, action, description, riskLevel, {
+    ...options,
+    batchCount: items.length,
+    previewArtifactPath: previewPath,
+  });
 }
 
 // ── Timeout sweep ─────────────────────────────────────────────────────────────
@@ -500,13 +547,37 @@ export function registerApprovalInteractionHandler(externalClient?: Client): voi
     }
 
     if (action === "preview") {
-      await interaction.editReply({
-        content:
-          `**Preview for Approval \`${approvalId}\`**\n` +
-          `**Action:** ${row.action}\n` +
-          `**Description:** ${row.description}\n` +
-          `**Risk:** ${getRiskEmoji(row.risk_level as RiskLevel)} ${row.risk_level}`,
-      });
+      if (row.preview_artifact_path) {
+        try {
+          const raw = fs.readFileSync(row.preview_artifact_path, "utf-8");
+          const items = JSON.parse(raw) as Array<{ id: string; label: string; detail?: string; reversible: boolean }>;
+          const lines = items.map((item, i) => {
+            const detail = item.detail ? ` — ${item.detail}` : "";
+            return `${i + 1}. ${item.label}${detail}`;
+          });
+          let content = `**Batch Preview** (${items.length} items total):\n` + lines.join("\n");
+          if (content.length > 1800) {
+            content = content.slice(0, 1800) + "\n...and more";
+          }
+          await interaction.editReply({ content });
+        } catch {
+          await interaction.editReply({
+            content:
+              `**Preview for Approval \`${approvalId}\`**\n` +
+              `**Action:** ${row.action}\n` +
+              `**Description:** ${row.description}\n` +
+              `**Risk:** ${getRiskEmoji(row.risk_level as RiskLevel)} ${row.risk_level}`,
+          });
+        }
+      } else {
+        await interaction.editReply({
+          content:
+            `**Preview for Approval \`${approvalId}\`**\n` +
+            `**Action:** ${row.action}\n` +
+            `**Description:** ${row.description}\n` +
+            `**Risk:** ${getRiskEmoji(row.risk_level as RiskLevel)} ${row.risk_level}`,
+        });
+      }
       return;
     }
 

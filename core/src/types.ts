@@ -58,6 +58,7 @@ export interface ApprovalRequest {
   deadlineAt?: Date | null;           // createdAt + timeoutSeconds
   idempotencyKey?: string | null;
   batchCount?: number | null;
+  previewArtifactPath?: string | null;
 }
 
 export interface EmbedField {

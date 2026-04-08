@@ -14,7 +14,11 @@ export type EventType =
   | "verification.failed"
   | "agent.online"
   | "agent.offline"
-  | "agent.heartbeat";
+  | "agent.heartbeat"
+  | "approval.escalation_requested"
+  | "approval.created"
+  | "approval.resolved"
+  | "approval.timeout";
 
 // ── Task ──
 
