@@ -830,8 +830,8 @@ export function createMcpServer(): Server {
             `    Role: ${profile.role_id}`,
             `    Department: ${profile.department}`,
             `    Clearance: ${profile.clearance_level}`,
-            `    Scopes: ${profile.scopes.filter(s => s.startsWith("write:discord:")).join(", ") || "(none)"}`,
-            `    Denied: ${profile.denied_scopes.filter(s => s.startsWith("write:discord:")).join(", ") || "(none)"}`,
+            `    Scopes: ${profile.scopes.filter(s => s.startsWith("write:channel:")).join(", ") || "(none)"}`,
+            `    Denied: ${profile.denied_scopes.filter(s => s.startsWith("write:channel:")).join(", ") || "(none)"}`,
           ].filter(Boolean);
 
           return makeTextContent(lines.join("\n"));

@@ -62,11 +62,8 @@ security:
     - "read:filesystem:docs"
     - "write:filesystem:docs"
     - "read:filesystem:data"
-    - "read:discord:ai-internal"
-    - "write:discord:ai-internal"
   denied_scopes:
-    - "write:discord:general"
-    - "write:discord:audit-log"
+    - "write:channel:general"
     - "execute:shell:*"
     - "write:filesystem:src"
   requires_approval:

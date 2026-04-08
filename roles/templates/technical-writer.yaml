@@ -70,11 +70,8 @@ security:
     - "read:filesystem:docs"
     - "write:filesystem:docs"
     - "execute:shell:git"
-    - "read:discord:ai-internal"
-    - "write:discord:ai-internal"
   denied_scopes:
-    - "write:discord:general"
-    - "write:discord:audit-log"
+    - "write:channel:general"
     - "execute:shell:rm"
     - "execute:shell:sudo"
     - "execute:shell:curl"

@@ -74,11 +74,8 @@ security:
     - "execute:shell:node"
     - "execute:shell:git"
     - "execute:shell:docker"
-    - "read:discord:ai-internal"
-    - "write:discord:ai-internal"
   denied_scopes:
-    - "write:discord:general"
-    - "write:discord:audit-log"
+    - "write:channel:general"
     - "execute:shell:rm"
     - "execute:shell:sudo"
     - "execute:shell:curl"

@@ -59,22 +59,17 @@ capabilities:
 security:
   clearance_level: 3
   scopes:
-    - "read:discord:*"
-    - "write:discord:general"
-    - "write:discord:approvals"
-    - "write:discord:daily-brief"
-    - "write:discord:alerts"
-    - "write:discord:ai-internal"
-    - "write:discord:task-board"
-    - "write:discord:watercooler"
-    - "write:discord:bot-status"
+    - "read:channel:*"
+    - "write:channel:general"
+    - "write:channel:approvals"
+    - "write:channel:daily-brief"
+    - "write:channel:alerts"
     - "read:coordination:*"
     - "write:coordination:*"
     - "execute:agent:spawn"
     - "execute:agent:stop"
     - "approve:task:*"
   denied_scopes:
-    - "write:discord:audit-log"
     - "execute:shell:rm"
     - "execute:shell:sudo"
   requires_approval:

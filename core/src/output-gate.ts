@@ -9,17 +9,13 @@ const CLASSIFICATION_PATTERNS: Array<{ pattern: RegExp; level: DataClassificatio
   { pattern: /\[INTERNAL\]/i, level: "INTERNAL", clearance: 1 },
 ];
 
-// Channels that require specific clearance levels
-const CHANNEL_CLEARANCE: Record<string, number> = {
-  "audit-log": 3, // system-only
-};
 
 // ─── Scope Matching ──────────────────────────────────────────────────────────
 
 function matchesScope(scope: string, channelName: string): boolean {
-  // Parse scope: write:discord:{pattern}
+  // Parse scope: write:channel:{pattern}
   const parts = scope.split(":");
-  if (parts.length < 3 || parts[0] !== "write" || parts[1] !== "discord") {
+  if (parts.length < 3 || parts[0] !== "write" || parts[1] !== "channel") {
     return false;
   }
 
@@ -57,18 +53,14 @@ function extractDepartmentFromChannel(channelName: string): string | null {
   return parts;
 }
 
-function isConfidentialChannel(channelName: string): boolean {
-  return channelName.endsWith("-confidential");
-}
 
 // ─── OutputGate ──────────────────────────────────────────────────────────────
 
 /**
  * Check if an agent is allowed to send a message to a channel.
- * Enforces three checks:
- * 1. Scope check — does the agent have write:discord:{channel} scope?
- * 2. Clearance check — does the agent meet the channel's clearance requirement?
- * 3. Data classification check — is the content appropriate for the agent's clearance?
+ * Enforces two checks:
+ * 1. Scope check — does the agent have write:channel:{channel} scope?
+ * 2. Data classification check — is the content appropriate for the agent's clearance?
  */
 export function checkOutputGate(
   agentId: string,
@@ -101,29 +93,11 @@ export function checkOutputGate(
   if (!hasScope) {
     return {
       allowed: false,
-      reason: `Agent "${agentId}" lacks write:discord:${normalizedChannel} scope`,
+      reason: `Agent "${agentId}" lacks write:channel:${normalizedChannel} scope`,
     };
   }
 
-  // ── Check 3: Clearance check ──
-  // Fixed channels with specific clearance requirements
-  const requiredClearance = CHANNEL_CLEARANCE[normalizedChannel];
-  if (requiredClearance !== undefined && agent.clearance_level < requiredClearance) {
-    return {
-      allowed: false,
-      reason: `Agent "${agentId}" clearance ${agent.clearance_level} < required ${requiredClearance} for #${normalizedChannel}`,
-    };
-  }
-
-  // Confidential department channels require clearance >= 2
-  if (isConfidentialChannel(normalizedChannel) && agent.clearance_level < 2) {
-    return {
-      allowed: false,
-      reason: `Agent "${agentId}" clearance ${agent.clearance_level} < 2 required for confidential channel #${normalizedChannel}`,
-    };
-  }
-
-  // ── Check 4: Data classification check ──
+  // ── Check 3: Data classification check ──
   for (const { pattern, level, clearance } of CLASSIFICATION_PATTERNS) {
     if (pattern.test(content) && agent.clearance_level < clearance) {
       return {

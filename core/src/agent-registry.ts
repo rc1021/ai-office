@@ -62,7 +62,7 @@ const SYSTEM_PROFILE: AgentProfile = {
   role_id: "system",
   department: "system",
   clearance_level: 3,
-  scopes: ["write:discord:*", "read:discord:*"],
+  scopes: ["write:channel:*", "read:channel:*"],
   denied_scopes: [],
 };
 
@@ -99,7 +99,7 @@ export function resolveAgent(agentId: string): AgentProfile {
       department: "unknown",
       clearance_level: 0,
       scopes: [],
-      denied_scopes: ["write:discord:*"],
+      denied_scopes: ["write:channel:*"],
     };
   }
 

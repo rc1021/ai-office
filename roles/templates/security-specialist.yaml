@@ -66,12 +66,8 @@ security:
     - "write:coordination:tasks"
     - "write:coordination:artifacts"
     - "read:filesystem:*"
-    - "read:discord:ai-internal"
-    - "write:discord:ai-internal"
-    - "read:discord:audit-log"
   denied_scopes:
-    - "write:discord:general"
-    - "write:discord:audit-log"
+    - "write:channel:general"
     - "execute:shell:rm"
     - "execute:shell:sudo"
     - "write:filesystem:src"

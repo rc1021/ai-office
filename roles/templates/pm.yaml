@@ -60,16 +60,11 @@ security:
     - "read:coordination:*"
     - "write:coordination:tasks"
     - "write:coordination:status"
-    - "read:discord:ai-internal"
-    - "read:discord:task-board"
-    - "write:discord:ai-internal"
-    - "write:discord:task-board"
     - "read:filesystem:docs"
     - "write:filesystem:docs"
   denied_scopes:
-    - "write:discord:audit-log"
     - "execute:shell:*"
-    - "write:discord:general"
+    - "write:channel:general"
   requires_approval:
     - external-api
   max_autonomous_risk: GREEN

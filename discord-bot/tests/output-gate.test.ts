@@ -30,28 +30,28 @@ describe("checkOutputGate", () => {
   });
 
   it("allows with wildcard scope", () => {
-    mockedResolveAgent.mockReturnValue(makeAgent({ scopes: ["write:discord:*"] }));
+    mockedResolveAgent.mockReturnValue(makeAgent({ scopes: ["write:channel:*"] }));
     const result = checkOutputGate("test-1", "general", "hello");
     expect(result.allowed).toBe(true);
   });
 
   it("denies when no matching scope", () => {
-    mockedResolveAgent.mockReturnValue(makeAgent({ scopes: ["write:discord:alerts"] }));
+    mockedResolveAgent.mockReturnValue(makeAgent({ scopes: ["write:channel:alerts"] }));
     const result = checkOutputGate("test-1", "general", "hello");
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain("lacks write");
   });
 
   it("allows with exact scope match", () => {
-    mockedResolveAgent.mockReturnValue(makeAgent({ scopes: ["write:discord:general"] }));
+    mockedResolveAgent.mockReturnValue(makeAgent({ scopes: ["write:channel:general"] }));
     const result = checkOutputGate("test-1", "general", "hello");
     expect(result.allowed).toBe(true);
   });
 
   it("denied scope overrides allowed scope", () => {
     mockedResolveAgent.mockReturnValue(makeAgent({
-      scopes: ["write:discord:*"],
-      denied_scopes: ["write:discord:alerts"],
+      scopes: ["write:channel:*"],
+      denied_scopes: ["write:channel:alerts"],
     }));
     const result = checkOutputGate("test-1", "alerts", "test");
     expect(result.allowed).toBe(false);
@@ -79,34 +79,15 @@ describe("checkOutputGate", () => {
   it("allows with dept-* glob scope", () => {
     mockedResolveAgent.mockReturnValue(makeAgent({
       department: "marketing",
-      scopes: ["write:discord:dept-*"],
+      scopes: ["write:channel:dept-*"],
     }));
     const result = checkOutputGate("test-1", "dept-sales", "hi");
     expect(result.allowed).toBe(true);
   });
 
-  it("denies low clearance for confidential channel", () => {
-    mockedResolveAgent.mockReturnValue(makeAgent({
-      scopes: ["write:discord:dept-*"],
-      clearance_level: 1,
-    }));
-    const result = checkOutputGate("test-1", "dept-engineering-confidential", "test");
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toContain("confidential");
-  });
-
-  it("allows clearance 2 for confidential channel", () => {
-    mockedResolveAgent.mockReturnValue(makeAgent({
-      scopes: ["write:discord:dept-*"],
-      clearance_level: 2,
-    }));
-    const result = checkOutputGate("test-1", "dept-engineering-confidential", "test");
-    expect(result.allowed).toBe(true);
-  });
-
   it("denies RESTRICTED content with low clearance", () => {
     mockedResolveAgent.mockReturnValue(makeAgent({
-      scopes: ["write:discord:*"],
+      scopes: ["write:channel:*"],
       clearance_level: 1,
     }));
     const result = checkOutputGate("test-1", "general", "[RESTRICTED] secret data");
@@ -116,7 +97,7 @@ describe("checkOutputGate", () => {
 
   it("allows RESTRICTED content with clearance 3", () => {
     mockedResolveAgent.mockReturnValue(makeAgent({
-      scopes: ["write:discord:*"],
+      scopes: ["write:channel:*"],
       clearance_level: 3,
     }));
     const result = checkOutputGate("test-1", "general", "[RESTRICTED] secret data");

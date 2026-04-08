@@ -173,14 +173,14 @@
           },
           "description": "Permitted action scopes",
           "examples": [
-            ["read:filesystem", "write:filesystem", "read:discord:ai-internal", "write:discord:general"]
+            ["read:filesystem", "write:filesystem", "read:channel:general", "write:channel:general"]
           ]
         },
         "denied_scopes": {
           "type": "array",
           "items": { "type": "string" },
           "description": "Explicitly denied scopes (override grants)",
-          "examples": [["write:discord:audit-log", "execute:shell:rm"]]
+          "examples": [["write:channel:approvals", "execute:shell:rm"]]
         },
         "requires_approval": {
           "type": "array",

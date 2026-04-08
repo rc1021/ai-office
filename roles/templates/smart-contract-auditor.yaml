@@ -71,11 +71,8 @@ security:
     - "read:filesystem:docs"
     - "execute:shell:npm"
     - "execute:shell:node"
-    - "read:discord:ai-internal"
-    - "write:discord:ai-internal"
   denied_scopes:
-    - "write:discord:general"
-    - "write:discord:audit-log"
+    - "write:channel:general"
     - "write:filesystem:src"
     - "execute:shell:rm"
     - "execute:shell:sudo"
