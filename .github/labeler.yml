@@ -1,0 +1,33 @@
+role-template:
+  - changed-files:
+    - any-glob-to-any-file: 'roles/templates/**'
+
+core:
+  - changed-files:
+    - any-glob-to-any-file: 'core/src/**'
+
+discord:
+  - changed-files:
+    - any-glob-to-any-file: 'discord-bot/src/**'
+
+coordination:
+  - changed-files:
+    - any-glob-to-any-file: 'coordination/src/**'
+
+pixel-office:
+  - changed-files:
+    - any-glob-to-any-file: 'pixel-office/**'
+
+cli:
+  - changed-files:
+    - any-glob-to-any-file: 'cli/src/**'
+    - any-glob-to-any-file: 'bin/**'
+
+documentation:
+  - changed-files:
+    - any-glob-to-any-file: 'docs/**'
+    - any-glob-to-any-file: '*.md'
+
+ci:
+  - changed-files:
+    - any-glob-to-any-file: '.github/**'

@@ -283,6 +283,22 @@ docker compose run setup          # Configuration wizard
 | `config/active-roles.yaml` | Currently active roles (written by wizard) |
 | `.mcp.json` | MCP server config for Claude Code |
 
+## Contributing
+
+We welcome contributions! AI Office is open to forks and pull requests.
+
+- All PRs must target the `develop` branch — not `main`
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide
+- Report security issues privately via [GitHub Security Advisories](https://github.com/rc1021/ai-office/security/advisories/new) — see [SECURITY.md](.github/SECURITY.md)
+
+Quick start for contributors:
+
+```bash
+git clone https://github.com/<your-username>/ai-office.git
+git remote add upstream https://github.com/rc1021/ai-office.git
+git checkout -b feat/my-feature upstream/develop
+```
+
 ## License
 
 [CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — free for personal and non-commercial use. Commercial use requires separate licensing.
