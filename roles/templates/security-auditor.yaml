@@ -9,6 +9,7 @@ name:
 category: industry
 industry: legal
 department: legal
+suggested_model: "opus"
 
 persona:
   role_description: >

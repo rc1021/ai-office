@@ -24,6 +24,7 @@ export class HeartbeatScheduler {
   private statePath: string;
   private projectDir: string;
   private claudeConfig: ClaudeRunnerConfig;
+  private auditClaudeConfig: ClaudeRunnerConfig;
   private adapter: ChatAdapter;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private dailyTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -44,11 +45,13 @@ export class HeartbeatScheduler {
     adapter: ChatAdapter,
     dailyBriefTime: string = "08:00",
     auditConfig: AuditConfig = { autoReview: false, riskThreshold: "YELLOW" },
+    auditClaudeConfig?: ClaudeRunnerConfig,
   ) {
     this.timezone = timezone;
     this.statePath = statePath;
     this.projectDir = projectDir;
     this.claudeConfig = claudeConfig;
+    this.auditClaudeConfig = auditClaudeConfig ?? claudeConfig;
     this.adapter = adapter;
     const [h, m] = dailyBriefTime.split(":").map(Number);
     this.dailyBriefHour = h;
@@ -409,7 +412,7 @@ export class HeartbeatScheduler {
       "Return PASS or FAIL as your final output.";
 
     try {
-      const output = await runClaude(prompt, this.claudeConfig);
+      const output = await runClaude(prompt, this.auditClaudeConfig);
       return output.toUpperCase().includes("PASS");
     } catch {
       return false;

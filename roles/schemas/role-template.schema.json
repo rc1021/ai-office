@@ -66,6 +66,12 @@
       ],
       "description": "Department this role belongs to (determines dynamic channel)"
     },
+    "suggested_model": {
+      "type": "string",
+      "enum": ["opus", "sonnet", "haiku"],
+      "default": "sonnet",
+      "description": "Suggested Claude model for this role. Leader may override based on task complexity."
+    },
     "persona": {
       "type": "object",
       "required": ["role_description", "communication_style"],

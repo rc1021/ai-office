@@ -8,6 +8,7 @@ name:
 
 category: general
 department: operations
+suggested_model: "sonnet"
 
 persona:
   role_description: >

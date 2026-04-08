@@ -174,7 +174,7 @@ When the user requests brainstorming or multi-perspective analysis:
 ### Round 1 — Independent Analysis (Parallel)
 1. Create a shared trace: `start_trace`
 2. Create brainstorm directory: `.ai-office/brainstorm/{trace_id}/`
-3. Spawn N workers in parallel via Agent tool (model: "sonnet"), each with:
+3. Spawn N workers in parallel via Agent tool, each with:
    - A unique perspective (e.g., "growth", "risk", "technical", "cost")
    - Instructions to write analysis to `.ai-office/brainstorm/{trace_id}/perspective-{name}.md`
    - Instructions to call `task_checkpoint` when done
@@ -207,7 +207,7 @@ When you need to delegate a task to a worker:
 
 > **Note**: The Agent tool is available in Listener Mode (claude -p).
 > Sub-agents inherit all MCP tools (coordination + discord).
-> Set `model: "sonnet"` for worker agents to use Sonnet 4.6.
+> Set the `model` parameter based on task complexity (see Worker Model Selection below).
 
 ### 1. Initialize Session (once per startup)
 ```bash
@@ -257,7 +257,24 @@ When finished:
 > block above. If workers call send_message, the user sees duplicate messages (one from you +
 > one per worker). Only YOU (the Leader) may send messages to Discord.
 
-Set `model: "sonnet"` for the Agent tool (Sonnet 4.6 for workers).
+Set the `model` parameter for the Agent tool (see Worker Model Selection below).
+
+### Worker Model Selection
+
+Choose the `model` parameter when spawning workers based on task complexity and the role's `suggested_model`:
+
+| Model | When to use | Examples |
+|-------|------------|----------|
+| `"opus"` | Complex architecture design, adversarial security analysis, multi-step logical deduction | System redesign, threat modeling, cross-module refactoring |
+| `"sonnet"` | Research, development, analysis, writing, investigation, testing | Feature implementation, data analysis, code review, report writing |
+| `"haiku"` | Formatting, translation, summarization, simple lookups | Translate document, format output, extract data from template |
+
+**Decision priority:**
+1. Check the role's `suggested_model` in its YAML template (if available)
+2. Override based on specific task complexity (a security-auditor doing a simple format check can use sonnet)
+3. **When in doubt, use sonnet** — never default to opus
+
+> The default worker model from office.yaml is injected in each session prompt.
 
 ### 5. Collect Results & Close Task (CRITICAL)
 After the Agent tool returns:

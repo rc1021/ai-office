@@ -13,14 +13,20 @@ export interface ClaudeRunnerConfig {
   projectDir: string;
   mcpConfigPath: string;
   allowedTools: string[];
+  model?: string;
 }
 
 export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<string> {
   return new Promise((resolve, reject) => {
     const args: string[] = [
       "-p", prompt,
-      "--allowedTools", ...config.allowedTools,
     ];
+
+    if (config.model) {
+      args.push("--model", config.model);
+    }
+
+    args.push("--allowedTools", ...config.allowedTools);
 
     // Only pass --mcp-config if the file actually exists
     if (fs.existsSync(config.mcpConfigPath)) {

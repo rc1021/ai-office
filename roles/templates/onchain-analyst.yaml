@@ -9,6 +9,7 @@ name:
 category: industry
 industry: crypto
 department: research
+suggested_model: "sonnet"
 
 persona:
   role_description: >

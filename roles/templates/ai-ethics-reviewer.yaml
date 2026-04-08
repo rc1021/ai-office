@@ -8,6 +8,7 @@ name:
 
 category: emerging
 department: research
+suggested_model: "opus"
 
 persona:
   role_description: >

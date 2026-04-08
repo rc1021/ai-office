@@ -9,6 +9,7 @@ name:
 category: industry
 industry: realestate
 department: marketing
+suggested_model: "sonnet"
 
 persona:
   role_description: >

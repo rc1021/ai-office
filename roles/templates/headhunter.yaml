@@ -9,6 +9,7 @@ name:
 category: industry
 industry: recruitment
 department: hr
+suggested_model: "sonnet"
 
 persona:
   role_description: >

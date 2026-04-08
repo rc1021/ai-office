@@ -8,6 +8,7 @@ name:
 
 category: emerging
 department: engineering
+suggested_model: "sonnet"
 
 persona:
   role_description: >

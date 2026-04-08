@@ -8,6 +8,7 @@ name:
 
 category: general
 department: engineering
+suggested_model: "opus"
 
 persona:
   role_description: >

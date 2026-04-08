@@ -9,6 +9,7 @@ name:
 category: industry
 industry: crypto
 department: engineering
+suggested_model: "opus"
 
 persona:
   role_description: >

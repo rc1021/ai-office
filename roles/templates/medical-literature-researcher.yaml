@@ -9,6 +9,7 @@ name:
 category: industry
 industry: healthcare
 department: research
+suggested_model: "sonnet"
 
 persona:
   role_description: >

@@ -94,11 +94,14 @@ const ALLOWED_TOOLS = [
   "mcp__ai-office-discord__list_channels",
 ];
 
-const CLAUDE_CONFIG: ClaudeRunnerConfig = {
+const BASE_CLAUDE_CONFIG: ClaudeRunnerConfig = {
   projectDir: PROJECT_DIR,
   mcpConfigPath: MCP_CONFIG,
   allowedTools: ALLOWED_TOOLS,
 };
+
+// Will be set to include model once config is loaded in ClientReady
+let leaderClaudeConfig: ClaudeRunnerConfig = BASE_CLAUDE_CONFIG;
 
 const STARTUP_CHECKLIST_PROMPT =
   "You are the AI Office Leader. This is the first launch. " +
@@ -120,7 +123,7 @@ async function checkFirstRun(): Promise<void> {
   console.log("");
 
   try {
-    const response = await runClaude(STARTUP_CHECKLIST_PROMPT, CLAUDE_CONFIG);
+    const response = await runClaude(STARTUP_CHECKLIST_PROMPT, leaderClaudeConfig);
     console.log("[Listener] Setup complete! Check Discord #general.");
     if (response) {
       console.log("[Listener] Leader output:", response.substring(0, 300));
@@ -142,6 +145,7 @@ interface QueueJob {
 const jobQueue: QueueJob[] = [];
 let activeJobs = 0;
 let maxConcurrent = 1; // default sequential; updated from config after ClientReady
+let workerModel = "sonnet"; // default worker model; updated from config after ClientReady
 const processedMessageIds = new Set<string>();
 
 /**
@@ -284,10 +288,10 @@ async function handleMessage(message: Message): Promise<void> {
   // 4. Build prompt + run claude -p
   // Prefer server nickname > global display name > username
   const displayName = message.member?.displayName ?? message.author.displayName ?? message.author.username;
-  const prompt = buildPrompt(displayName, userContent, message.id, replyContext, savedAttachments);
+  const prompt = buildPrompt(displayName, userContent, message.id, replyContext, savedAttachments, workerModel);
 
   try {
-    const output = await runClaude(prompt, CLAUDE_CONFIG);
+    const output = await runClaude(prompt, leaderClaudeConfig);
     if (output) {
       console.log("[Listener] Claude output (not posted to Discord):", output.substring(0, 200));
     }
@@ -312,10 +316,10 @@ async function handleMessage(message: Message): Promise<void> {
 async function handleApproval(approval: ApprovalRequest): Promise<void> {
   console.log(`[Listener] Processing approval trigger: ${approval.id} (${approval.status})`);
 
-  const prompt = buildApprovalPrompt(approval);
+  const prompt = buildApprovalPrompt(approval, workerModel);
 
   try {
-    const output = await runClaude(prompt, CLAUDE_CONFIG);
+    const output = await runClaude(prompt, leaderClaudeConfig);
     if (output) {
       console.log("[Listener] Claude approval output (not posted to Discord):", output.substring(0, 200));
     }
@@ -325,9 +329,10 @@ async function handleApproval(approval: ApprovalRequest): Promise<void> {
   }
 }
 
-function buildApprovalPrompt(approval: ApprovalRequest): string {
+function buildApprovalPrompt(approval: ApprovalRequest, workerModelOverride?: string): string {
   const resolvedBy = approval.resolvedBy ?? "unknown";
   const resolvedAt = approval.resolvedAt ? approval.resolvedAt.toISOString() : "unknown";
+  const modelHint = workerModelOverride ?? "sonnet";
 
   return (
     "You are the AI Office Leader. An approval has been resolved in Discord.\n" +
@@ -353,7 +358,8 @@ function buildApprovalPrompt(approval: ApprovalRequest): string {
     "- Do NOT register new agents with report_status — only use existing agents from list_agents.\n" +
     "- Every task you create MUST be closed with task_update(status: completed) before you exit.\n" +
     "- Call report_status(busy) at start, report_status(idle) at end.\n" +
-    "- Call task_checkpoint with context_summary before exiting."
+    "- Call task_checkpoint with context_summary before exiting.\n" +
+    `\nDefault worker model: ${modelHint}. Use this when calling Agent tool unless task complexity requires override.\n`
   );
 }
 
@@ -365,12 +371,14 @@ function buildPrompt(
   messageId: string,
   replyContext: string = "",
   attachments: string[] = [],
+  workerModelOverride?: string,
 ): string {
   let attachmentInfo = "";
   if (attachments.length > 0) {
     attachmentInfo = "\n\nUser uploaded files (saved to disk — use Read tool to access):\n" +
       attachments.map(p => `- ${p}`).join("\n") + "\n";
   }
+  const modelHint = workerModelOverride ?? "sonnet";
 
   return (
     "You are the AI Office Leader. A user has sent you a message in Discord #general.\n" +
@@ -394,7 +402,8 @@ function buildPrompt(
     "- Do NOT register new agents with report_status — only use existing agents from list_agents.\n" +
     "- Every task you create MUST be closed with task_update(status: completed) before you exit.\n" +
     "- Call report_status(busy) at start, report_status(idle) at end.\n" +
-    "- Call task_checkpoint with context_summary before exiting."
+    "- Call task_checkpoint with context_summary before exiting.\n" +
+    `\nDefault worker model: ${modelHint}. Use this when calling Agent tool unless task complexity requires override.\n`
   );
 }
 
@@ -516,9 +525,6 @@ async function main(): Promise<void> {
     console.log(`[Listener] Bot ready! Logged in as ${readyClient.user.tag}`);
     console.log(`[Listener] Listening for messages in #${GENERAL_CHANNEL}`);
 
-    await checkFirstRun();
-    await postNgrokUrl(readyClient);
-
     // Start core subsystems with Discord adapter
     try {
       const config = loadOfficeConfig(PROJECT_DIR);
@@ -526,11 +532,22 @@ async function main(): Promise<void> {
       // Initialize concurrency from config (parallel vs sequential)
       initConcurrency(config.executionMode, config.maxConcurrent);
 
+      // Set model-aware configs from office.yaml
+      leaderClaudeConfig = { ...BASE_CLAUDE_CONFIG, model: config.models.leader };
+      workerModel = config.models.worker;
+      console.log(`[Listener] Leader model: ${config.models.leader}, Worker model: ${config.models.worker}`);
+
+      await checkFirstRun();
+      await postNgrokUrl(readyClient);
+
       const adapter = new DiscordChatAdapter();
 
+      const dailyBriefConfig: ClaudeRunnerConfig = { ...BASE_CLAUDE_CONFIG, model: config.models.dailyBrief };
+      const auditClaudeConfig: ClaudeRunnerConfig = { ...BASE_CLAUDE_CONFIG, model: config.models.auditor };
+
       heartbeat = new HeartbeatScheduler(
-        config.timezone, config.statePath, PROJECT_DIR, CLAUDE_CONFIG, adapter,
-        config.dailyBriefTime, config.audit,
+        config.timezone, config.statePath, PROJECT_DIR, dailyBriefConfig, adapter,
+        config.dailyBriefTime, config.audit, auditClaudeConfig,
       );
       heartbeat.start();
       console.log("[Listener] HeartbeatScheduler started");

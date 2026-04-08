@@ -9,6 +9,7 @@ name:
 category: industry
 industry: tech
 department: engineering
+suggested_model: "sonnet"
 
 persona:
   role_description: >

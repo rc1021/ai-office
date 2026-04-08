@@ -9,7 +9,7 @@ office:
 # Agent defaults
 agents:
   leader:
-    model: "opus"       # Opus 4.6 for Leader
+    model: "sonnet"     # Sonnet 4.6 for Leader (spawns opus workers for complex tasks)
   workers:
     model: "sonnet"     # Sonnet 4.6 for Workers
     max_concurrent: 3   # Max workers running simultaneously
@@ -45,6 +45,11 @@ logging:
   structured: true      # JSONL format
   audit_trail: true     # Hash-chained audit log
   trace_enabled: true   # Distributed tracing with trace_id
+
+# Model overrides for system tasks (optional, defaults to "sonnet")
+models:
+  daily_brief: "sonnet"   # Daily brief generation
+  auditor: "sonnet"       # Internal auditor reviews
 
 # Data paths (relative to workspace root)
 paths:

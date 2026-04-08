@@ -9,6 +9,7 @@ name:
 category: industry
 industry: ecommerce
 department: operations
+suggested_model: "sonnet"
 
 persona:
   role_description: >

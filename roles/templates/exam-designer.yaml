@@ -9,6 +9,7 @@ name:
 category: industry
 industry: education
 department: design
+suggested_model: "sonnet"
 
 persona:
   role_description: >

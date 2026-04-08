@@ -9,6 +9,7 @@ name:
 category: industry
 industry: government
 department: legal
+suggested_model: "haiku"
 
 persona:
   role_description: >

@@ -8,6 +8,7 @@ name:
 
 category: general
 department: support
+suggested_model: "haiku"
 
 persona:
   role_description: >

@@ -8,6 +8,7 @@ name:
 
 category: general
 department: management
+suggested_model: "opus"
 
 persona:
   role_description: >
