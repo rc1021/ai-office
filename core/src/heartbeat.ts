@@ -535,46 +535,114 @@ export class HeartbeatScheduler {
 
   // ── Daily Brief (configurable time in user timezone) ─────────────────────
 
+  private get missedBriefsPath(): string {
+    return path.join(this.statePath, "missed-briefs.json");
+  }
+
+  private isTransient(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err);
+    return (
+      msg.includes("429") || msg.includes("503") ||
+      msg.includes("ECONNRESET") || msg.includes("timeout") ||
+      msg.includes("ETIMEDOUT") || msg.includes("ECONNREFUSED")
+    );
+  }
+
+  private readMissedBriefs(): string[] {
+    try {
+      if (!fs.existsSync(this.missedBriefsPath)) return [];
+      const data = JSON.parse(fs.readFileSync(this.missedBriefsPath, "utf-8"));
+      return Array.isArray(data.missed) ? data.missed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private writeMissedBriefs(dates: string[]): void {
+    try {
+      fs.writeFileSync(this.missedBriefsPath, JSON.stringify({ missed: dates }, null, 2), "utf-8");
+    } catch (err) {
+      console.error("[Heartbeat] Failed to write missed-briefs.json:", err);
+    }
+  }
+
+  private recordMissedBrief(date: string): void {
+    const missed = this.readMissedBriefs();
+    if (!missed.includes(date)) {
+      missed.push(date);
+      this.writeMissedBriefs(missed);
+      console.log(`[Heartbeat] Recorded missed brief for ${date}`);
+    }
+  }
+
+  private clearMissedBrief(date: string): void {
+    const missed = this.readMissedBriefs().filter(d => d !== date);
+    this.writeMissedBriefs(missed);
+  }
+
   private scheduleDailyBrief(): void {
     const msUntil = this.msUntilNextBrief();
     console.log(`[Heartbeat] Next daily brief in ${Math.round(msUntil / 60000)} minutes`);
 
     this.dailyTimeout = setTimeout(async () => {
       if (!this.running) return;
-
-      console.log("[Heartbeat] Running daily brief...");
-      try {
-        await this.runDailyBrief();
-      } catch (err) {
-        console.error("[Heartbeat] Daily brief failed:", err);
-      }
-
-      // Re-schedule for tomorrow
+      await this.runDailyBriefWithRetry(0);
       if (this.running) {
         this.scheduleDailyBrief();
       }
     }, msUntil);
   }
 
-  private async runDailyBrief(): Promise<void> {
+  private async runDailyBriefWithRetry(attempt: number): Promise<void> {
+    const today = new Date().toLocaleDateString("sv-SE", { timeZone: this.timezone }); // YYYY-MM-DD
+    const retryDelays = [1 * 60 * 1000, 5 * 60 * 1000]; // 1min, 5min
+
+    console.log(`[Heartbeat] Running daily brief (attempt ${attempt + 1})...`);
+    try {
+      await this.runDailyBrief(today);
+      this.clearMissedBrief(today);
+      console.log("[Heartbeat] Daily brief completed");
+    } catch (err) {
+      console.error(`[Heartbeat] Daily brief failed (attempt ${attempt + 1}):`, err);
+      if (this.isTransient(err) && attempt < retryDelays.length) {
+        const delay = retryDelays[attempt];
+        console.log(`[Heartbeat] Transient error — retrying in ${delay / 60000} minute(s)...`);
+        this.dailyTimeout = setTimeout(async () => {
+          if (!this.running) return;
+          await this.runDailyBriefWithRetry(attempt + 1);
+        }, delay);
+      } else {
+        // Permanent error or exhausted retries — record missed and alert
+        this.recordMissedBrief(today);
+        try {
+          await this.adapter.sendMessage("alerts",
+            `⚠️ **Daily Brief 失敗**\n今日（${today}）簡報無法產生。` +
+            `\n原因：${err instanceof Error ? err.message : String(err)}` +
+            `\n下次簡報時將自動補發。`
+          );
+        } catch { /* best effort */ }
+      }
+    }
+  }
+
+  private async runDailyBrief(today: string): Promise<void> {
+    const missedDates = this.readMissedBriefs().filter(d => d !== today);
+    const catchUpNote = missedDates.length > 0
+      ? `\n\n⚠️ 補發通知：以下日期的簡報因系統問題未能發送，請在本次簡報中補充說明：${missedDates.join("、")}。` +
+        `在簡報開頭加上「📋 今日簡報（含補發）」標題，並標注補發日期。`
+      : "";
+
     const prompt =
       "You are the AI Office Leader. It's time for the daily brief.\n" +
       "Use the task_list MCP tool to see all current tasks.\n" +
       "Use the list_agents MCP tool to see who is online.\n" +
       "Then use send_embed MCP tool to post a summary to #daily-brief.\n" +
       "Include: completed tasks (last 24h), in-progress tasks, any blockers, agent status.\n" +
-      "Keep it concise and actionable. Use zh-TW language.";
+      "If any section's data is unavailable (e.g., MCP tool fails), skip that section and add ⚠️ mark.\n" +
+      "Keep it concise and actionable. Use zh-TW language." +
+      catchUpNote;
 
-    try {
-      await runClaude(prompt, this.claudeConfig);
-      console.log("[Heartbeat] Daily brief completed");
-    } catch (err) {
-      console.error("[Heartbeat] Daily brief claude -p failed:", err);
-      // Post a fallback message
-      try {
-        await this.adapter.sendMessage("daily-brief", "Daily brief generation failed. Please check system logs.");
-      } catch { /* best effort */ }
-    }
+    await runClaude(prompt, this.claudeConfig);
   }
 
   /**
