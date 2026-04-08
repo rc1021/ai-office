@@ -23,6 +23,8 @@ function formatMessage(msg: Message): ChannelMessage {
 }
 
 const DISCORD_MAX_LENGTH = 2000;
+const FOOTER_RESERVE_NO_LABEL = 20;
+const FOOTER_RESERVE_WITH_LABEL = 70;
 
 /**
  * Split text into chunks that fit within Discord's 2000-char limit.
@@ -47,14 +49,22 @@ function splitContent(text: string, maxLen: number = DISCORD_MAX_LENGTH): string
 export async function sendMessage(
   channelName: string,
   content: string,
-  replyToMessageId?: string
+  replyToMessageId?: string,
+  pageLabel?: string
 ): Promise<string> {
   const channel = await findTextChannel(channelName);
-  const chunks = splitContent(content);
+  const effectiveMax = DISCORD_MAX_LENGTH - (pageLabel !== undefined ? FOOTER_RESERVE_WITH_LABEL : FOOTER_RESERVE_NO_LABEL);
+  const chunks = splitContent(content, effectiveMax);
+  const total = chunks.length;
   let lastMsgId = "";
 
-  for (const chunk of chunks) {
-    const options: MessageCreateOptions = { content: chunk };
+  for (let i = 0; i < chunks.length; i++) {
+    let pageContent = chunks[i];
+    if (total > 1) {
+      const label = pageLabel ? `${pageLabel}` : '';
+      pageContent += `\n${label}（第 ${i + 1}/${total} 頁）`;
+    }
+    const options: MessageCreateOptions = { content: pageContent };
     if (replyToMessageId && lastMsgId === "") {
       // Only apply the reply reference on the first chunk
       options.reply = { messageReference: replyToMessageId, failIfNotExists: false };

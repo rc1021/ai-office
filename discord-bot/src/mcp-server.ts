@@ -67,6 +67,7 @@ const SendMessageSchema = z.object({
   channel_name: z.string().min(1),
   content: z.string().min(1).max(2000),
   reply_to_message_id: z.string().optional(),
+  page_label: z.string().max(50).optional(),
 });
 
 const SendEmbedSchema = z.object({
@@ -200,6 +201,7 @@ const TOOLS = [
         channel_name: { type: "string", description: "Target channel name (without #)" },
         content: { type: "string", description: "Message text (max 2000 chars)" },
         reply_to_message_id: { type: "string", description: "Discord message ID to reply to (creates a threaded reply)" },
+        page_label: { type: "string", description: "Optional label shown in page footer (max 50 chars), e.g. task ID brief. Only shown when message spans multiple pages." },
       },
       required: ["agent_id", "channel_name", "content"],
     },
@@ -393,7 +395,8 @@ async function gatedSendMessage(
   channelName: string,
   content: string,
   options?: ThrottleOptions,
-  replyToMessageId?: string
+  replyToMessageId?: string,
+  pageLabel?: string
 ): Promise<string> {
   // OutputGate check
   const gate = checkOutputGate(agentId, channelName, content);
@@ -407,7 +410,7 @@ async function gatedSendMessage(
   switch (decision.action) {
     case "send": {
       const toSend = decision.bufferedContent ?? content;
-      return await sendMessage(channelName, toSend, replyToMessageId);
+      return await sendMessage(channelName, toSend, replyToMessageId, pageLabel);
     }
     case "buffer":
       return `BUFFERED: ${decision.reason}`;
@@ -415,9 +418,9 @@ async function gatedSendMessage(
       throw new GateError(`Throttle rejected: ${decision.reason}`);
     case "edit":
       // For text messages, edit is unusual — just send
-      return await sendMessage(channelName, content, replyToMessageId);
+      return await sendMessage(channelName, content, replyToMessageId, pageLabel);
     default:
-      return await sendMessage(channelName, content, replyToMessageId);
+      return await sendMessage(channelName, content, replyToMessageId, pageLabel);
   }
 }
 
@@ -565,7 +568,8 @@ export function createMcpServer(): Server {
             input.channel_name,
             input.content,
             opts,
-            input.reply_to_message_id
+            input.reply_to_message_id,
+            input.page_label
           );
           if (result.startsWith("BUFFERED:")) {
             return makeTextContent(result);
