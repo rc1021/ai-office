@@ -95,10 +95,15 @@ const ALLOWED_TOOLS = [
   "mcp__ai-office-discord__list_channels",
 ];
 
+// Default timeout: 8 minutes. Claude -p sessions on complex tasks can take several minutes,
+// but 8 min is a safe upper bound. If the process hangs past this, surface a visible error.
+const CLAUDE_TIMEOUT_MS = 8 * 60 * 1000;
+
 const BASE_CLAUDE_CONFIG: ClaudeRunnerConfig = {
   projectDir: PROJECT_DIR,
   mcpConfigPath: MCP_CONFIG,
   allowedTools: ALLOWED_TOOLS,
+  timeoutMs: CLAUDE_TIMEOUT_MS,
 };
 
 // Will be set to include model once config is loaded in ClientReady
@@ -305,8 +310,10 @@ async function handleMessage(message: Message): Promise<void> {
     ? { ...leaderClaudeConfig, resumeSessionId: existingSessionId }
     : leaderClaudeConfig;
 
+  let claudeSucceeded = false;
   try {
     const result = await runClaude(prompt, sessionConfig);
+    claudeSucceeded = true;
 
     // Persist the returned session ID for the next message from this user
     if (result.sessionId) {
@@ -316,24 +323,48 @@ async function handleMessage(message: Message): Promise<void> {
     if (result.output) {
       console.log("[Listener] Claude output (not posted to Discord):", result.output.substring(0, 200));
     }
+
+    // Fallback guard: if the claude process exited cleanly but the output strongly suggests
+    // the Leader never sent a reply (e.g. OutputGate blocked it or it wrote to stdout instead
+    // of calling send_message), surface a visible warning so the user is not left in silence.
+    const out = result.output ?? "";
+    const looksLikeUnsentReply =
+      out.length > 40 &&
+      !/send_message|sent to #|Message sent|BUFFERED/i.test(out) &&
+      // Heuristic: plain prose output longer than 80 chars is likely meant for the user
+      /[\u4e00-\u9fff]|[a-z]{4,}/i.test(out);
+
+    if (looksLikeUnsentReply) {
+      console.warn("[Listener] Leader output looks like an unsent reply — forwarding to Discord as fallback");
+      // Truncate to 1800 chars to leave room for the warning prefix
+      const truncated = out.length > 1800 ? out.substring(0, 1800) + "…" : out;
+      await channel
+        .send(`⚠️ *(fallback — Leader reply not sent via MCP)*\n\n${truncated}`)
+        .catch((e) => console.error("[Listener] Failed to send fallback:", e));
+    }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error("[Listener] claude failed:", errMsg);
 
     await removeReaction(message, "⏳");
+    const isTimeoutError = errMsg.startsWith("TIMEOUT:");
     const isAuthError = errMsg.startsWith("AUTH_EXPIRED:");
     const userMsg = isAuthError
       ? "🔐 Claude authentication expired. Please run `/login` to re-authenticate, then retry."
-      : `❌ Error processing your request: ${errMsg.substring(0, 1000)}`;
+      : isTimeoutError
+        ? "⏱️ Request timed out — the Leader took too long to respond. Please try again."
+        : `❌ Error processing your request: ${errMsg.substring(0, 1000)}`;
     await channel
       .send(userMsg)
       .catch((e) => console.error("[Listener] Failed to send error:", e));
     return;
   }
 
-  // 3. Replace ⏳ with ✅
-  try { await message.react("✅"); } catch { /* non-fatal */ }
-  await removeReaction(message, "⏳");
+  // Replace ⏳ with ✅ only when claude completed without error
+  if (claudeSucceeded) {
+    try { await message.react("✅"); } catch { /* non-fatal */ }
+    await removeReaction(message, "⏳");
+  }
 }
 
 // ── Handle approval resolution ────────────────────────────────────────────────
@@ -351,13 +382,18 @@ async function handleApproval(approval: ApprovalRequest): Promise<void> {
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error("[Listener] claude failed for approval trigger:", errMsg);
-    if (errMsg.startsWith("AUTH_EXPIRED:")) {
+    const isAuthError = errMsg.startsWith("AUTH_EXPIRED:");
+    const isTimeoutError = errMsg.startsWith("TIMEOUT:");
+    if (isAuthError || isTimeoutError) {
       try {
         const dc = getDiscordClient();
         const ch = dc.channels.cache.find(
           (c) => c.isTextBased() && "name" in c && c.name === GENERAL_CHANNEL
         ) as TextChannel | undefined;
-        await ch?.send("🔐 Claude authentication expired. Please run `/login` to re-authenticate.");
+        const msg = isAuthError
+          ? "🔐 Claude authentication expired. Please run `/login` to re-authenticate."
+          : "⏱️ Approval processing timed out. Please retry or check the task status.";
+        await ch?.send(msg);
       } catch { /* non-fatal */ }
     }
   }
@@ -371,6 +407,21 @@ function buildApprovalPrompt(approval: ApprovalRequest, workerModelOverride?: st
   return (
     "You are the AI Office Leader. An approval has been resolved in Discord.\n" +
     "\n" +
+    // ── Critical constraint — stated FIRST (same reason as buildPrompt) ──
+    "⚠️  CRITICAL: Your text output (stdout / result field) is NEVER shown to the user.\n" +
+    "You MUST call the send_message MCP tool to post your response to Discord.\n" +
+    "Do NOT write your answer as text output — write it ONLY via send_message.\n" +
+    "\n" +
+    // ── Mandatory execution steps ──
+    "Execute these steps IN ORDER:\n" +
+    "1. Call report_status with status 'busy'.\n" +
+    "2. Read agents/leader/CLAUDE.md for your full identity and instructions.\n" +
+    "3. Execute or acknowledge the approval (see details below).\n" +
+    "4. Call send_message to inform the user in #general.\n" +
+    "5. Call task_checkpoint with a context_summary.\n" +
+    "6. Call report_status with status 'idle'.\n" +
+    "\n" +
+    // ── Approval payload ──
     `Approval ID: ${approval.id}\n` +
     `Status: ${approval.status}\n` +
     `Action: ${approval.action}\n` +
@@ -382,17 +433,13 @@ function buildApprovalPrompt(approval: ApprovalRequest, workerModelOverride?: st
     "If APPROVED: execute the action described above.\n" +
     "If REJECTED: acknowledge the rejection and inform the user.\n" +
     "\n" +
-    "Process this according to your role instructions (agents/leader/CLAUDE.md).\n" +
-    "Read agents/leader/CLAUDE.md first for your full identity and instructions.\n" +
-    "RULES:\n" +
-    "- Use send_message MCP tool to respond in #general. stdout is NOT posted to Discord.\n" +
+    // ── Additional rules ──
+    "Additional rules:\n" +
     "- Long messages are auto-paginated — just send the full content in one call.\n" +
     "- When spawning workers via Agent tool, include in their prompt: " +
     "'FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool.'\n" +
     "- Do NOT register new agents with report_status — only use existing agents from list_agents.\n" +
     "- Every task you create MUST be closed with task_update(status: completed) before you exit.\n" +
-    "- Call report_status(busy) at start, report_status(idle) at end.\n" +
-    "- Call task_checkpoint with context_summary before exiting.\n" +
     `\nDefault worker model: ${modelHint}. Use this when calling Agent tool unless task complexity requires override.\n`
   );
 }
@@ -414,29 +461,46 @@ function buildPrompt(
   }
   const modelHint = workerModelOverride ?? "sonnet";
 
+  // ⚠️  PROMPT STRUCTURE NOTE
+  // The send_message requirement is stated BEFORE "read CLAUDE.md" intentionally.
+  // claude -p --output-format json always writes a `result` text field to stdout.
+  // That result field is NEVER shown to the user — only send_message reaches Discord.
+  // If the Leader writes its reply as text output (stdout) instead of calling
+  // send_message, the user sees nothing. We put the critical constraint first so
+  // the model cannot shortcut past it even for simple/quick answers.
   return (
     "You are the AI Office Leader. A user has sent you a message in Discord #general.\n" +
     "\n" +
+    // ── Critical constraint — stated FIRST, before any other instruction ──
+    "⚠️  CRITICAL: Your text output (stdout / result field) is NEVER shown to the user.\n" +
+    "You MUST call the send_message MCP tool to post your reply to Discord.\n" +
+    "Do NOT write your answer as text output — write it ONLY via send_message.\n" +
+    "Even for a one-line answer, you must call send_message.\n" +
+    "\n" +
+    // ── Mandatory execution steps ──
+    "Execute these steps IN ORDER — do not skip any:\n" +
+    "1. Call report_status with status 'busy'.\n" +
+    "2. Read agents/leader/CLAUDE.md for your full identity and instructions.\n" +
+    "3. Process the user request (delegate to workers if needed).\n" +
+    "4. Call send_message to post your reply to #general, using reply_to_message_id: " + messageId + ".\n" +
+    "5. Call task_checkpoint with a context_summary of what was done.\n" +
+    "6. Call report_status with status 'idle'.\n" +
+    "\n" +
+    // ── Message payload ──
     "User: " + username + "\n" +
-    "User message ID: " + messageId + "\n" +
-    "When responding, use reply_to_message_id with this ID so your reply threads to the user's message.\n" +
     "--- BEGIN MESSAGE ---\n" +
     content + "\n" +
     "--- END MESSAGE ---\n" +
     replyContext +
     attachmentInfo +
     "\n" +
-    "Process this request according to your role instructions (agents/leader/CLAUDE.md). " +
-    "Read agents/leader/CLAUDE.md first for your full identity and instructions.\n" +
-    "RULES:\n" +
-    "- Use send_message MCP tool to respond in #general. stdout is NOT posted to Discord.\n" +
+    // ── Additional rules ──
+    "Additional rules:\n" +
     "- Long messages are auto-paginated — just send the full content in one call.\n" +
     "- When spawning workers via Agent tool, include in their prompt: " +
     "'FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool.'\n" +
     "- Do NOT register new agents with report_status — only use existing agents from list_agents.\n" +
     "- Every task you create MUST be closed with task_update(status: completed) before you exit.\n" +
-    "- Call report_status(busy) at start, report_status(idle) at end.\n" +
-    "- Call task_checkpoint with context_summary before exiting.\n" +
     `\nDefault worker model: ${modelHint}. Use this when calling Agent tool unless task complexity requires override.\n`
   );
 }

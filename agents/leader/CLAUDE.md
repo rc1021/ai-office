@@ -324,7 +324,15 @@ Process this request...
 
 ### Listener Mode Behaviour
 
-1. **Status Update** — Call `report_status` with status `busy` immediately.
+> ⚠️ **CRITICAL — read this before anything else:**
+> `claude -p` always writes a `result` text field to stdout. That field is **NEVER** shown
+> to the user. Your reply reaches the user **ONLY** if you call `send_message` via MCP.
+> This applies to every response — even a single-sentence answer must go through `send_message`.
+> Writing your reply as text output (stdout) is a silent failure: the user sees nothing.
+
+Execute these steps **IN ORDER** for every incoming message:
+
+1. **Status Update** — Call `report_status` with status `busy`.
 2. **Context Recovery** — Before processing any request:
    - Call `task_resume` to check for ongoing project context
    - Call `list_agents` to see available workers
@@ -332,9 +340,10 @@ Process this request...
 3. **Process the request** — Route, delegate, and coordinate as usual.
    You have full access to the **Agent tool** for spawning workers.
 4. **Use MCP tools** (coordination, discord) as needed.
-5. **Respond via MCP only** — Use `send_message` to reply in Discord #general.
-   Your stdout is NOT posted to Discord. Do not return text meant for the user.
+5. **Respond via send_message** — Call `send_message` to post your reply to #general.
+   Use `reply_to_message_id` with the user's message ID so your reply threads correctly.
    Long messages are auto-paginated — just send the full content in one call.
+   **Do NOT write your reply as text output.** stdout is never shown to the user.
 6. **Worker Discord restriction** — When spawning workers via Agent tool, always include
    in their prompt: `FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool.`
    Workers return results as text output; you post to Discord on their behalf.

@@ -15,6 +15,7 @@ export interface ClaudeRunnerConfig {
   allowedTools: string[];
   model?: string;
   resumeSessionId?: string; // if set, pass --resume <id> to claude
+  timeoutMs?: number;       // if set, kill the process after this many ms and reject
 }
 
 export interface ClaudeRunResult {
@@ -58,6 +59,22 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<C
 
     let rawOutput = "";
     let stderrOutput = "";
+    let timedOut = false;
+
+    // Optional timeout: kill the process if it runs too long
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+    if (config.timeoutMs && config.timeoutMs > 0) {
+      timeoutHandle = setTimeout(() => {
+        timedOut = true;
+        const timeoutSec = Math.round(config.timeoutMs! / 1000);
+        console.error(`[ClaudeRunner] Timeout after ${timeoutSec}s — killing claude process`);
+        proc.kill("SIGTERM");
+        // Force-kill after a further 5 s if SIGTERM is ignored
+        setTimeout(() => {
+          try { proc.kill("SIGKILL"); } catch { /* already dead */ }
+        }, 5_000);
+      }, config.timeoutMs);
+    }
 
     proc.stdout.on("data", (data: Buffer) => {
       rawOutput += data.toString();
@@ -70,10 +87,19 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<C
     });
 
     proc.on("error", (err) => {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
       reject(new Error(`Failed to spawn claude: ${err.message}. Is Claude Code installed?`));
     });
 
     proc.on("close", (code) => {
+      if (timeoutHandle) clearTimeout(timeoutHandle);
+
+      if (timedOut) {
+        const timeoutSec = Math.round((config.timeoutMs ?? 0) / 1000);
+        reject(new Error(`TIMEOUT: claude process did not complete within ${timeoutSec}s`));
+        return;
+      }
+
       if (code === 0) {
         const trimmed = rawOutput.trim();
         try {
