@@ -94,7 +94,7 @@ fi
 echo ""
 echo "[2/4] Installing dependencies..."
 
-for dir in core discord-bot coordination orchestrator pixel-office setup; do
+for dir in core discord-bot coordination orchestrator pixel-office setup cli; do
   if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
     echo "  Installing $dir..."
     (cd "$dir" && npm install --silent 2>&1) || {
@@ -111,7 +111,7 @@ echo ""
 echo "[3/4] Building TypeScript..."
 
 # core must build before discord-bot (file: dependency)
-for dir in core discord-bot coordination orchestrator setup; do
+for dir in core discord-bot coordination orchestrator setup cli; do
   if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
     echo "  Building $dir..."
     (cd "$dir" && npm run build --silent 2>&1) || {

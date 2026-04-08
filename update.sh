@@ -93,7 +93,7 @@ rm -rf "$tmpdir"
 echo ""
 echo "[3/4] Updating dependencies & rebuilding..."
 
-for dir in core discord-bot coordination orchestrator pixel-office setup; do
+for dir in core discord-bot coordination orchestrator pixel-office setup cli; do
   if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
     echo "  $dir: install..."
     (cd "$dir" && npm install --silent 2>&1) || {
@@ -103,7 +103,7 @@ for dir in core discord-bot coordination orchestrator pixel-office setup; do
   fi
 done
 
-for dir in core discord-bot coordination orchestrator setup; do
+for dir in core discord-bot coordination orchestrator setup cli; do
   if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
     echo "  $dir: build..."
     (cd "$dir" && npm run build --silent 2>&1) || {

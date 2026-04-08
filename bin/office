@@ -1,0 +1,392 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ── 解析 PROJECT_DIR(處理 symlink，相容 macOS 無 readlink -f)────────────────
+
+_resolve_dir() {
+  local source="${BASH_SOURCE[0]}"
+  local dir
+  # 追蹤 symlink 直到找到真正的檔案
+  while [ -L "$source" ]; do
+    dir="$(cd -P "$(dirname "$source")" && pwd)"
+    source="$(readlink "$source")"
+    # 如果 readlink 結果是相對路徑，轉為絕對路徑
+    [[ "$source" != /* ]] && source="$dir/$source"
+  done
+  dir="$(cd -P "$(dirname "$source")" && pwd)"
+  echo "$dir"
+}
+
+SCRIPT_DIR="$(_resolve_dir)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# ── 顏色常數 ─────────────────────────────────────────────────────────────────
+
+GREEN='\033[32m'
+RED='\033[31m'
+YELLOW='\033[33m'
+RESET='\033[0m'
+BOLD='\033[1m'
+
+ok()   { echo -e "  ${GREEN}[OK]${RESET}  $*"; }
+fail() { echo -e "  ${RED}[FAIL]${RESET} $*"; }
+warn() { echo -e "  ${YELLOW}[WARN]${RESET} $*"; }
+info() { echo -e "  $*"; }
+
+prefix() { echo -e "${BOLD}[office]${RESET} $*"; }
+
+# ── 子指令: help ──────────────────────────────────────────────────────────────
+
+cmd_help() {
+  echo ""
+  echo -e "  ${BOLD}AI Office — 指令說明${RESET}"
+  echo "  =================================="
+  echo ""
+  echo "  使用方式: office <指令>"
+  echo ""
+  echo "  可用指令: "
+  echo ""
+  echo "    setup              初始化環境(安裝相依套件、建置、設定精靈)"
+  echo "    start              啟動 Discord Listener daemon"
+  echo "    stop               停止所有運行中的程序"
+  echo "    restart            停止後重新啟動(等同 stop + start)"
+  echo "    update             下載最新版本並重新建置"
+  echo "    status             顯示各元件目前狀態"
+  echo "    logs               追蹤 Discord Listener 日誌(Ctrl+C 離開)"
+  echo "    wizard             重新執行設定精靈(Discord token、ngrok 等)"
+  echo "    install-service    安裝開機自啟服務(launchd / systemd)"
+  echo "    uninstall-service  移除開機自啟服務"
+  echo "    help               顯示本說明"
+  echo ""
+  echo "  範例: "
+  echo "    office setup              # 首次設定"
+  echo "    office start              # 啟動服務"
+  echo "    office status             # 查看狀態"
+  echo "    office logs               # 追蹤日誌"
+  echo "    office stop               # 停止服務"
+  echo "    office install-service    # 安裝開機自啟"
+  echo "    office uninstall-service  # 移除開機自啟"
+  echo ""
+}
+
+# ── 子指令: status ────────────────────────────────────────────────────────────
+
+cmd_status() {
+  echo ""
+  echo -e "  ${BOLD}AI Office — 系統狀態${RESET}"
+  echo "  =================================="
+  echo ""
+
+  local any_issue=0
+
+  # 1. Discord Listener
+  local listener_pid_file="$PROJECT_DIR/discord-bot/listener.pid"
+  echo -e "  ${BOLD}Discord Listener${RESET}"
+  if [ -f "$listener_pid_file" ]; then
+    local lpid
+    lpid=$(cat "$listener_pid_file")
+    if kill -0 "$lpid" 2>/dev/null; then
+      echo -e "    狀態: ${GREEN}● 運行中${RESET}(PID $lpid)"
+      echo "    日誌: $PROJECT_DIR/discord-bot/listener.log"
+    else
+      echo -e "    狀態: ${RED}● 已停止${RESET}(PID 檔案存在但程序不存在，PID $lpid)"
+      any_issue=1
+    fi
+  else
+    echo -e "    狀態: ${RED}● 已停止${RESET}(找不到 PID 檔案)"
+    any_issue=1
+  fi
+  echo ""
+
+  # 2. Pixel Office
+  local pixel_pid_file="$PROJECT_DIR/pixel-office/pixel.pid"
+  local pixel_port=3847
+  echo -e "  ${BOLD}Pixel Office${RESET}"
+  local pixel_pid_ok=0
+  if [ -f "$pixel_pid_file" ]; then
+    local ppid
+    ppid=$(cat "$pixel_pid_file")
+    if kill -0 "$ppid" 2>/dev/null; then
+      pixel_pid_ok=1
+      echo -e "    程序: ${GREEN}● 運行中${RESET}(PID $ppid)"
+    else
+      echo -e "    程序: ${YELLOW}● PID 失效${RESET}(PID $ppid 不存在)"
+    fi
+  else
+    echo -e "    程序: ${YELLOW}● 無 PID 檔案${RESET}"
+  fi
+
+  # curl 端口檢查(-s -o /dev/null，不輸出內容，timeout 2 秒)
+  if curl -s -o /dev/null --connect-timeout 2 "http://localhost:${pixel_port}" 2>/dev/null; then
+    echo -e "    連接埠 ${pixel_port}: ${GREEN}● 回應中${RESET}  →  http://localhost:${pixel_port}"
+  else
+    if [ "$pixel_pid_ok" -eq 1 ]; then
+      echo -e "    連接埠 ${pixel_port}: ${YELLOW}● 無回應${RESET}(程序存在但埠未開放)"
+    else
+      echo -e "    連接埠 ${pixel_port}: ${RED}● 未運行${RESET}"
+      any_issue=1
+    fi
+  fi
+  echo ""
+
+  # 3. Coordination DB
+  local db_path="$PROJECT_DIR/.ai-office/state/coordination.db"
+  echo -e "  ${BOLD}Coordination DB${RESET}"
+  if [ -f "$db_path" ]; then
+    local db_size
+    db_size=$(du -sh "$db_path" 2>/dev/null | awk '{print $1}')
+    echo -e "    狀態: ${GREEN}● 存在${RESET}($db_size)"
+    echo "    路徑: $db_path"
+  else
+    echo -e "    狀態: ${YELLOW}● 尚未建立${RESET}(首次啟動後會自動產生)"
+  fi
+  echo ""
+
+  # 4. ngrok
+  local ngrok_url_file="$PROJECT_DIR/.ai-office/state/ngrok-url.txt"
+  echo -e "  ${BOLD}ngrok 隧道${RESET}"
+  if [ -f "$ngrok_url_file" ]; then
+    local ngrok_url
+    ngrok_url=$(cat "$ngrok_url_file" 2>/dev/null || true)
+    if [ -n "$ngrok_url" ]; then
+      echo -e "    狀態: ${GREEN}● 已建立${RESET}"
+      echo "    URL: $ngrok_url"
+    else
+      echo -e "    狀態: ${YELLOW}● URL 檔案空白${RESET}"
+    fi
+  else
+    echo -e "    狀態: ${YELLOW}● 未啟用${RESET}(ngrok-url.txt 不存在)"
+  fi
+  echo ""
+
+  # 5. 綜合摘要
+  if [ "$any_issue" -eq 0 ]; then
+    echo -e "  ${GREEN}${BOLD}系統運行正常。${RESET}"
+  else
+    echo -e "  ${YELLOW}${BOLD}有元件未運行。執行 'office start' 可啟動服務。${RESET}"
+  fi
+  echo ""
+}
+
+# ── 子指令: stop ──────────────────────────────────────────────────────────────
+
+cmd_stop() {
+  echo ""
+  prefix "停止所有程序..."
+  echo ""
+
+  # 停止 Discord Listener(PID 檔)
+  local listener_pid_file="$PROJECT_DIR/discord-bot/listener.pid"
+  if [ -f "$listener_pid_file" ]; then
+    local lpid
+    lpid=$(cat "$listener_pid_file")
+    if kill -0 "$lpid" 2>/dev/null; then
+      kill "$lpid" 2>/dev/null && ok "已停止 Discord Listener(PID $lpid)"
+      sleep 1
+    else
+      info "Discord Listener PID $lpid 已不存在(跳過)"
+    fi
+    rm -f "$listener_pid_file"
+  else
+    info "Discord Listener 未在運行(找不到 PID 檔案)"
+  fi
+
+  # 停止 Pixel Office(PID 檔)
+  local pixel_pid_file="$PROJECT_DIR/pixel-office/pixel.pid"
+  if [ -f "$pixel_pid_file" ]; then
+    local ppid
+    ppid=$(cat "$pixel_pid_file")
+    if kill -0 "$ppid" 2>/dev/null; then
+      kill "$ppid" 2>/dev/null && ok "已停止 Pixel Office(PID $ppid)"
+      sleep 1
+    else
+      info "Pixel Office PID $ppid 已不存在(跳過)"
+    fi
+    rm -f "$pixel_pid_file"
+  else
+    info "Pixel Office 未在運行(找不到 PID 檔案)"
+  fi
+
+  # pkill 清理此專案殘留程序（supervisor + listener）
+  pkill -f "$PROJECT_DIR/discord-bot/dist/supervisor" 2>/dev/null \
+    && ok "已清理殘留 supervisor 程序" || true
+  pkill -f "$PROJECT_DIR/discord-bot/dist/listener" 2>/dev/null \
+    && ok "已清理殘留 listener 程序" || true
+  pkill -f "$PROJECT_DIR/pixel-office" 2>/dev/null \
+    && ok "已清理殘留 pixel-office 程序" || true
+
+  # 全域清理所有 listener.js(防止舊版殘留造成重複回應)
+  local stale_pids
+  stale_pids=$(ps aux | grep "[l]istener.js" | awk '{print $2}' || true)
+  if [ -n "$stale_pids" ]; then
+    for pid in $stale_pids; do
+      kill "$pid" 2>/dev/null && ok "已清除殘留 listener(PID $pid)" || true
+    done
+  fi
+
+  # 清除 ngrok URL(防止 Leader 分享過期 tunnel)
+  rm -f "$PROJECT_DIR/.ai-office/state/ngrok-url.txt" \
+    && ok "已清除 ngrok URL 快取" || true
+
+  echo ""
+  ok "所有程序已停止。"
+  echo ""
+}
+
+# ── 子指令: start ─────────────────────────────────────────────────────────────
+
+cmd_start() {
+  echo ""
+  prefix "啟動 Discord Listener daemon..."
+  echo ""
+
+  # 檢查是否已在運行
+  local listener_pid_file="$PROJECT_DIR/discord-bot/listener.pid"
+  if [ -f "$listener_pid_file" ]; then
+    local existing_pid
+    existing_pid=$(cat "$listener_pid_file")
+    if kill -0 "$existing_pid" 2>/dev/null; then
+      warn "Discord Listener 已在運行(PID $existing_pid)"
+      info "若要重新啟動，請先執行 'office stop' 再執行 'office start'"
+      info "或直接執行 'office restart'"
+      echo ""
+      return 0
+    else
+      # PID 檔案過期，清除
+      rm -f "$listener_pid_file"
+    fi
+  fi
+
+  # 驗證建置存在（優先使用 supervisor.js，fallback 到 listener.js）
+  local supervisor_js="$PROJECT_DIR/discord-bot/dist/supervisor.js"
+  local listener_js="$PROJECT_DIR/discord-bot/dist/listener.js"
+  local target_js=""
+  local use_supervisor=0
+
+  if [ -f "$supervisor_js" ]; then
+    target_js="$supervisor_js"
+    use_supervisor=1
+    info "使用 Supervisor 模式（自動重啟保護）"
+  elif [ -f "$listener_js" ]; then
+    target_js="$listener_js"
+    info "Supervisor 未建置，回退至直接啟動 listener"
+  else
+    fail "找不到 discord-bot/dist/supervisor.js 或 listener.js"
+    info "請先執行 'office setup' 或 'office update' 進行建置。"
+    echo ""
+    exit 1
+  fi
+
+  local listener_log="$PROJECT_DIR/discord-bot/listener.log"
+
+  # 背景啟動 supervisor（或 listener），輸出導向日誌檔
+  set +u
+  node "$target_js" >>"$listener_log" 2>&1 &
+  local listener_pid="$!"
+  set -u
+
+  # 短暫等待以偵測立即崩潰
+  # supervisor 自行寫入 PID 檔；listener fallback 時才由此處寫入
+  sleep 2
+  if kill -0 "$listener_pid" 2>/dev/null; then
+    if [ "$use_supervisor" -eq 0 ]; then
+      echo "$listener_pid" > "$listener_pid_file"
+    fi
+    local label="Discord Listener"
+    [ "$use_supervisor" -eq 1 ] && label="Supervisor"
+    ok "$label 已啟動(PID $listener_pid)"
+    info "日誌: $listener_log"
+    echo ""
+    local ngrok_mode
+    ngrok_mode=$(grep "^NGROK_MODE=" "$PROJECT_DIR/pixel-office/.env" 2>/dev/null | cut -d= -f2 || true)
+    if [ -n "$ngrok_mode" ] && [ "$ngrok_mode" != "disabled" ]; then
+      info "Pixel Office 會隨 listener 自動啟動"
+      info "(ngrok 模式: $ngrok_mode — 公開 URL 將發送至 Discord #general)"
+    else
+      info "Pixel Office 本機位址: http://localhost:3847"
+    fi
+  else
+    warn "Discord Listener 可能啟動失敗。"
+    info "請檢查日誌: $listener_log"
+    info "手動啟動方式: "
+    info "  cd $PROJECT_DIR && node discord-bot/dist/listener.js"
+  fi
+  echo ""
+}
+
+# ── 子指令: logs ──────────────────────────────────────────────────────────────
+
+cmd_logs() {
+  local listener_log="$PROJECT_DIR/discord-bot/listener.log"
+  if [ ! -f "$listener_log" ]; then
+    prefix "日誌檔案尚不存在: $listener_log"
+    info "請先執行 'office start' 啟動服務。"
+    exit 1
+  fi
+  prefix "追蹤日誌(Ctrl+C 離開)..."
+  echo ""
+  tail -f "$listener_log"
+}
+
+# ── 主 dispatch ───────────────────────────────────────────────────────────────
+
+SUBCOMMAND="${1:-}"
+
+case "$SUBCOMMAND" in
+  setup)
+    exec "$PROJECT_DIR/setup.sh"
+    ;;
+  start|stop|status|restart)
+    if [ -f "$PROJECT_DIR/cli/dist/index.js" ]; then
+      exec node "$PROJECT_DIR/cli/dist/index.js" "$SUBCOMMAND"
+    else
+      # fallback: cli 尚未 build，用 bash 版本
+      case "$SUBCOMMAND" in
+        start)   cmd_start ;;
+        stop)    cmd_stop ;;
+        status)  cmd_status ;;
+        restart) cmd_stop; cmd_start ;;
+      esac
+    fi
+    ;;
+  install-service|uninstall-service)
+    if [ -f "$PROJECT_DIR/cli/dist/index.js" ]; then
+      exec node "$PROJECT_DIR/cli/dist/index.js" "$SUBCOMMAND"
+    else
+      echo ""
+      echo -e "  ${RED}[FAIL]${RESET} CLI 尚未建置，請先執行 'office setup'。"
+      echo ""
+      exit 1
+    fi
+    ;;
+  wizard)
+    wizard_js="$PROJECT_DIR/setup/dist/wizard.js"
+    if [ ! -f "$wizard_js" ]; then
+      echo ""
+      echo -e "  ${RED}[FAIL]${RESET} setup/dist/wizard.js 不存在，請先執行 'office setup'。"
+      echo ""
+      exit 1
+    fi
+    stty sane 2>/dev/null || true
+    exec node "$wizard_js"
+    ;;
+  update)
+    exec "$PROJECT_DIR/update.sh"
+    ;;
+  logs)
+    cmd_logs
+    ;;
+  help|--help|-h)
+    cmd_help
+    ;;
+  "")
+    cmd_help
+    ;;
+  *)
+    echo ""
+    prefix "未知指令: '$SUBCOMMAND'"
+    echo ""
+    cmd_help
+    exit 1
+    ;;
+esac

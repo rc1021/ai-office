@@ -436,6 +436,12 @@ async function postNgrokUrl(readyClient: import("discord.js").Client<true>): Pro
   }
 }
 
+// ── Module-level state for shard reconnect tracking ───────────────────────────
+
+let reconnectAttempts = 0;
+let lastReconnectAt = 0;
+let isShuttingDown = false;
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -547,9 +553,52 @@ async function main(): Promise<void> {
     console.warn("[Listener] Discord warning:", info);
   });
 
+  // discord.js v14 不可恢復的 close codes
+  const FATAL_CLOSE_CODES = [4004, 4010, 4011, 4012, 4013, 4014];
+
+  client.on(Events.ShardDisconnect, (closeEvent, shardId) => {
+    console.error(`[Listener] Shard ${shardId} disconnected. Close code: ${closeEvent.code}`);
+    if (FATAL_CLOSE_CODES.includes(closeEvent.code)) {
+      console.error(`[Listener] Fatal close code ${closeEvent.code} — exiting for supervisor restart`);
+      process.exit(1);
+    }
+  });
+
+  client.on(Events.ShardReconnecting, (shardId) => {
+    console.log(`[Listener] Shard ${shardId} reconnecting...`);
+    reconnectAttempts++;
+    lastReconnectAt = Date.now();
+  });
+
+  client.on(Events.ShardResume, (shardId, replayedEvents) => {
+    console.log(`[Listener] Shard ${shardId} resumed. Replayed ${replayedEvents} events`);
+    reconnectAttempts = 0;
+    lastReconnectAt = 0;
+  });
+
+  client.on(Events.ShardError, (error, shardId) => {
+    console.error(`[Listener] Shard ${shardId} error:`, error.message);
+  });
+
+  client.on(Events.ShardReady, (shardId) => {
+    console.log(`[Listener] Shard ${shardId} ready`);
+  });
+
+  client.on(Events.Invalidated, () => {
+    console.error("[Listener] Session invalidated — exiting for supervisor restart");
+    process.exit(1);
+  });
+
+  // Keepalive timer handle — assigned after client.login(); declared here so
+  // shutdown() can close over the binding.
+  let keepaliveTimer: ReturnType<typeof setInterval> | undefined;
+
   // Graceful shutdown
   const shutdown = async (signal: string): Promise<void> => {
+    if (isShuttingDown) return; // 避免重複 shutdown
+    isShuttingDown = true;
     console.log(`\n[Listener] Received ${signal}. Shutting down...`);
+    if (keepaliveTimer !== undefined) clearInterval(keepaliveTimer);
     if (heartbeat) heartbeat.stop();
     client.destroy();
     console.log("[Listener] Goodbye.");
@@ -565,6 +614,22 @@ async function main(): Promise<void> {
     console.error("[Listener] Unhandled promise rejection:", reason);
   });
 
+  process.on("beforeExit", (code) => {
+    if (isShuttingDown) return; // 正常 shutdown，不干預
+    console.error(`[Listener] Event loop drained unexpectedly (code=${code}) — exiting with code 1`);
+    process.exit(1); // 讓 supervisor 重啟
+  });
+
+  process.on("exit", (code) => {
+    const ts = new Date().toISOString();
+    try {
+      fs.appendFileSync(
+        path.join(__discord_bot_dir, "listener.exit.log"),
+        `${ts} exit code=${code} shuttingDown=${isShuttingDown}\n`
+      );
+    } catch { /* best effort */ }
+  });
+
   try {
     await client.login(token);
     console.log("[Listener] Discord login initiated.");
@@ -572,6 +637,21 @@ async function main(): Promise<void> {
     console.error("[Listener] Failed to log into Discord:", err);
     process.exit(1);
   }
+
+  // 保持 event loop 活著，同時偵測重連卡住
+  const KEEPALIVE_INTERVAL_MS = 30_000;
+  const RECONNECT_STUCK_THRESHOLD_MS = 15 * 60 * 1000; // 15 分鐘
+
+  keepaliveTimer = setInterval(() => {
+    if (reconnectAttempts > 0 && lastReconnectAt > 0) {
+      const elapsed = Date.now() - lastReconnectAt;
+      if (elapsed > RECONNECT_STUCK_THRESHOLD_MS) {
+        console.error(`[Listener] Reconnect stuck for ${Math.round(elapsed / 60000)} min — force exit`);
+        process.exit(1);
+      }
+    }
+  }, KEEPALIVE_INTERVAL_MS);
+  // 不用 .unref() — 我們就是要它防止 event loop 排空
 }
 
 main();
