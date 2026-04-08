@@ -20,21 +20,47 @@ The setup script will:
 
 After setup, the bot is online in Discord. Send a message in `#general` — the Leader responds automatically. No need to open Claude Code.
 
+The `office` CLI is now available for all management tasks:
+
+```bash
+office help
+```
+
+> **Note:** `./bin/office` must be in your PATH, or call it as `./bin/office <command>` from the project root.
+
+### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `office setup` | Initialize environment (installs deps, runs wizard, starts listener) |
+| `office start` | Start the Discord Listener daemon |
+| `office stop` | Stop all running processes |
+| `office restart` | Stop + start |
+| `office update` | Download latest version and rebuild |
+| `office status` | Show current status of each component |
+| `office logs` | Tail Discord Listener logs (`-f`) |
+| `office wizard` | Re-run the configuration wizard |
+| `office install-service` | Install auto-start service (launchd / systemd) |
+| `office uninstall-service` | Remove auto-start service |
+| `office help` | Show help |
+
 ### Updating
 
 ```bash
-./update.sh
+office update
 ```
 
 Downloads latest source, rebuilds, and **restarts the listener**. Your configuration is preserved (`config/office.yaml`, `discord-bot/.env`, `pixel-office/.env`, `.mcp.json`).
 
 ### Uninstalling
 
+To stop all processes:
+
 ```bash
-./uninstall.sh
+office stop
 ```
 
-Stops all processes (listener + Pixel Office), removes state/build/node_modules. Your `.env` config files are preserved for easy reinstall.
+This stops the listener and Pixel Office daemons. To also remove state/build/node_modules, delete those directories manually. Your `.env` config files are preserved for easy reinstall.
 
 ## Prerequisites
 
@@ -150,10 +176,10 @@ User sends message in #general
   → Next queued message starts processing
 ```
 
-Management commands (printed after setup):
-- **View logs**: `tail -f discord-bot/listener.log`
-- **Stop**: `kill <PID>` (PID shown in setup output)
-- **Restart**: `node discord-bot/dist/listener.js`
+Management commands:
+- **View logs**: `office logs`
+- **Stop**: `office stop`
+- **Start / Restart**: `office start` / `office restart`
 
 ## Pixel Office UI
 

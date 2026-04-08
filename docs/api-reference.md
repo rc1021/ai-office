@@ -1,10 +1,11 @@
 # API Reference
 
-This document covers the three API surfaces exposed by AI Office:
+This document covers the four API surfaces exposed by AI Office:
 
 1. **Coordination MCP Server** (`ai-office-coordination`) — 19 tools for task management, event bus, observability, and validation. Used by all agents.
 2. **Discord MCP Server** (`ai-office-discord`) — 16 tools for channel management, messaging, threads, approvals, and admin. Used by agents to interact with Discord.
-3. **Orchestrator CLI** — 6 commands for managing worker lifecycle and session state. Called by the Leader agent via shell.
+3. **`office` CLI** — 10 commands for managing the AI Office runtime (start, stop, update, logs, etc.). Used by humans from the terminal.
+4. **Orchestrator CLI** — 6 commands for managing worker lifecycle and session state. Called by the Leader agent via shell.
 
 All tools require agents to identify themselves via `agent_id`. The Coordination server additionally enforces JWT-based identity tokens; tools that access sensitive data require a minimum clearance level.
 
@@ -567,6 +568,28 @@ Diagnostic tool. Check what permissions an agent currently has for a specific ch
 | `channel_name` | string | yes | Channel to check |
 
 **Returns:** Text block showing `allowed` (boolean), optional denial reason, and the agent's full profile (role, department, clearance, write scopes, and denied scopes).
+
+---
+
+## `office` CLI
+
+**Binary:** `./bin/office` (add to PATH, or invoke as `./bin/office <command>` from the project root)
+
+The `office` CLI is the unified management interface for AI Office. It replaces direct shell scripts and manual process management.
+
+| Command | Description |
+|---------|-------------|
+| `office setup` | Initialize environment — installs deps, runs configuration wizard, starts the Discord Listener daemon. Equivalent to the original `./setup.sh`. |
+| `office start` | Start the Discord Listener daemon in the background. |
+| `office stop` | Stop all running processes (listener + Pixel Office). |
+| `office restart` | `stop` followed by `start`. |
+| `office update` | Download latest source, rebuild all packages, and restart the listener. Equivalent to the original `./update.sh`. Configuration files are preserved. |
+| `office status` | Print the current status of each component (listener, Pixel Office, MCP servers). |
+| `office logs` | Tail the Discord Listener log (`tail -f discord-bot/listener.log`). |
+| `office wizard` | Re-run the interactive configuration wizard. Equivalent to `node setup/dist/wizard.js`. |
+| `office install-service` | Install an auto-start service entry for the listener (launchd on macOS, systemd on Linux). |
+| `office uninstall-service` | Remove the auto-start service entry. |
+| `office help` | Print a summary of all available commands. |
 
 ---
 

@@ -50,13 +50,16 @@ Docker is only needed if you want to run the Pixel Office UI or the setup wizard
 bash <(curl -fsSL https://raw.githubusercontent.com/rc1021/ai-office/main/setup.sh)
 ```
 
-Or if you already have the project:
+After the initial install, the `office` CLI is available for all subsequent management:
 
 ```sh
-./setup.sh
+office setup    # re-run setup (install deps + wizard + start listener)
+office help     # show all available commands
 ```
 
-The `setup.sh` script performs six steps automatically:
+> **Note:** `./bin/office` must be in your PATH, or call it as `./bin/office <command>` from the project root.
+
+The `setup.sh` script (and `office setup`) performs six steps automatically:
 
 1. **Downloads AI Office** — fetches the latest tarball from GitHub (no git required).
 2. **Checks prerequisites** — verifies Node.js >= 22, npm, curl, Claude Code, and Docker/ngrok (optional).
@@ -66,7 +69,7 @@ The `setup.sh` script performs six steps automatically:
 6. **Stops old processes** — kills any existing listener/Pixel Office daemons to prevent duplicates.
 7. **Starts the Discord Listener daemon** — background process that keeps the bot online.
 
-If any step fails, the script exits with an error message indicating which package failed. Fix the issue and re-run `./setup.sh`.
+If any step fails, the script exits with an error message indicating which package failed. Fix the issue and re-run `office setup`.
 
 ---
 
@@ -107,10 +110,10 @@ In Discord, open **User Settings > Advanced** and enable **Developer Mode**. The
 
 ## 4. Configuration Wizard
 
-The wizard runs automatically at the end of `./setup.sh`. You can also run it standalone:
+The wizard runs automatically at the end of `office setup`. You can also run it standalone:
 
 ```sh
-node setup/dist/wizard.js
+office wizard
 ```
 
 The wizard asks the following questions in order:
@@ -163,16 +166,18 @@ After you confirm the summary, the wizard creates or updates:
 
 ## 5. First Run
 
-Once setup is complete, open Claude Code in the project root:
+Once setup is complete, the Discord Listener daemon is already running in the background — no need to open Claude Code manually.
+
+To verify everything is working:
 
 ```sh
-cd ai-office
-claude
+office status   # show component status
+office logs     # tail the listener log
 ```
 
 ### What happens on startup
 
-1. Claude Code loads the project-level `CLAUDE.md` and the Leader's `agents/leader/CLAUDE.md`.
+1. The Listener daemon starts and loads the project-level `CLAUDE.md` and the Leader's `agents/leader/CLAUDE.md`.
 2. The Leader agent calls `orchestrator init` to generate a session key, clean up stale workers, and sync active roles to the database.
 3. The Leader calls `register_agent` on the Discord MCP Server to announce itself and ensure all required Discord channels exist.
 4. The Leader posts a startup embed to the `#general` channel in Discord, showing office name, active roles, and session ID.
@@ -287,31 +292,43 @@ Then re-run the wizard or set `AI_OFFICE_WORKSPACE` to point to an existing dire
 
 ### Build errors after updating
 
-**Symptom:** TypeScript compilation errors after `./update.sh`.
+**Symptom:** TypeScript compilation errors after `office update`.
 
 **Fix:** Re-run the full setup to reinstall dependencies and rebuild:
 
 ```sh
-./setup.sh
+office setup
 ```
 
 This is idempotent — it is safe to run multiple times. Note: `core/` must build before `discord-bot/` (the build scripts handle this automatically).
+
+### Listener won't start
+
+**Symptom:** `office start` returns an error or the listener exits immediately.
+
+**Fix:** Check the logs to see what went wrong:
+
+```sh
+office logs
+```
+
+Common causes: missing `.env` values (see [Discord token invalid](#discord-token-invalid)), missing build output (`office setup` to rebuild), or a port conflict.
 
 ### MCP servers not connecting
 
 **Symptom:** Claude Code shows tools unavailable; no Discord messages are sent.
 
 **Fix:**
-1. Verify `.mcp.json` exists in the project root. If missing, re-run `node setup/dist/wizard.js`.
-2. Check that `discord-bot/dist/` and `coordination/dist/` exist. If not, run `./setup.sh` to build.
+1. Verify `.mcp.json` exists in the project root. If missing, re-run `office wizard`.
+2. Check that `discord-bot/dist/` and `coordination/dist/` exist. If not, run `office setup` to build.
 3. In Claude Code, use `/mcp` to view the MCP server connection status and error details.
 
 ### Uninstalling
 
-To stop all processes and clean up:
+To stop all processes:
 
 ```sh
-./uninstall.sh
+office stop
 ```
 
-This stops the listener and Pixel Office daemons, removes state files, build outputs, and `node_modules`. Your `.env` config files are preserved — run `./setup.sh` to reinstall.
+This stops the listener and Pixel Office daemons. To also remove state files, build outputs, and `node_modules`, delete those directories manually. Your `.env` config files are preserved — run `office setup` to reinstall.
