@@ -28,7 +28,7 @@ import {
 } from "discord.js";
 import { registerApprovalInteractionHandler, setApprovalResolvedCallback, runTimeoutSweep, recoverPendingApprovals } from "./approval-manager.js";
 import type { ApprovalRequest } from "./types.js";
-import { setDiscordClient } from "./discord-client.js";
+import { setDiscordClient, getDiscordClient } from "./discord-client.js";
 import { DiscordChatAdapter } from "./discord-adapter.js";
 import {
   loadOfficeConfig,
@@ -321,8 +321,12 @@ async function handleMessage(message: Message): Promise<void> {
     console.error("[Listener] claude failed:", errMsg);
 
     await removeReaction(message, "⏳");
+    const isAuthError = errMsg.startsWith("AUTH_EXPIRED:");
+    const userMsg = isAuthError
+      ? "🔐 Claude authentication expired. Please run `/login` to re-authenticate, then retry."
+      : `❌ Error processing your request: ${errMsg.substring(0, 1000)}`;
     await channel
-      .send(`❌ Error processing your request: ${errMsg.substring(0, 1000)}`)
+      .send(userMsg)
       .catch((e) => console.error("[Listener] Failed to send error:", e));
     return;
   }
@@ -347,6 +351,15 @@ async function handleApproval(approval: ApprovalRequest): Promise<void> {
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error("[Listener] claude failed for approval trigger:", errMsg);
+    if (errMsg.startsWith("AUTH_EXPIRED:")) {
+      try {
+        const dc = getDiscordClient();
+        const ch = dc.channels.cache.find(
+          (c) => c.isTextBased() && "name" in c && c.name === GENERAL_CHANNEL
+        ) as TextChannel | undefined;
+        await ch?.send("🔐 Claude authentication expired. Please run `/login` to re-authenticate.");
+      } catch { /* non-fatal */ }
+    }
   }
 }
 

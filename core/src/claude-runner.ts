@@ -87,11 +87,16 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<C
           resolve({ output: trimmed, sessionId: "" });
         }
       } else {
-        reject(
-          new Error(
-            `claude exited with code ${code}. stderr: ${stderrOutput.slice(-500)}`
-          )
-        );
+        const isAuthError = /auth|login|401|unauthorized|unauthenticated|token|credential/i.test(stderrOutput);
+        if (isAuthError) {
+          reject(new Error(`AUTH_EXPIRED: Claude authentication expired. Please run \`claude auth login\` (or /login in Discord) to re-authenticate.\nstderr: ${stderrOutput.slice(-500)}`));
+        } else {
+          reject(
+            new Error(
+              `claude exited with code ${code}. stderr: ${stderrOutput.slice(-500)}`
+            )
+          );
+        }
       }
     });
   });
