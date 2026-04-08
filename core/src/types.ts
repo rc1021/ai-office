@@ -1,6 +1,6 @@
 export type RiskLevel = "GREEN" | "YELLOW" | "RED";
 
-export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "TIMEOUT" | "CANCELLED" | "CONSUMED" | "SUPERSEDED";
 
 export type DataClassification = "PUBLIC" | "INTERNAL" | "CONFIDENTIAL" | "RESTRICTED";
 
@@ -50,7 +50,14 @@ export interface ApprovalRequest {
   messageId: string | null;
   createdAt: Date;
   resolvedAt: Date | null;
-  resolvedBy: string | null;
+  resolvedBy: string | null;          // Discord snowflake user ID
+  traceId?: string;
+  taskId?: string | null;
+  requestingAgentId?: string;
+  timeoutSeconds?: number;            // 0 = no timeout
+  deadlineAt?: Date | null;           // createdAt + timeoutSeconds
+  idempotencyKey?: string | null;
+  batchCount?: number | null;
 }
 
 export interface EmbedField {

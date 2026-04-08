@@ -26,7 +26,7 @@ import {
   TextChannel,
   Message,
 } from "discord.js";
-import { registerApprovalInteractionHandler, setApprovalResolvedCallback } from "./approval-manager.js";
+import { registerApprovalInteractionHandler, setApprovalResolvedCallback, runTimeoutSweep, recoverPendingApprovals } from "./approval-manager.js";
 import type { ApprovalRequest } from "./types.js";
 import { setDiscordClient } from "./discord-client.js";
 import { DiscordChatAdapter } from "./discord-adapter.js";
@@ -558,6 +558,9 @@ async function main(): Promise<void> {
       workerModel = config.models.worker;
       console.log(`[Listener] Leader model: ${config.models.leader}, Worker model: ${config.models.worker}`);
 
+      // Recover orphan pending approvals from before daemon restart
+      await recoverPendingApprovals(client).catch(err => console.warn('[Listener] recoverPendingApprovals failed:', err));
+
       await checkFirstRun();
       await postNgrokUrl(readyClient);
 
@@ -691,6 +694,8 @@ async function main(): Promise<void> {
         process.exit(1);
       }
     }
+    // Sweep for timed-out approvals (fire and forget)
+    runTimeoutSweep();
   }, KEEPALIVE_INTERVAL_MS);
   // 不用 .unref() — 我們就是要它防止 event loop 排空
 }

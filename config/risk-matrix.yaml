@@ -1,0 +1,87 @@
+# AI Office Risk Matrix
+# operation_type × scope_impact → risk_level + timeout policy
+version: 1
+
+# Base matrix: operation × scope → risk
+matrix:
+  - operation: read
+    scope: any
+    risk: GREEN
+    auto_approve: true
+    timeout_seconds: 0
+
+  - operation: write
+    scope: local
+    risk: GREEN
+    auto_approve: true
+    timeout_seconds: 0
+
+  - operation: write
+    scope: shared
+    risk: YELLOW
+    auto_approve: false
+    timeout_seconds: 300
+
+  - operation: delete
+    scope: single_record
+    risk: GREEN
+    auto_approve: true
+    timeout_seconds: 0
+
+  - operation: delete
+    scope: table_subset
+    risk: YELLOW
+    auto_approve: false
+    timeout_seconds: 300
+
+  - operation: delete
+    scope: full_table
+    risk: RED
+    auto_approve: false
+    timeout_seconds: 600
+
+  - operation: migrate
+    scope: any
+    risk: RED
+    auto_approve: false
+    timeout_seconds: 900
+
+  - operation: send
+    scope: external
+    risk: YELLOW
+    auto_approve: false
+    timeout_seconds: 180
+
+  - operation: execute
+    scope: irreversible
+    risk: RED
+    auto_approve: false
+    timeout_seconds: 900
+
+  - operation: financial
+    scope: any
+    risk: RED
+    auto_approve: false
+    timeout_seconds: 600
+
+# Timeout behavior per risk level
+timeout_behavior:
+  GREEN:
+    action: auto_approve
+    notify_channel: null
+  YELLOW:
+    action: auto_cancel
+    notify_channel: alerts
+  RED:
+    action: auto_cancel
+    notify_channel: alerts
+
+# Impact thresholds: escalate risk if batch_count exceeds
+impact_thresholds:
+  - operation: delete
+    scope: table_subset
+    escalate_to: RED
+    when_count_exceeds: 100
+
+# Role overrides (lower risk for qualified roles)
+role_overrides: []

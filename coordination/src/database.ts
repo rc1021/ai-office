@@ -197,6 +197,38 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 4,
+    description: "Approvals table — replaces approvals.json, supports atomic transitions + timeout",
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS approvals (
+          id TEXT PRIMARY KEY,
+          trace_id TEXT NOT NULL DEFAULT '',
+          task_id TEXT,
+          requesting_agent_id TEXT NOT NULL DEFAULT 'leader',
+          channel_name TEXT NOT NULL,
+          action TEXT NOT NULL,
+          description TEXT NOT NULL,
+          risk_level TEXT NOT NULL CHECK(risk_level IN ('GREEN','YELLOW','RED')),
+          status TEXT NOT NULL DEFAULT 'PENDING'
+            CHECK(status IN ('PENDING','APPROVED','REJECTED','TIMEOUT','CANCELLED','CONSUMED','SUPERSEDED')),
+          timeout_seconds INTEGER NOT NULL DEFAULT 0,
+          deadline_at TEXT,
+          message_id TEXT,
+          idempotency_key TEXT UNIQUE,
+          batch_count INTEGER,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          resolved_at TEXT,
+          resolved_by TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
+        CREATE INDEX IF NOT EXISTS idx_approvals_deadline ON approvals(deadline_at) WHERE status = 'PENDING';
+        CREATE INDEX IF NOT EXISTS idx_approvals_idempotency ON approvals(idempotency_key);
+        UPDATE schema_meta SET value = '4' WHERE key = 'version';
+      `);
+    },
+  },
 ];
 
 function migrate(db: Database.Database): void {
