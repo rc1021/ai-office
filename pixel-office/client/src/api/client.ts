@@ -1,4 +1,5 @@
 import { API_BASE } from "../config.js";
+import type { ActivityData } from "../ui/ActivityLog.js";
 
 export interface AgentData {
   agent_id: string;
@@ -50,6 +51,7 @@ export type SSEHandlers = {
   onAgents: (agents: AgentData[]) => void;
   onTasks: (tasks: TaskData[]) => void;
   onEvents?: (events: EventData[]) => void;
+  onActivity?: (activity: ActivityData[]) => void;
 };
 
 export class OfficeAPI {
@@ -83,6 +85,10 @@ export class OfficeAPI {
 
     this.eventSource.addEventListener("events", (e) => {
       handlers.onEvents?.(JSON.parse((e as MessageEvent).data));
+    });
+
+    this.eventSource.addEventListener("activity", (e) => {
+      handlers.onActivity?.(JSON.parse((e as MessageEvent).data));
     });
 
     this.eventSource.onerror = () => {

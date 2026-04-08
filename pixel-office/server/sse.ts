@@ -1,15 +1,21 @@
 import { Request, Response } from "express";
-import { getAllAgents, getAllTasks, getRecentEvents, AgentRow, TaskRow, EventRow } from "./db.js";
+import { getAllAgents, getAllTasks, getRecentEvents, getActivity, AgentRow, TaskRow, EventRow, ActivityRow } from "./db.js";
 
 interface SSEClient {
   res: Response;
   lastAgents: string; // JSON hash for diff detection
   lastTasks: string;
   lastEvents: string;
+  lastActivity: string;
 }
 
 const clients: Set<SSEClient> = new Set();
 let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+/** Format Date as UTC string matching SQLite format: "YYYY-MM-DD HH:MM:SS" */
+function toDbTimestamp(date: Date): string {
+  return date.toISOString().replace("T", " ").slice(0, 19);
+}
 
 function hashData(data: unknown): string {
   return JSON.stringify(data);
@@ -30,11 +36,16 @@ function pollForChanges(): void {
   try {
     const agents = getAllAgents();
     const tasks = getAllTasks(20);
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const fiveMinAgo = toDbTimestamp(new Date(Date.now() - 5 * 60 * 1000));
     const events = getRecentEvents(fiveMinAgo, 50);
     const agentsHash = hashData(agents);
     const tasksHash = hashData(tasks);
     const eventsHash = hashData(events);
+
+    // Poll activity (last 30 min for activity log)
+    const thirtyMinAgo = toDbTimestamp(new Date(Date.now() - 30 * 60 * 1000));
+    const activity = getActivity({ since: thirtyMinAgo, limit: 100 });
+    const activityHash = hashData(activity);
 
     for (const client of clients) {
       // Send agents if changed
@@ -77,6 +88,17 @@ function pollForChanges(): void {
           clients.delete(client);
         }
       }
+
+      // Send activity if changed
+      if (client.lastActivity !== activityHash) {
+        const payload = `event: activity\ndata: ${JSON.stringify(activity)}\n\n`;
+        try {
+          client.res.write(payload);
+          client.lastActivity = activityHash;
+        } catch {
+          clients.delete(client);
+        }
+      }
     }
   } catch (err) {
     console.error("[SSE] Poll error:", err);
@@ -96,21 +118,25 @@ export function handleSSE(req: Request, res: Response): void {
     ...t,
     steps: JSON.parse(t.steps),
   }));
-  const initSince = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const initSince = toDbTimestamp(new Date(Date.now() - 5 * 60 * 1000));
   const events = getRecentEvents(initSince, 50).map((e) => ({
     ...e,
     payload: JSON.parse(e.payload),
   }));
+  const actSince = toDbTimestamp(new Date(Date.now() - 30 * 60 * 1000));
+  const activity = getActivity({ since: actSince, limit: 100 });
 
   res.write(`event: agents\ndata: ${JSON.stringify(agents)}\n\n`);
   res.write(`event: tasks\ndata: ${JSON.stringify(tasks)}\n\n`);
   res.write(`event: events\ndata: ${JSON.stringify(events)}\n\n`);
+  res.write(`event: activity\ndata: ${JSON.stringify(activity)}\n\n`);
 
   const client: SSEClient = {
     res,
     lastAgents: hashData(agents),
     lastTasks: hashData(getAllTasks(20)),
     lastEvents: hashData(getRecentEvents(initSince, 50)),
+    lastActivity: hashData(getActivity({ since: actSince, limit: 100 })),
   };
   clients.add(client);
 

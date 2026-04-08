@@ -10,7 +10,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import type { ChatAdapter } from "./chat-adapter.js";
 import { runClaude } from "./claude-runner.js";
 import type { ClaudeRunnerConfig } from "./claude-runner.js";
@@ -32,6 +32,9 @@ export class HeartbeatScheduler {
   private dailyBriefMinute: number;
   private auditConfig: AuditConfig;
   private auditingTaskIds = new Set<string>(); // prevent double-audit
+  private lastAlertHashes = new Map<string, number>(); // hash → timestamp for cooldown
+  private restarting = false; // guard flag: skip health check during restart
+  private static ALERT_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 
   constructor(
     timezone: string,
@@ -87,11 +90,15 @@ export class HeartbeatScheduler {
   // ── Health Check (every 1 min) ──────────────────────────────────────────
 
   private async healthCheck(): Promise<void> {
-    const issues: string[] = [];
+    const criticalIssues: { icon: string; label: string; detail: string }[] = [];
+    const routineActions: { icon: string; label: string; detail: string }[] = [];
 
     // Check pixel-office: PID file first, then HTTP fallback
+    // Skip during active restart to avoid false alarms in the gap window
     const pidFile = path.join(this.projectDir, "pixel-office", "pixel.pid");
-    if (fs.existsSync(pidFile)) {
+    if (this.restarting) {
+      console.log("[Heartbeat] Pixel Office restart in progress — skipping health check");
+    } else if (fs.existsSync(pidFile)) {
       let pidAlive = false;
       try {
         const pid = parseInt(fs.readFileSync(pidFile, "utf-8").trim(), 10);
@@ -105,7 +112,10 @@ export class HeartbeatScheduler {
         // HTTP health check as fallback before declaring dead
         const serverAlive = await this.checkPixelOfficeHttp();
         if (!serverAlive) {
-          issues.push("Pixel Office process is dead — restarting");
+          criticalIssues.push({
+            icon: "🖥️", label: "視覺化儀表板離線",
+            detail: "Pixel Office 程序已停止，正在嘗試重新啟動",
+          });
           this.restartPixelOffice();
         } else {
           // Server is alive but PID file is stale — find real PID and update
@@ -121,30 +131,67 @@ export class HeartbeatScheduler {
         // Quick read test — just check the file is readable
         fs.accessSync(dbPath, fs.constants.R_OK | fs.constants.W_OK);
       } catch {
-        issues.push("Coordination DB is inaccessible");
+        criticalIssues.push({
+          icon: "🗄️", label: "協調資料庫無法存取",
+          detail: "coordination.db 無法讀寫，任務系統可能受影響",
+        });
       }
     }
 
     // Clean up stale tasks and agents (stuck for >10 minutes)
-    await this.cleanupStaleTasks(issues);
+    await this.cleanupStaleTasks(criticalIssues, routineActions);
 
     // Auto-audit completed tasks (if enabled)
     if (this.auditConfig.autoReview) {
       await this.checkPendingAudits();
     }
 
-    // Alert on genuine failures — no cooldown needed because issues are resolved at source
-    if (issues.length > 0) {
-      try {
-        await this.adapter.sendEmbed("alerts", {
-          title: "Health Check Alert",
-          description: issues.join("\n"),
-          color: COLORS.RED,
-          footer: new Date().toISOString(),
-        });
-      } catch (err) {
-        console.error("[Heartbeat] Failed to post health alert:", err);
+    // Only send alerts for critical issues (with cooldown to prevent spam)
+    if (criticalIssues.length > 0) {
+      const alertKey = criticalIssues.map(i => i.label).sort().join("|");
+      if (!this.isAlertOnCooldown(alertKey)) {
+        const fields = criticalIssues.map(i => `${i.icon} **${i.label}**\n${i.detail}`);
+        if (routineActions.length > 0) {
+          fields.push(
+            "🔧 **自動處理**\n" +
+            routineActions.map(a => `• ${a.detail}`).join("\n")
+          );
+        }
+        try {
+          await this.adapter.sendEmbed("alerts", {
+            title: "⚠️ 系統健康檢查警報",
+            description: fields.join("\n\n"),
+            color: COLORS.YELLOW,
+            footer: new Date().toLocaleString("zh-TW", { timeZone: this.timezone }),
+          });
+          this.markAlertSent(alertKey);
+        } catch (err) {
+          console.error("[Heartbeat] Failed to post health alert:", err);
+        }
       }
+    }
+
+    // Log routine actions to console only (not Discord) to reduce noise
+    if (routineActions.length > 0 && criticalIssues.length === 0) {
+      for (const a of routineActions) {
+        console.log(`[Heartbeat] ${a.label}: ${a.detail}`);
+      }
+    }
+  }
+
+  /** Check if a specific alert type is still within cooldown period */
+  private isAlertOnCooldown(key: string): boolean {
+    const lastSent = this.lastAlertHashes.get(key);
+    if (!lastSent) return false;
+    return Date.now() - lastSent < HeartbeatScheduler.ALERT_COOLDOWN_MS;
+  }
+
+  private markAlertSent(key: string): void {
+    this.lastAlertHashes.set(key, Date.now());
+    // Prune old entries
+    const cutoff = Date.now() - HeartbeatScheduler.ALERT_COOLDOWN_MS;
+    for (const [k, ts] of this.lastAlertHashes) {
+      if (ts < cutoff) this.lastAlertHashes.delete(k);
     }
   }
 
@@ -152,7 +199,10 @@ export class HeartbeatScheduler {
    * Detect tasks stuck in active states for >10 minutes and mark them failed.
    * Free any agents that are stuck in "busy" with stale heartbeats.
    */
-  private async cleanupStaleTasks(issues: string[]): Promise<void> {
+  private async cleanupStaleTasks(
+    criticalIssues: { icon: string; label: string; detail: string }[],
+    routineActions: { icon: string; label: string; detail: string }[],
+  ): Promise<void> {
     const dbPath = path.join(this.statePath, "coordination.db");
     if (!fs.existsSync(dbPath)) return;
 
@@ -213,10 +263,16 @@ export class HeartbeatScheduler {
         }
 
         if (autoCompletedTasks.length > 0) {
-          issues.push(`${autoCompletedTasks.length} stale task(s) auto-completed (agent idle): ${autoCompletedTasks.join(", ")}`);
+          routineActions.push({
+            icon: "✅", label: "逾時任務自動完成",
+            detail: `${autoCompletedTasks.length} 個閒置任務已自動結案：${autoCompletedTasks.join("、")}`,
+          });
         }
         if (failedTasks.length > 0) {
-          issues.push(`${failedTasks.length} stale task(s) marked as failed: ${failedTasks.join(", ")}`);
+          criticalIssues.push({
+            icon: "❌", label: "任務逾時失敗",
+            detail: `${failedTasks.length} 個任務超過 10 分鐘無回應，已標記失敗：${failedTasks.join("、")}`,
+          });
         }
       }
 
@@ -238,7 +294,10 @@ export class HeartbeatScheduler {
           freeStmt.run(agent.agent_id);
           console.log(`[Heartbeat] Freed stale agent: ${agent.agent_id}`);
         }
-        issues.push(`${staleAgents.length} stale agent(s) freed: ${staleAgents.map(a => a.agent_id).join(", ")}`);
+        routineActions.push({
+          icon: "👤", label: "閒置代理已釋放",
+          detail: `${staleAgents.length} 個代理超時已重設為閒置：${staleAgents.map(a => a.agent_id).join("、")}`,
+        });
       }
 
       db.close();
@@ -362,7 +421,6 @@ export class HeartbeatScheduler {
    */
   private async fixStalePidFile(pidFile: string): Promise<void> {
     try {
-      const { execSync } = await import("node:child_process");
       const output = execSync("lsof -ti :3847", { encoding: "utf-8", timeout: 5000 }).trim();
       if (output) {
         const realPid = output.split("\n")[0].trim();
@@ -388,8 +446,18 @@ export class HeartbeatScheduler {
     const pixelServerPath = path.join(this.projectDir, "pixel-office", "server", "index.ts");
     if (!fs.existsSync(pixelServerPath)) return;
 
+    this.restarting = true;
     console.log("[Heartbeat] Attempting to restart Pixel Office...");
+
     try {
+      // Step 1: Kill ALL existing processes on port 3847 to prevent zombie accumulation
+      this.killProcessesOnPort(3847);
+
+      // Step 2: Remove stale PID file
+      const pidFile = path.join(this.projectDir, "pixel-office", "pixel.pid");
+      try { fs.unlinkSync(pidFile); } catch { /* may not exist */ }
+
+      // Step 3: Spawn new server
       const npxPath = path.join(this.projectDir, "pixel-office", "node_modules", ".bin", "tsx");
       const pixelProc = spawn(npxPath, [pixelServerPath], {
         cwd: path.join(this.projectDir, "pixel-office"),
@@ -403,13 +471,62 @@ export class HeartbeatScheduler {
       });
       pixelProc.unref();
 
-      if (pixelProc.pid) {
-        const pidFile = path.join(this.projectDir, "pixel-office", "pixel.pid");
-        fs.writeFileSync(pidFile, String(pixelProc.pid), "utf-8");
-        console.log(`[Heartbeat] Pixel Office restarted (PID ${pixelProc.pid})`);
-      }
+      // Step 4: Wait for server to be ready, then resolve the REAL PID on the port
+      // (tsx wrapper PID ≠ actual node PID listening on the port)
+      setTimeout(async () => {
+        try {
+          const serverReady = await this.checkPixelOfficeHttp();
+          if (serverReady) {
+            await this.fixStalePidFile(pidFile);
+            console.log("[Heartbeat] Pixel Office restarted and verified");
+          } else if (pixelProc.pid) {
+            // Fallback: write the spawn PID (better than nothing)
+            fs.writeFileSync(pidFile, String(pixelProc.pid), "utf-8");
+            console.log(`[Heartbeat] Pixel Office spawned (PID ${pixelProc.pid}), but HTTP not yet ready`);
+          }
+        } catch (err) {
+          console.error("[Heartbeat] Post-restart PID resolution failed:", err);
+        } finally {
+          this.restarting = false;
+        }
+      }, 5000); // wait 5s for server startup
     } catch (err) {
+      this.restarting = false;
       console.error("[Heartbeat] Failed to restart Pixel Office:", err);
+    }
+  }
+
+  /**
+   * Kill all processes listening on a given port.
+   * Prevents zombie accumulation from repeated restarts.
+   */
+  private killProcessesOnPort(port: number): void {
+    try {
+      const pids = execSync(`lsof -ti :${port}`, { encoding: "utf-8", timeout: 5000 }).trim();
+      if (pids) {
+        const pidList = pids.split("\n").map(p => p.trim()).filter(Boolean);
+        for (const pid of pidList) {
+          try {
+            process.kill(parseInt(pid, 10), "SIGTERM");
+            console.log(`[Heartbeat] Killed old process on port ${port}: PID ${pid}`);
+          } catch { /* already dead */ }
+        }
+        // Give processes time to exit gracefully, then force kill survivors
+        try {
+          execSync("sleep 2", { timeout: 5000 });
+          const survivors = execSync(`lsof -ti :${port}`, { encoding: "utf-8", timeout: 5000 }).trim();
+          if (survivors) {
+            for (const pid of survivors.split("\n").map(p => p.trim()).filter(Boolean)) {
+              try {
+                process.kill(parseInt(pid, 10), "SIGKILL");
+                console.log(`[Heartbeat] Force-killed stubborn process: PID ${pid}`);
+              } catch { /* already dead */ }
+            }
+          }
+        } catch { /* no survivors or lsof failed — good */ }
+      }
+    } catch {
+      // No processes on port or lsof not available — safe to proceed
     }
   }
 

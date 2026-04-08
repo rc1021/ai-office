@@ -5,6 +5,7 @@ import { TaskBoard } from "../ui/TaskBoard.js";
 import { AgentPanel } from "../ui/AgentPanel.js";
 import { MessageFeed } from "../ui/MessageFeed.js";
 import { BrainstormPanel } from "../ui/BrainstormPanel.js";
+import { ActivityLog } from "../ui/ActivityLog.js";
 import { CANVAS_WIDTH, CANVAS_HEIGHT, DEPT_COLORS, SPRITE_SIZE } from "../config.js";
 import layout from "../assets/office-layout.json";
 
@@ -25,6 +26,7 @@ export class OfficeScene extends Phaser.Scene {
   private agentPanel!: AgentPanel;
   private messageFeed!: MessageFeed;
   private brainstormPanel!: BrainstormPanel;
+  private activityLog!: ActivityLog;
   private rooms: Room[] = layout.rooms as Room[];
   private agents: AgentData[] = [];
   private tasks: TaskData[] = [];
@@ -40,6 +42,7 @@ export class OfficeScene extends Phaser.Scene {
     this.agentPanel = new AgentPanel();
     this.messageFeed = new MessageFeed();
     this.brainstormPanel = new BrainstormPanel();
+    this.activityLog = new ActivityLog();
 
     // Draw office
     this.drawOffice();
@@ -64,6 +67,9 @@ export class OfficeScene extends Phaser.Scene {
       onEvents: (events) => {
         this.messageFeed.updateEvents(events);
         this.brainstormPanel.updateEvents(events);
+      },
+      onActivity: (activity) => {
+        this.activityLog.updateActivity(activity);
       },
     });
   }

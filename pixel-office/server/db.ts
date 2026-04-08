@@ -138,3 +138,123 @@ export function getSummary() {
     recent_events: recentEvents,
   };
 }
+
+// ─── Audit Log ───────────────────────────────────────────────────────────────
+
+export interface AuditLogRow {
+  id: number;
+  timestamp: string;
+  agent_id: string;
+  trace_id: string;
+  action: string;
+  detail: string;
+  prev_hash: string;
+  hash: string;
+}
+
+export interface ArtifactRow {
+  id: string;
+  task_id: string;
+  agent_id: string;
+  name: string;
+  path: string;
+  checksum: string;
+  version: number;
+  created_at: string;
+}
+
+export interface TraceSpanRow {
+  trace_id: string;
+  span_id: string;
+  parent_span_id: string | null;
+  agent_id: string;
+  operation: string;
+  status: string;
+  started_at: string;
+  ended_at: string | null;
+  metadata: string; // JSON
+}
+
+export function getAuditLog(since?: string, limit: number = 50): AuditLogRow[] {
+  const db = getDb();
+  if (since) {
+    return db.prepare("SELECT * FROM audit_log WHERE timestamp > ? ORDER BY timestamp DESC LIMIT ?")
+      .all(since, limit) as AuditLogRow[];
+  }
+  return db.prepare("SELECT * FROM audit_log ORDER BY timestamp DESC LIMIT ?")
+    .all(limit) as AuditLogRow[];
+}
+
+export function getArtifacts(taskId?: string): ArtifactRow[] {
+  const db = getDb();
+  if (taskId) {
+    return db.prepare("SELECT * FROM artifacts WHERE task_id = ? ORDER BY created_at DESC")
+      .all(taskId) as ArtifactRow[];
+  }
+  return db.prepare("SELECT * FROM artifacts ORDER BY created_at DESC LIMIT 100")
+    .all() as ArtifactRow[];
+}
+
+export function getTraceSpans(traceId: string): TraceSpanRow[] {
+  return getDb()
+    .prepare("SELECT * FROM trace_spans WHERE trace_id = ? ORDER BY started_at ASC")
+    .all(traceId) as TraceSpanRow[];
+}
+
+// ─── Unified Activity Feed ────────────────────────────────────────────────────
+
+export interface ActivityRow {
+  source: 'event' | 'audit';
+  id: string;
+  timestamp: string;
+  agent_id: string;
+  type: string;        // event type or audit action
+  target: string;      // target_agents for events, '' for audit
+  detail: string;      // payload JSON for events, detail for audit
+  trace_id: string;
+}
+
+export function getActivity(opts: {
+  since?: string;
+  limit?: number;
+  agent?: string;
+  type?: string;
+}): ActivityRow[] {
+  const db = getDb();
+  const limit = opts.limit ?? 100;
+  const since = opts.since ?? '1970-01-01';
+
+  const eventConditions = ['created_at > ?'];
+  const auditConditions = ['timestamp > ?'];
+  const eventParams: any[] = [since];
+  const auditParams: any[] = [since];
+
+  if (opts.agent) {
+    eventConditions.push('source_agent = ?');
+    auditConditions.push('agent_id = ?');
+    eventParams.push(opts.agent);
+    auditParams.push(opts.agent);
+  }
+  if (opts.type) {
+    eventConditions.push('type LIKE ?');
+    auditConditions.push('action LIKE ?');
+    eventParams.push(`%${opts.type}%`);
+    auditParams.push(`%${opts.type}%`);
+  }
+
+  const sql = `
+    SELECT 'event' as source, id, created_at as timestamp, source_agent as agent_id,
+           type, target_agents as target, payload as detail, trace_id
+    FROM events
+    WHERE ${eventConditions.join(' AND ')}
+    UNION ALL
+    SELECT 'audit' as source, CAST(id AS TEXT) as id, timestamp, agent_id,
+           action as type, '' as target, detail, trace_id
+    FROM audit_log
+    WHERE ${auditConditions.join(' AND ')}
+    ORDER BY timestamp DESC
+    LIMIT ?
+  `;
+
+  return db.prepare(sql).all(...eventParams, ...auditParams, limit) as ActivityRow[];
+}
