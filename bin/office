@@ -56,6 +56,7 @@ cmd_help() {
   echo "    wizard             重新執行設定精靈(Discord token、ngrok 等)"
   echo "    install-service    安裝開機自啟服務(launchd / systemd)"
   echo "    uninstall-service  移除開機自啟服務"
+  echo "    configure [key] [value]  設定單一變數(不走完整 wizard)"
   echo "    help               顯示本說明"
   echo ""
   echo "  範例: "
@@ -336,9 +337,9 @@ case "$SUBCOMMAND" in
   setup)
     exec "$PROJECT_DIR/setup.sh"
     ;;
-  start|stop|status|restart)
+  start|stop|status|restart|configure)
     if [ -f "$PROJECT_DIR/cli/dist/index.js" ]; then
-      exec node "$PROJECT_DIR/cli/dist/index.js" "$SUBCOMMAND"
+      exec node "$PROJECT_DIR/cli/dist/index.js" "$SUBCOMMAND" "${@:2}"
     else
       # fallback: cli 尚未 build，用 bash 版本
       case "$SUBCOMMAND" in
@@ -346,6 +347,12 @@ case "$SUBCOMMAND" in
         stop)    cmd_stop ;;
         status)  cmd_status ;;
         restart) cmd_stop; cmd_start ;;
+        configure)
+          echo ""
+          echo -e "  ${RED}[FAIL]${RESET} CLI 尚未建置，請先執行 'office setup'。"
+          echo ""
+          exit 1
+          ;;
       esac
     fi
     ;;

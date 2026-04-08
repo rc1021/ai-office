@@ -6,6 +6,7 @@ import { cmdStatus } from './commands/status.js';
 import { cmdRestart } from './commands/restart.js';
 import { cmdInstallService } from './commands/install-service.js';
 import { cmdUninstallService } from './commands/uninstall-service.js';
+import { cmdConfigure } from './commands/configure.js';
 
 // ── PROJECT_DIR 解析 ──────────────────────────────────────────────────────────
 // 優先使用環境變數（由 bin/office 傳入），否則推算：cli/dist/index.js → 上兩層
@@ -32,6 +33,7 @@ function showHelp(): void {
   console.log('    status             顯示各元件目前狀態');
   console.log('    install-service    安裝開機自啟服務（launchd / systemd）');
   console.log('    uninstall-service  移除開機自啟服務');
+  console.log('    configure [key] [value]  設定單一變數（不走完整 wizard）');
   console.log('');
 }
 
@@ -58,6 +60,9 @@ async function main(): Promise<void> {
       break;
     case 'uninstall-service':
       await cmdUninstallService();
+      break;
+    case 'configure':
+      await cmdConfigure(projectDir, process.argv.slice(3));
       break;
     case 'help':
     case '--help':
