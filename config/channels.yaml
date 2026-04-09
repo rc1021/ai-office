@@ -16,3 +16,6 @@ categories:
       - name: daily-brief
         topic: "Daily office summary"
         throttle: "1/day"
+      - name: hr
+        topic: "Hiring board — recruit new team members"
+        throttle: none

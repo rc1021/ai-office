@@ -12,6 +12,7 @@ const SERVER_STRUCTURE = [
       { name: "approvals", topic: "Human approval requests" },
       { name: "alerts", topic: "Critical alerts requiring attention" },
       { name: "daily-brief", topic: "Daily office summary" },
+      { name: "hr", topic: "Hiring board — recruit new team members" },
     ],
   },
 ];

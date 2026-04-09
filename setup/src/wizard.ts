@@ -4,7 +4,7 @@ import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";
 import path from "node:path";
 import fs from "node:fs";
-import { loadStarterPacks, loadAdvancedPacks, localize, StarterPack, AdvancedIndustry, AdvancedTeam } from "./starter-packs.js";
+import { localize, StarterPack } from "./starter-packs.js";
 import {
   SetupConfig,
   writeOfficeYaml,
@@ -274,83 +274,18 @@ async function main(): Promise<void> {
     guildId = await ask(t("prompt.guild"), guildId);
   }
 
-  // 5. Starter pack (Basic or Advanced)
-  console.log(`\n  ${t("section.starter")}\n`);
-  const packs = loadStarterPacks(projectRoot);
-  const advancedPacks = loadAdvancedPacks(projectRoot);
+  // 5. Role selection → moved to Discord onboarding
+  //    The interactive hiring board in #hr lets users choose roles after first launch.
+  const packId = "";
+  const selectedRoles: string[] = [];
+  const packData: StarterPack = { name: "discord-onboarding", description: "", roles: [] };
 
-  let packId = "";
-  let selectedRoles: string[] = [];
-  let selectedPackName: string | Record<string, string> = "";
-  let done = false;
-
-  while (!done) {
-    // Step 1: Mode selection
-    const modeOptions = [t("mode.basic"), t("mode.advanced")];
-    const modeChoice = await choose(t("prompt.pack_mode"), modeOptions, 0);
-    const isAdvanced = modeChoice === modeOptions[1];
-
-    if (!isAdvanced) {
-      // Basic mode — flat pack list with back support
-      const packEntries = Object.entries(packs);
-      const packOptions = packEntries.map(([_id, p]) => {
-        const name = localize(p.name, currentLang);
-        const desc = localize(p.description, currentLang);
-        const roles = p.roles.length > 0 ? ` (${p.roles.join(", ")})` : "";
-        return `${name}${roles} — ${desc}`;
-      });
-
-      const packChoice = await chooseWithBack(t("prompt.starter"), packOptions, 0);
-      if (packChoice === BACK) continue; // back to mode selection
-
-      const packIdx = packOptions.indexOf(packChoice);
-      const [id, data] = packEntries[packIdx >= 0 ? packIdx : 0];
-      packId = id;
-      selectedRoles = data.roles;
-      selectedPackName = data.name;
-      done = true;
-    } else {
-      // Advanced mode — Industry → Team
-      const industryEntries = Object.entries(advancedPacks);
-      const industryOptions = industryEntries.map(([_id, ind]) => localize(ind.name, currentLang));
-
-      let industryDone = false;
-      while (!industryDone) {
-        const industryChoice = await chooseWithBack(t("prompt.industry"), industryOptions, 0);
-        if (industryChoice === BACK) {
-          industryDone = true; // back to mode selection
-          break;
-        }
-
-        const industryIdx = industryOptions.indexOf(industryChoice);
-        const [industryId, industry] = industryEntries[industryIdx >= 0 ? industryIdx : 0];
-        const teamEntries = Object.entries(industry.teams);
-        const teamOptions = teamEntries.map(([_id, team]) => {
-          const name = localize(team.name, currentLang);
-          const desc = localize(team.description, currentLang);
-          return `${name} — ${desc}`;
-        });
-
-        const teamChoice = await chooseWithBack(t("prompt.team"), teamOptions, 0);
-        if (teamChoice === BACK) continue; // back to industry selection
-
-        const teamIdx = teamOptions.indexOf(teamChoice);
-        const [teamId, teamData] = teamEntries[teamIdx >= 0 ? teamIdx : 0];
-        packId = `${industryId}/${teamId}`;
-        selectedRoles = teamData.roles;
-        selectedPackName = teamData.name;
-        done = true;
-        industryDone = true;
-      }
-    }
-  }
-
-  // Build a packData-compatible object for the rest of the wizard
-  const packData: StarterPack = {
-    name: selectedPackName,
-    description: "",
-    roles: selectedRoles,
+  const starterNote = {
+    "zh-TW": "✨ 角色選擇將在 Discord #hr 的互動招聘看板中進行（首次啟動後自動開啟）",
+    en:      "✨ Role selection happens interactively in Discord #hr after first launch",
+    ja:      "✨ ロール選択はDiscord #hrの採用ボードで行います（初回起動後に自動表示）",
   };
+  console.log(`\n  ${starterNote[currentLang]}\n`);
 
   // 6. Remote access mode
   console.log(`\n  ${t("section.ngrok")}\n`);
@@ -427,7 +362,7 @@ async function main(): Promise<void> {
   console.log(`  ${t("sum.timezone")}:     ${config.timezone}`);
   console.log(`  ${t("sum.discord")}:      ${discordToken ? t("sum.token_ok") : t("sum.token_later")}`);
   console.log(`  ${t("sum.guild")}:        ${guildId || t("sum.token_later")}`);
-  console.log(`  ${t("sum.starter")}:      ${localize(packData.name, currentLang)} (${packData.roles.length > 0 ? packData.roles.join(", ") : "Leader only"})`);
+  console.log(`  ${t("sum.starter")}:      Discord onboarding (roles selected interactively in #hr)`);
   console.log(`  ${t("sum.workers")}:      ${config.maxWorkers}`);
   const ngrokSummary = config.ngrokMode === "internal"
     ? `internal (user: ${config.pixelAuthUser})`

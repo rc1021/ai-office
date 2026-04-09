@@ -11,6 +11,7 @@ import dotenv from "dotenv";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import Database from "better-sqlite3";
 
 // Load .env from discord-bot/ directory (not cwd)
 const __listener_file = fileURLToPath(import.meta.url);
@@ -27,6 +28,13 @@ import {
   Message,
 } from "discord.js";
 import { registerApprovalInteractionHandler, setApprovalResolvedCallback, runTimeoutSweep, recoverPendingApprovals } from "./approval-manager.js";
+import {
+  registerOnboardingInteractionHandler,
+  startOnboarding,
+  recoverOnboardingState,
+  isAwaitingUserInput,
+  handleUserMessage as onboardingHandleUserMessage,
+} from "./onboarding-manager.js";
 import type { ApprovalRequest } from "./types.js";
 import { setDiscordClient, getDiscordClient } from "./discord-client.js";
 import { DiscordChatAdapter } from "./discord-adapter.js";
@@ -95,15 +103,12 @@ const ALLOWED_TOOLS = [
   "mcp__ai-office-discord__list_channels",
 ];
 
-// Default timeout: 8 minutes. Claude -p sessions on complex tasks can take several minutes,
-// but 8 min is a safe upper bound. If the process hangs past this, surface a visible error.
-const CLAUDE_TIMEOUT_MS = 8 * 60 * 1000;
-
+// No per-message timeout — claude-runner enforces a 2-hour absolute cap.
+// Long tasks (multi-step, sub-agents) must not be killed by a wall-clock timer.
 const BASE_CLAUDE_CONFIG: ClaudeRunnerConfig = {
   projectDir: PROJECT_DIR,
   mcpConfigPath: MCP_CONFIG,
   allowedTools: ALLOWED_TOOLS,
-  timeoutMs: CLAUDE_TIMEOUT_MS,
 };
 
 // Will be set to include model once config is loaded in ClientReady
@@ -118,8 +123,10 @@ const STARTUP_CHECKLIST_PROMPT =
   "You are the AI Office Leader. This is the first launch. " +
   "Follow your Startup Checklist in agents/leader/CLAUDE.md: " +
   "initialize the orchestrator, report status, setup Discord server channels, " +
-  "check for interrupted tasks, " +
-  "and run the Welcome Flow to greet the user in #general.";
+  "check for interrupted tasks. " +
+  "IMPORTANT: Do NOT run the Welcome Flow or send any welcome/greeting messages — " +
+  "the Discord bot handles the interactive onboarding flow directly. " +
+  "Your job is only: setup_server, report_status, check for pending tasks, then set status idle.";
 
 // ── First-run check ───────────────────────────────────────────────────────────
 
@@ -135,7 +142,7 @@ async function checkFirstRun(): Promise<void> {
 
   try {
     const response = await runClaude(STARTUP_CHECKLIST_PROMPT, leaderClaudeConfig);
-    console.log("[Listener] Setup complete! Check Discord #general.");
+    console.log("[Listener] Startup checklist complete.");
     if (response.output) {
       console.log("[Listener] Leader output:", response.output.substring(0, 300));
     }
@@ -143,6 +150,9 @@ async function checkFirstRun(): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[Listener] First-run setup failed:", msg);
   }
+
+  // Start the interactive onboarding flow (replaces old static Welcome Flow embed)
+  await startOnboarding();
 }
 
 // ── Job Queue — semaphore-based parallel pool (configurable via office.yaml) ──
@@ -159,6 +169,10 @@ let maxConcurrent = 1; // default sequential; updated from config after ClientRe
 let workerModel = "sonnet"; // default worker model; updated from config after ClientReady
 const processedMessageIds = new Set<string>();
 
+// Per-user processing lock: prevents two claude -p processes from running on the
+// same session simultaneously (would corrupt --resume session state).
+const userProcessing = new Set<string>();
+
 /**
  * Called once after office config is loaded to set the concurrency limit.
  * When executionMode is "sequential", maxConcurrent is clamped to 1.
@@ -166,6 +180,28 @@ const processedMessageIds = new Set<string>();
 function initConcurrency(executionMode: "sequential" | "parallel", limit: number): void {
   maxConcurrent = executionMode === "parallel" ? Math.max(1, limit) : 1;
   console.log(`[Listener] Concurrency mode: ${executionMode}, maxConcurrent: ${maxConcurrent}`);
+}
+
+/**
+ * Poll the coordination DB audit_log for the most recent action.
+ * Returns a short human-readable string, or null if unavailable.
+ */
+function queryLastAuditAction(): string | null {
+  const dbPath = path.join(PROJECT_DIR, ".ai-office", "state", "coordination.db");
+  if (!fs.existsSync(dbPath)) return null;
+  try {
+    const db = new Database(dbPath, { readonly: true });
+    db.pragma("busy_timeout = 1000");
+    const row = db.prepare(
+      "SELECT action, detail FROM audit_log ORDER BY id DESC LIMIT 1"
+    ).get() as { action: string; detail: string } | undefined;
+    db.close();
+    if (!row) return null;
+    const detail = row.detail.length > 60 ? row.detail.substring(0, 60) + "…" : row.detail;
+    return `${row.action}: ${detail}`;
+  } catch {
+    return null;
+  }
 }
 
 async function enqueueMessage(message: Message): Promise<void> {
@@ -183,6 +219,24 @@ async function enqueueMessage(message: Message): Promise<void> {
     if (first) processedMessageIds.delete(first);
   }
 
+  // ── Onboarding intercept (Step 2: company description) ───────────────────
+  // If we're waiting for the user to describe their company, handle it here
+  // directly rather than going through Claude -p.
+  if (isAwaitingUserInput()) {
+    try { await message.react("⏳"); } catch { /* non-fatal */ }
+    try {
+      const handled = await onboardingHandleUserMessage(message);
+      if (handled) {
+        await removeReaction(message, "⏳");
+        try { await message.react("✅"); } catch { /* non-fatal */ }
+        return;
+      }
+    } catch (err) {
+      console.error("[Listener] Onboarding message handler error:", err);
+    }
+    await removeReaction(message, "⏳");
+  }
+
   jobQueue.push({ type: "message", message });
   console.log(`[Listener] Queued message from ${message.author.username} (queue size: ${jobQueue.length}, active: ${activeJobs}/${maxConcurrent})`);
 
@@ -193,10 +247,12 @@ async function enqueueMessage(message: Message): Promise<void> {
 }
 
 function enqueueApprovalTrigger(approval: ApprovalRequest): void {
-  jobQueue.push({ type: "approval", approval });
-  console.log(`[Listener] Queued approval trigger for ${approval.id} (${approval.status}) (queue size: ${jobQueue.length}, active: ${activeJobs}/${maxConcurrent})`);
-
-  processQueue();
+  // Approval is time-sensitive and doesn't use --resume, so bypass the job queue
+  // and fire immediately as a concurrent async task.
+  console.log(`[Listener] Firing approval trigger immediately: ${approval.id} (${approval.status})`);
+  handleApproval(approval).catch((err) =>
+    console.error("[Listener] Unhandled error in handleApproval:", err)
+  );
 }
 
 /**
@@ -231,7 +287,20 @@ async function processJob(job: QueueJob): Promise<void> {
 async function handleMessage(message: Message): Promise<void> {
   const userContent = message.content.trim();
   const channel = message.channel as TextChannel;
+  const userLockKey = `channel:${message.channelId}:${message.author.id}`;
 
+  // Per-user lock: if this user already has a claude -p running, notify and skip.
+  // Two processes sharing the same --resume session would corrupt session state.
+  if (userProcessing.has(userLockKey)) {
+    console.log(`[Listener] User ${message.author.username} already processing — skipping concurrent message`);
+    await channel.send(
+      `⏳ 你的上一則訊息仍在處理中，請等待完成後再發送新訊息。`,
+    ).catch(() => { /* non-fatal */ });
+    return;
+  }
+  userProcessing.add(userLockKey);
+
+  try {
   console.log(`[Listener] Processing message from ${message.author.username}: ${userContent.substring(0, 80)}`);
 
   // 1. (⏳ already added at enqueue time in enqueueMessage)
@@ -298,10 +367,19 @@ async function handleMessage(message: Message): Promise<void> {
     }
   }
 
-  // 4. Build prompt + run claude -p
+  // 4. Send progress message early so its ID can be included in the prompt.
+  //    The Leader uses this ID to call edit_message for richer C-path updates.
+  const startTime = Date.now();
+  const PROGRESS_INTERVAL_MS = 2 * 60 * 1000;
+  let progressMsg: Message | null = null;
+  try {
+    progressMsg = await channel.send("⏳ 處理中...");
+  } catch { /* non-fatal */ }
+
+  // 5. Build prompt + run claude -p
   // Prefer server nickname > global display name > username
   const displayName = message.member?.displayName ?? message.author.displayName ?? message.author.username;
-  const prompt = buildPrompt(displayName, userContent, message.id, replyContext, savedAttachments, workerModel);
+  const prompt = buildPrompt(displayName, userContent, message.id, replyContext, savedAttachments, workerModel, progressMsg?.id);
 
   // Resolve session key and attach existing session ID for --resume
   const sessionKey = `channel:${message.channelId}:${message.author.id}`;
@@ -309,6 +387,16 @@ async function handleMessage(message: Message): Promise<void> {
   const sessionConfig = existingSessionId
     ? { ...leaderClaudeConfig, resumeSessionId: existingSessionId }
     : leaderClaudeConfig;
+
+  const progressTimer = setInterval(async () => {
+    if (!progressMsg) return;
+    const elapsed = Math.round((Date.now() - startTime) / 60_000);
+    const lastAction = queryLastAuditAction();
+    const detail = lastAction ? ` — ${lastAction}` : "";
+    try {
+      await progressMsg.edit(`⏳ 處理中 (${elapsed} 分鐘)${detail}`);
+    } catch { /* message may have been deleted */ }
+  }, PROGRESS_INTERVAL_MS);
 
   let claudeSucceeded = false;
   try {
@@ -345,6 +433,9 @@ async function handleMessage(message: Message): Promise<void> {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error("[Listener] claude failed:", errMsg);
 
+    clearInterval(progressTimer);
+    try { await progressMsg?.delete(); } catch { /* non-fatal */ }
+
     await removeReaction(message, "⏳");
     const isTimeoutError = errMsg.startsWith("TIMEOUT:");
     const isAuthError = errMsg.startsWith("AUTH_EXPIRED:");
@@ -359,10 +450,16 @@ async function handleMessage(message: Message): Promise<void> {
     return;
   }
 
+  clearInterval(progressTimer);
+  try { await progressMsg?.delete(); } catch { /* non-fatal */ }
+
   // Replace ⏳ with ✅ only when claude completed without error
   if (claudeSucceeded) {
     try { await message.react("✅"); } catch { /* non-fatal */ }
     await removeReaction(message, "⏳");
+  }
+  } finally {
+    userProcessing.delete(userLockKey);
   }
 }
 
@@ -381,20 +478,19 @@ async function handleApproval(approval: ApprovalRequest): Promise<void> {
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     console.error("[Listener] claude failed for approval trigger:", errMsg);
-    const isAuthError = errMsg.startsWith("AUTH_EXPIRED:");
-    const isTimeoutError = errMsg.startsWith("TIMEOUT:");
-    if (isAuthError || isTimeoutError) {
-      try {
-        const dc = getDiscordClient();
-        const ch = dc.channels.cache.find(
-          (c) => c.isTextBased() && "name" in c && c.name === GENERAL_CHANNEL
-        ) as TextChannel | undefined;
-        const msg = isAuthError
-          ? "🔐 Claude authentication expired. Please run `/login` to re-authenticate."
-          : "⏱️ Approval processing timed out. Please retry or check the task status.";
-        await ch?.send(msg);
-      } catch { /* non-fatal */ }
-    }
+    // Notify in the channel where the approval originated (not hardcoded #general)
+    try {
+      const dc = getDiscordClient();
+      const targetChannelName = approval.channelName ?? GENERAL_CHANNEL;
+      const ch = dc.channels.cache.find(
+        (c) => c.isTextBased() && "name" in c && c.name === targetChannelName
+      ) as TextChannel | undefined;
+      const isAuthError = errMsg.startsWith("AUTH_EXPIRED:");
+      const msg = isAuthError
+        ? "🔐 Claude authentication expired. Please run `/login` to re-authenticate."
+        : `❌ Approval processing failed: ${errMsg.substring(0, 500)}`;
+      await ch?.send(msg);
+    } catch { /* non-fatal */ }
   }
 }
 
@@ -423,9 +519,17 @@ function buildApprovalPrompt(approval: ApprovalRequest, workerModelOverride?: st
     `Risk Level: ${approval.riskLevel}\n` +
     `Resolved By: ${resolvedBy}\n` +
     `Resolved At: ${resolvedAt}\n` +
+    (approval.taskId ? `Related Task ID: ${approval.taskId} — call task_list to retrieve full task details.\n` : "") +
+    (approval.traceId ? `Trace ID: ${approval.traceId}\n` : "") +
+    (approval.previewArtifactPath ? `Preview artifact: ${approval.previewArtifactPath} — Read this file before acting.\n` : "") +
     "\n" +
-    "If APPROVED: execute the action described above.\n" +
-    "If REJECTED: acknowledge the rejection and inform the user.\n" +
+    "Steps:\n" +
+    "1. If a Task ID is provided, call task_list to get full task context.\n" +
+    "2. If a preview artifact is provided, Read it.\n" +
+    "3. If APPROVED: execute the action. Call start_trace before executing, end_trace after.\n" +
+    "4. If REJECTED: acknowledge and inform the user via send_message.\n" +
+    "5. Call publish_event with type 'approval.processed', include approval_id, decision (approved/rejected), and reasoning.\n" +
+    "6. Call report_status with status 'idle' when done.\n" +
     `\nDefault worker model: ${modelHint}.\n`
   );
 }
@@ -439,6 +543,7 @@ function buildPrompt(
   replyContext: string = "",
   attachments: string[] = [],
   workerModelOverride?: string,
+  progressMessageId?: string,
 ): string {
   let attachmentInfo = "";
   if (attachments.length > 0) {
@@ -473,7 +578,10 @@ function buildPrompt(
     "--- END MESSAGE ---\n" +
     replyContext +
     attachmentInfo +
-    `\nDefault worker model: ${modelHint}.\n`
+    `\nDefault worker model: ${modelHint}.\n` +
+    (progressMessageId
+      ? `Progress message ID (call edit_message with channel_name "general" to update it): ${progressMessageId}\n`
+      : "")
   );
 }
 
@@ -584,6 +692,7 @@ async function main(): Promise<void> {
 
   setDiscordClient(client);
   registerApprovalInteractionHandler(client);
+  registerOnboardingInteractionHandler(client);
   setApprovalResolvedCallback((approval) => {
     enqueueApprovalTrigger(approval);
   });
@@ -609,6 +718,9 @@ async function main(): Promise<void> {
 
       // Recover orphan pending approvals from before daemon restart
       await recoverPendingApprovals(client).catch(err => console.warn('[Listener] recoverPendingApprovals failed:', err));
+
+      // Recover onboarding state if interrupted by a previous bot restart
+      await recoverOnboardingState().catch(err => console.warn('[Listener] recoverOnboardingState failed:', err));
 
       await checkFirstRun();
       await postNgrokUrl(readyClient);
