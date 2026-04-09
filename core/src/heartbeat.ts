@@ -21,6 +21,7 @@ import { COLORS } from "./types.js";
 
 export class HeartbeatScheduler {
   private timezone: string;
+  private language: string;
   private statePath: string;
   private projectDir: string;
   private claudeConfig: ClaudeRunnerConfig;
@@ -46,8 +47,10 @@ export class HeartbeatScheduler {
     dailyBriefTime: string = "08:00",
     auditConfig: AuditConfig = { autoReview: false, riskThreshold: "YELLOW" },
     auditClaudeConfig?: ClaudeRunnerConfig,
+    language: string = "zh-TW",
   ) {
     this.timezone = timezone;
+    this.language = language;
     this.statePath = statePath;
     this.projectDir = projectDir;
     this.claudeConfig = claudeConfig;
@@ -627,9 +630,12 @@ export class HeartbeatScheduler {
 
   private async runDailyBrief(today: string): Promise<void> {
     const missedDates = this.readMissedBriefs().filter(d => d !== today);
+    const lang = this.language;
     const catchUpNote = missedDates.length > 0
-      ? `\n\n⚠️ 補發通知：以下日期的簡報因系統問題未能發送，請在本次簡報中補充說明：${missedDates.join("、")}。` +
-        `在簡報開頭加上「📋 今日簡報（含補發）」標題，並標注補發日期。`
+      ? (lang === "zh-TW"
+          ? `\n\n⚠️ 補發通知：以下日期的簡報因系統問題未能發送，請在本次簡報中補充說明：${missedDates.join("、")}。` +
+            `在簡報開頭加上「📋 今日簡報（含補發）」標題，並標注補發日期。`
+          : `\n\nNote: The following dates were missed due to system issues, please include catch-up notes: ${missedDates.join(", ")}.`)
       : "";
 
     const prompt =
@@ -639,7 +645,7 @@ export class HeartbeatScheduler {
       "Then use send_embed MCP tool to post a summary to #daily-brief.\n" +
       "Include: completed tasks (last 24h), in-progress tasks, any blockers, agent status.\n" +
       "If any section's data is unavailable (e.g., MCP tool fails), skip that section and add ⚠️ mark.\n" +
-      "Keep it concise and actionable. Use zh-TW language." +
+      `Keep it concise and actionable. Respond in ${lang} language.` +
       catchUpNote;
 
     await runClaude(prompt, this.claudeConfig); // result unused — daily brief posts via MCP
