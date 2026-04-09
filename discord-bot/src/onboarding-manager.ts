@@ -441,15 +441,21 @@ export async function startOnboarding(): Promise<void> {
   try {
     const channel = await findTextChannel("general");
 
+    // Step 1a: greeting embed (no button) — feels like Leader is "talking" first
     const embed = buildWelcomeEmbed(officeName);
+    await channel.send({ embeds: [embed] });
+
+    // Short pause for conversational feel
+    await new Promise(r => setTimeout(r, 1200));
+
+    // Step 1b: button as a separate follow-up message
     const startBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId("onboarding:start")
         .setLabel("👋 開始招聘！")
         .setStyle(ButtonStyle.Primary)
     );
-
-    const msg = await channel.send({ embeds: [embed], components: [startBtn] });
+    const msg = await channel.send({ components: [startBtn] });
     state.generalMessageId = msg.id;
     saveState(state);
 
@@ -512,7 +518,8 @@ export function registerOnboardingInteractionHandler(externalClient?: Client): v
 
     const state = loadState();
     if (!state) {
-      console.warn("[Onboarding] Button pressed but no state found:", interaction.customId);
+      console.warn("[Onboarding] Button pressed but no state found:", interaction.customId, "— re-triggering startOnboarding");
+      await startOnboarding();
       return;
     }
 

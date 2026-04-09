@@ -140,19 +140,20 @@ async function checkFirstRun(): Promise<void> {
   console.log("[Listener] First run detected! Setting up AI Office...");
   console.log("");
 
-  try {
-    const response = await runClaude(STARTUP_CHECKLIST_PROMPT, leaderClaudeConfig);
+  // Start onboarding FIRST so state is saved and the button is clickable immediately.
+  // The startup checklist (setup_server, report_status, etc.) runs in the background
+  // and does not need to complete before the user can begin onboarding.
+  await startOnboarding();
+
+  runClaude(STARTUP_CHECKLIST_PROMPT, leaderClaudeConfig).then(response => {
     console.log("[Listener] Startup checklist complete.");
     if (response.output) {
       console.log("[Listener] Leader output:", response.output.substring(0, 300));
     }
-  } catch (err) {
+  }).catch(err => {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[Listener] First-run setup failed:", msg);
-  }
-
-  // Start the interactive onboarding flow (replaces old static Welcome Flow embed)
-  await startOnboarding();
+  });
 }
 
 // ── Job Queue — semaphore-based parallel pool (configurable via office.yaml) ──
