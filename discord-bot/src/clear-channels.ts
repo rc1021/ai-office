@@ -70,7 +70,7 @@ async function clearChannel(channel: TextChannel): Promise<void> {
   console.log(`[ClearChannels] #${channel.name}: deleted ${deleted} messages`);
 }
 
-client.once("ready", async (readyClient) => {
+client.once("clientReady", async (readyClient) => {
   try {
     const guild = await readyClient.guilds.fetch(guildId!);
     const allChannels = await guild.channels.fetch();
