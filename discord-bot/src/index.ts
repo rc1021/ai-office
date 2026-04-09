@@ -1,6 +1,5 @@
 import "dotenv/config";
 import { createDiscordClient } from "./discord-client.js";
-import { registerApprovalInteractionHandler } from "./approval-manager.js";
 import { startMcpServer } from "./mcp-server.js";
 
 // Redirect all console output to stderr so stdout stays clean for MCP JSON-RPC
@@ -39,10 +38,9 @@ async function main(): Promise<void> {
   // 2. Create and configure the Discord client
   const client = createDiscordClient();
 
-  // 3. Register the approval interaction handler (listens for button clicks)
-  registerApprovalInteractionHandler();
-
-  // 4. Log into Discord (after MCP is ready — Discord connects via WebSocket independently)
+  // 3. Log into Discord (after MCP is ready — Discord connects via WebSocket independently)
+  // Note: approval interaction handling is done exclusively by the listener daemon,
+  // not here, to prevent double-response when both processes receive InteractionCreate.
   try {
     await client.login(token);
     console.error("[Startup] Discord login initiated.");

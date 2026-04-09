@@ -72,7 +72,7 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<C
         // Force-kill after a further 5 s if SIGTERM is ignored
         setTimeout(() => {
           try { proc.kill("SIGKILL"); } catch { /* already dead */ }
-        }, 5_000);
+        }, 5_000).unref();
       }, config.timeoutMs);
     }
 

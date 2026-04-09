@@ -31,13 +31,6 @@ export function createDiscordClient(): Client {
     console.warn("[Discord] Warning:", info);
   });
 
-  client.on(Events.MessageCreate, (message) => {
-    if (message.author.bot) return;
-    console.log(
-      `[Discord] Message in #${message.channel.type === 0 ? (message.channel as { name: string }).name : "unknown"} from ${message.author.username}: ${message.content.substring(0, 80)}`
-    );
-  });
-
   clientInstance = client;
   return client;
 }

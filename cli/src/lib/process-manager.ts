@@ -78,6 +78,7 @@ export async function waitForExit(pid: number, timeoutMs: number = 5000): Promis
 export function cleanupStaleProcesses(projectDir: string): void {
   const patterns = [
     `${projectDir}/discord-bot/dist/listener`,
+    `${projectDir}/discord-bot/dist/index`,
     `${projectDir}/pixel-office`,
   ];
 

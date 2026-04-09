@@ -213,6 +213,8 @@ cmd_stop() {
     && ok "已清理殘留 supervisor 程序" || true
   pkill -f "$PROJECT_DIR/discord-bot/dist/listener" 2>/dev/null \
     && ok "已清理殘留 listener 程序" || true
+  pkill -f "$PROJECT_DIR/discord-bot/dist/index" 2>/dev/null \
+    && ok "已清理殘留 MCP server 程序" || true
   pkill -f "$PROJECT_DIR/pixel-office" 2>/dev/null \
     && ok "已清理殘留 pixel-office 程序" || true
 

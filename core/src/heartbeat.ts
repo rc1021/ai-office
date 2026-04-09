@@ -596,9 +596,35 @@ export class HeartbeatScheduler {
     }, msUntil);
   }
 
+  /**
+   * Check Claude authentication status before running the daily brief.
+   * Returns true if authenticated, false if auth is expired or unavailable.
+   */
+  private checkClaudeAuth(): boolean {
+    try {
+      execSync("claude auth status", { stdio: "ignore", timeout: 10_000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   private async runDailyBriefWithRetry(attempt: number): Promise<void> {
     const today = new Date().toLocaleDateString("sv-SE", { timeZone: this.timezone }); // YYYY-MM-DD
     const retryDelays = [1 * 60 * 1000, 5 * 60 * 1000]; // 1min, 5min
+
+    // Proactive auth check — skip brief immediately if Claude auth is invalid
+    if (!this.checkClaudeAuth()) {
+      console.error("[Heartbeat] Claude auth check failed — skipping daily brief");
+      this.recordMissedBrief(today);
+      try {
+        const msg = this.language === "zh-TW"
+          ? `⚠️ **Daily Brief 跳過 — 驗證已失效**\n今日（${today}）簡報因 Claude 驗證失效而略過。\n請在伺服器上執行 \`claude setup-token\` 或 \`claude auth login\` 重新驗證。\n下次簡報時將自動補發。`
+          : `⚠️ **Daily Brief Skipped — Auth Invalid**\nToday's brief (${today}) was skipped because Claude authentication has expired.\nPlease run \`claude setup-token\` or \`claude auth login\` on the server to re-authenticate.\nThe next brief will include a catch-up.`;
+        await this.adapter.sendMessage("alerts", msg);
+      } catch { /* best effort */ }
+      return;
+    }
 
     console.log(`[Heartbeat] Running daily brief (attempt ${attempt + 1})...`);
     try {
@@ -607,7 +633,17 @@ export class HeartbeatScheduler {
       console.log("[Heartbeat] Daily brief completed");
     } catch (err) {
       console.error(`[Heartbeat] Daily brief failed (attempt ${attempt + 1}):`, err);
-      if (this.isTransient(err) && attempt < retryDelays.length) {
+      const isAuthErr = err instanceof Error && err.message.startsWith("AUTH_EXPIRED");
+      if (isAuthErr) {
+        // Auth expired mid-run — no point retrying, alert immediately
+        this.recordMissedBrief(today);
+        try {
+          const msg = this.language === "zh-TW"
+            ? `⚠️ **Daily Brief 失敗 — 驗證已失效**\n今日（${today}）簡報在執行中驗證失效。\n請執行 \`claude setup-token\` 或 \`claude auth login\` 重新驗證。\n下次簡報時將自動補發。`
+            : `⚠️ **Daily Brief Failed — Auth Expired**\nToday's brief (${today}) failed because Claude authentication expired mid-run.\nPlease run \`claude setup-token\` or \`claude auth login\` to re-authenticate.\nThe next brief will include a catch-up.`;
+          await this.adapter.sendMessage("alerts", msg);
+        } catch { /* best effort */ }
+      } else if (this.isTransient(err) && attempt < retryDelays.length) {
         const delay = retryDelays[attempt];
         console.log(`[Heartbeat] Transient error — retrying in ${delay / 60000} minute(s)...`);
         this.dailyTimeout = setTimeout(async () => {
