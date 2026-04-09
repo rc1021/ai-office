@@ -190,6 +190,14 @@ done
 
 echo "  [OK] Old processes cleaned up"
 
+# ── Reset onboarding state so the welcome flow triggers on next start ─────────
+
+STATE_DIR="$PROJECT_DIR/.ai-office/state"
+mkdir -p "$STATE_DIR"
+for f in ".onboarded" "onboarding-state.yaml" "company-profile.yaml"; do
+  rm -f "$STATE_DIR/$f" && echo "  [OK] Cleared $f" || true
+done
+
 # ── Start Discord Listener ────────────────────────────────────────────────────
 
 echo ""
