@@ -27,6 +27,7 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<C
   return new Promise((resolve, reject) => {
     const args: string[] = [
       "-p", prompt,
+      "--dangerously-skip-permissions",
     ];
 
     if (config.model) {
