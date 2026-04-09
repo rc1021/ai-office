@@ -196,12 +196,23 @@ cmd_restore() {
     esac
   fi
 
-  # 1. 停止所有程序
-  prefix "步驟 1/3 — 停止所有程序..."
+  # 1. 清空 Discord 頻道訊息(在停止進程前執行，確保 bot 尚未下線)
+  prefix "步驟 1/4 — 清空 Discord 頻道訊息..."
+  echo ""
+  local clear_js="$PROJECT_DIR/discord-bot/dist/clear-channels.js"
+  if [ -f "$clear_js" ]; then
+    node "$clear_js" || warn "清空頻道時發生錯誤(繼續執行)"
+  else
+    warn "clear-channels.js 不存在，跳過(請先執行 'office setup')"
+  fi
+  echo ""
+
+  # 2. 停止所有程序
+  prefix "步驟 2/4 — 停止所有程序..."
   cmd_stop
 
-  # 2. 清除狀態資料
-  prefix "步驟 2/3 — 清除狀態資料..."
+  # 3. 清除狀態資料
+  prefix "步驟 3/4 — 清除狀態資料..."
   echo ""
 
   local state_dir="$PROJECT_DIR/.ai-office/state"
@@ -255,8 +266,8 @@ cmd_restore() {
 
   echo ""
 
-  # 3. 重新啟動
-  prefix "步驟 3/3 — 重新啟動..."
+  # 4. 重新啟動
+  prefix "步驟 4/4 — 重新啟動..."
   cmd_start
 
   echo ""
