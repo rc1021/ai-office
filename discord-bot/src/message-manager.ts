@@ -25,6 +25,7 @@ function formatMessage(msg: Message): ChannelMessage {
 const DISCORD_MAX_LENGTH = 2000;
 const FOOTER_RESERVE_NO_LABEL = 20;
 const FOOTER_RESERVE_WITH_LABEL = 70;
+const SESSION_FOOTER_RESERVE = 25; // "\n-# ↩ `a1b2c3d4`" ≈ 18 chars + margin
 
 /**
  * Split text into chunks that fit within Discord's 2000-char limit.
@@ -53,7 +54,16 @@ export async function sendMessage(
   pageLabel?: string
 ): Promise<string> {
   const channel = await findTextChannel(channelName);
-  const effectiveMax = DISCORD_MAX_LENGTH - (pageLabel !== undefined ? FOOTER_RESERVE_WITH_LABEL : FOOTER_RESERVE_NO_LABEL);
+
+  // Short session ID injected via AI_OFFICE_SESSION_ID env var (set by claude-runner
+  // when --resume is active). Shows on the last page so users can easily --resume.
+  const rawSessionId = process.env.AI_OFFICE_SESSION_ID ?? "";
+  const shortSessionId = rawSessionId ? rawSessionId.replace(/-/g, "").substring(0, 8) : "";
+  const sessionFooter = shortSessionId ? `\n-# ⌘ ${shortSessionId}` : "";
+
+  const effectiveMax = DISCORD_MAX_LENGTH
+    - (pageLabel !== undefined ? FOOTER_RESERVE_WITH_LABEL : FOOTER_RESERVE_NO_LABEL)
+    - (shortSessionId ? SESSION_FOOTER_RESERVE : 0);
   const chunks = splitContent(content, effectiveMax);
   const total = chunks.length;
   let lastMsgId = "";
@@ -63,6 +73,10 @@ export async function sendMessage(
     if (total > 1) {
       const label = pageLabel ? `${pageLabel}` : '';
       pageContent += `\n${label}（第 ${i + 1}/${total} 頁）`;
+    }
+    // Append session footer to the last page only
+    if (i === total - 1 && sessionFooter) {
+      pageContent += sessionFooter;
     }
     const options: MessageCreateOptions = { content: pageContent };
     if (replyToMessageId && lastMsgId === "") {

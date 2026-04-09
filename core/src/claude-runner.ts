@@ -53,7 +53,12 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<C
 
     const proc = spawn("claude", args, {
       cwd: config.projectDir,
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        // Propagate resume session ID so the MCP server (index.js) can append
+        // a short session ID footer to Discord messages for easy --resume reference.
+        ...(config.resumeSessionId ? { AI_OFFICE_SESSION_ID: config.resumeSessionId } : {}),
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
 
