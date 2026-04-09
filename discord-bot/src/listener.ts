@@ -406,20 +406,14 @@ function buildApprovalPrompt(approval: ApprovalRequest, workerModelOverride?: st
   return (
     "You are the AI Office Leader. An approval has been resolved in Discord.\n" +
     "\n" +
-    // ── Critical constraint — stated FIRST (same reason as buildPrompt) ──
+    // ── Critical constraint — enforced before CLAUDE.md is read ──
     "⚠️  CRITICAL: Your text output (stdout / result field) is NEVER shown to the user.\n" +
     "You MUST call the send_message MCP tool to post your response to Discord.\n" +
     "After calling send_message, your ONLY text output must be the single line: 'Message sent to Discord.'\n" +
-    "Do not include any other content in your text output.\n" +
     "\n" +
-    // ── Mandatory execution steps ──
-    "Execute these steps IN ORDER:\n" +
+    // ── Bootstrap steps + pointer to full procedure ──
     "1. Call report_status with status 'busy'.\n" +
-    "2. Read agents/leader/CLAUDE.md for your full identity and instructions.\n" +
-    "3. Execute or acknowledge the approval (see details below).\n" +
-    "4. Call send_message to inform the user in #general.\n" +
-    "5. Call task_checkpoint with a context_summary.\n" +
-    "6. Call report_status with status 'idle'.\n" +
+    "2. Read agents/leader/CLAUDE.md — then follow its Listener Mode steps exactly.\n" +
     "\n" +
     // ── Approval payload ──
     `Approval ID: ${approval.id}\n` +
@@ -432,15 +426,7 @@ function buildApprovalPrompt(approval: ApprovalRequest, workerModelOverride?: st
     "\n" +
     "If APPROVED: execute the action described above.\n" +
     "If REJECTED: acknowledge the rejection and inform the user.\n" +
-    "\n" +
-    // ── Additional rules ──
-    "Additional rules:\n" +
-    "- Long messages are auto-paginated — just send the full content in one call.\n" +
-    "- When spawning workers via Agent tool, include in their prompt: " +
-    "'FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool.'\n" +
-    "- Do NOT register new agents with report_status — only use existing agents from list_agents.\n" +
-    "- Every task you create MUST be closed with task_update(status: completed) before you exit.\n" +
-    `\nDefault worker model: ${modelHint}. Use this when calling Agent tool unless task complexity requires override.\n`
+    `\nDefault worker model: ${modelHint}.\n`
   );
 }
 
@@ -462,46 +448,32 @@ function buildPrompt(
   const modelHint = workerModelOverride ?? "sonnet";
 
   // ⚠️  PROMPT STRUCTURE NOTE
-  // The send_message requirement is stated BEFORE "read CLAUDE.md" intentionally.
-  // claude -p --output-format json always writes a `result` text field to stdout.
-  // That result field is NEVER shown to the user — only send_message reaches Discord.
-  // If the Leader writes its reply as text output (stdout) instead of calling
-  // send_message, the user sees nothing. We put the critical constraint first so
-  // the model cannot shortcut past it even for simple/quick answers.
+  // Critical constraints are stated BEFORE "read CLAUDE.md" so they apply from the
+  // very first action, even if the Leader skips or delays the Read step.
+  // agents/leader/CLAUDE.md is the authoritative source for all detailed procedures;
+  // the prompt only carries what CLAUDE.md cannot statically define (runtime values)
+  // and the constraints that must be enforced before CLAUDE.md is read.
   return (
     "You are the AI Office Leader. A user has sent you a message in Discord #general.\n" +
     "\n" +
-    // ── Critical constraint — stated FIRST, before any other instruction ──
+    // ── Critical constraint — enforced before CLAUDE.md is read ──
     "⚠️  CRITICAL: Your text output (stdout / result field) is NEVER shown to the user.\n" +
     "You MUST call the send_message MCP tool to post your reply to Discord.\n" +
     "After calling send_message, your ONLY text output must be the single line: 'Message sent to Discord.'\n" +
-    "Do not include any other content in your text output.\n" +
     "\n" +
-    // ── Mandatory execution steps ──
-    "Execute these steps IN ORDER — do not skip any:\n" +
+    // ── Bootstrap steps (before CLAUDE.md) + pointer to full procedure ──
     "1. Call report_status with status 'busy'.\n" +
-    "2. Read agents/leader/CLAUDE.md for your full identity and instructions.\n" +
-    "3. Process the user request (delegate to workers if needed).\n" +
-    "4. Call send_message to post your reply to #general, using reply_to_message_id: " + messageId + ".\n" +
-    "5. Call task_checkpoint with a context_summary of what was done.\n" +
-    "6. Call report_status with status 'idle'.\n" +
+    "2. Read agents/leader/CLAUDE.md — then follow its Listener Mode steps exactly.\n" +
+    "   When calling send_message, use reply_to_message_id: " + messageId + ".\n" +
     "\n" +
-    // ── Message payload ──
+    // ── Runtime values CLAUDE.md cannot know ──
     "User: " + username + "\n" +
     "--- BEGIN MESSAGE ---\n" +
     content + "\n" +
     "--- END MESSAGE ---\n" +
     replyContext +
     attachmentInfo +
-    "\n" +
-    // ── Additional rules ──
-    "Additional rules:\n" +
-    "- Long messages are auto-paginated — just send the full content in one call.\n" +
-    "- When spawning workers via Agent tool, include in their prompt: " +
-    "'FORBIDDEN: Do NOT call send_message, send_embed, or any mcp__ai-office-discord__ tool.'\n" +
-    "- Do NOT register new agents with report_status — only use existing agents from list_agents.\n" +
-    "- Every task you create MUST be closed with task_update(status: completed) before you exit.\n" +
-    `\nDefault worker model: ${modelHint}. Use this when calling Agent tool unless task complexity requires override.\n`
+    `\nDefault worker model: ${modelHint}.\n`
   );
 }
 
