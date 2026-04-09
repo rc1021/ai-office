@@ -607,34 +607,6 @@ async function removeReaction(message: Message, emoji: string): Promise<void> {
   } catch { /* non-fatal */ }
 }
 
-async function postNgrokUrl(readyClient: import("discord.js").Client<true>): Promise<void> {
-  const ngrokFile = path.join(PROJECT_DIR, ".ai-office", "state", "ngrok-url.txt");
-  let url = "";
-  if (fs.existsSync(ngrokFile)) {
-    url = fs.readFileSync(ngrokFile, "utf-8").trim();
-  }
-  if (!url) {
-    console.log("[Listener] No ngrok URL found — skipping #general post.");
-    return;
-  }
-
-  const guildId = process.env.DISCORD_GUILD_ID;
-  if (!guildId) return;
-
-  try {
-    const guild = await readyClient.guilds.fetch(guildId);
-    const channels = await guild.channels.fetch();
-    const general = channels.find(
-      (ch) => ch !== null && "name" in ch && ch.name === "general"
-    );
-    if (general && general.isTextBased()) {
-      await (general as TextChannel).send(`🌐 **Pixel Office** is online: ${url}`);
-      console.log(`[Listener] Posted ngrok URL to #general: ${url}`);
-    }
-  } catch (err) {
-    console.warn("[Listener] Failed to post ngrok URL:", err);
-  }
-}
 
 // ── Module-level state for shard reconnect tracking ───────────────────────────
 
@@ -736,7 +708,6 @@ async function main(): Promise<void> {
       await recoverOnboardingState().catch(err => console.warn('[Listener] recoverOnboardingState failed:', err));
 
       await checkFirstRun();
-      await postNgrokUrl(readyClient);
 
       const adapter = new DiscordChatAdapter();
 
