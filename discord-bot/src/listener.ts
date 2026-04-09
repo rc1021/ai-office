@@ -324,19 +324,18 @@ async function handleMessage(message: Message): Promise<void> {
       console.log("[Listener] Claude output (not posted to Discord):", result.output.substring(0, 200));
     }
 
-    // Fallback guard: if the claude process exited cleanly but the output strongly suggests
-    // the Leader never sent a reply (e.g. OutputGate blocked it or it wrote to stdout instead
-    // of calling send_message), surface a visible warning so the user is not left in silence.
+    // Fallback guard: fires only when the Leader genuinely forgot to call send_message.
+    // With the corrected prompt, a successful send_message run produces output like
+    // "Message sent to Discord." (< 40 chars, contains "Message sent") — both conditions
+    // prevent this block from triggering. It only fires when result.output contains the
+    // actual reply content (long prose), meaning the Leader skipped the MCP call.
     const out = result.output ?? "";
     const looksLikeUnsentReply =
       out.length > 40 &&
-      !/send_message|sent to #|Message sent|BUFFERED/i.test(out) &&
-      // Heuristic: plain prose output longer than 80 chars is likely meant for the user
-      /[\u4e00-\u9fff]|[a-z]{4,}/i.test(out);
+      !/Message sent|BUFFERED/i.test(out);
 
     if (looksLikeUnsentReply) {
       console.warn("[Listener] Leader output looks like an unsent reply — forwarding to Discord as fallback");
-      // Truncate to 1800 chars to leave room for the warning prefix
       const truncated = out.length > 1800 ? out.substring(0, 1800) + "…" : out;
       await channel
         .send(`⚠️ *(fallback — Leader reply not sent via MCP)*\n\n${truncated}`)
@@ -410,7 +409,8 @@ function buildApprovalPrompt(approval: ApprovalRequest, workerModelOverride?: st
     // ── Critical constraint — stated FIRST (same reason as buildPrompt) ──
     "⚠️  CRITICAL: Your text output (stdout / result field) is NEVER shown to the user.\n" +
     "You MUST call the send_message MCP tool to post your response to Discord.\n" +
-    "Do NOT write your answer as text output — write it ONLY via send_message.\n" +
+    "After calling send_message, your ONLY text output must be the single line: 'Message sent to Discord.'\n" +
+    "Do not include any other content in your text output.\n" +
     "\n" +
     // ── Mandatory execution steps ──
     "Execute these steps IN ORDER:\n" +
@@ -474,8 +474,8 @@ function buildPrompt(
     // ── Critical constraint — stated FIRST, before any other instruction ──
     "⚠️  CRITICAL: Your text output (stdout / result field) is NEVER shown to the user.\n" +
     "You MUST call the send_message MCP tool to post your reply to Discord.\n" +
-    "Do NOT write your answer as text output — write it ONLY via send_message.\n" +
-    "Even for a one-line answer, you must call send_message.\n" +
+    "After calling send_message, your ONLY text output must be the single line: 'Message sent to Discord.'\n" +
+    "Do not include any other content in your text output.\n" +
     "\n" +
     // ── Mandatory execution steps ──
     "Execute these steps IN ORDER — do not skip any:\n" +
