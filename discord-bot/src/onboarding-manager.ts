@@ -76,6 +76,166 @@ interface RoleEntry {
   category: string;
 }
 
+// ── i18n ─────────────────────────────────────────────────────────────────────
+
+type Lang = "zh-TW" | "en";
+
+let _cachedLang: Lang | null = null;
+
+function loadLanguage(): Lang {
+  try {
+    const officeYaml = path.join(PROJECT_DIR, "config", "office.yaml");
+    const raw = fs.readFileSync(officeYaml, "utf-8");
+    const match = raw.match(/^language:\s*["']?([^"'\n]+)["']?/m);
+    const val = match?.[1]?.trim() ?? "zh-TW";
+    return val.startsWith("en") ? "en" : "zh-TW";
+  } catch {
+    return "zh-TW";
+  }
+}
+
+function lang(): Lang {
+  if (!_cachedLang) _cachedLang = loadLanguage();
+  return _cachedLang;
+}
+
+/** Return role display name in the current language. */
+function roleName(role: RoleEntry): string {
+  return lang() === "en" ? role.en : role["zh-TW"];
+}
+
+const STRINGS = {
+  "zh-TW": {
+    // Step 1
+    welcomeTitle: "👋 嗨！我是你的 AI Office Leader",
+    welcomeDescription:
+      "很高興認識你！在我們正式開始之前，我想花幾分鐘了解你的辦公室，這樣我才能為你推薦最適合的團隊成員。\n\n" +
+      "整個招聘流程只需要幾分鐘，完成後你就可以立刻開始工作了。",
+    startButton: "👋 開始招聘！",
+    // Step 2
+    askCompany:
+      "👍 太好了！\n\n請問這間辦公室主要是做什麼的？（例如：軟體開發公司、電商、行銷顧問...）\n\n直接在這裡描述就可以，不需要很正式 😊",
+    // Step 3
+    suggestionsTitle: "🔍 了解了！以下是我的建議",
+    suggestionsBody: (roleList: string) =>
+      `根據你的描述，我建議先從這些基礎角色開始：\n\n${roleList}\n\n` +
+      "前往招聘看板後，你可以從所有角色中自由選擇。之後也可以隨時新增更多角色。",
+    roleListItem: (name: string, dept: string) => `• **${name}**（${dept}）`,
+    toJobBoardButton: "🏢 前往招聘看板 #hr",
+    // Job board
+    jobBoardTitle: "🏢 招聘看板",
+    jobBoardDescription: (count: number, list: string) =>
+      `選擇你想雇用的角色，可以多選。確認後進入細節設定。\n\n**目前已選 (${count} 位)**\n${list}`,
+    jobBoardNoRoles: "_尚未選擇任何角色_",
+    jobBoardContent: "📋 **招聘看板** — 選擇你想加入團隊的角色",
+    jobBoardFooter: (page: number, total: number) => `第 ${page} 頁 / 共 ${total} 頁`,
+    prevPage: "◀ 上頁",
+    nextPage: "▶ 下頁",
+    confirmButton: (count: number) => `✅ 確認選擇 (${count})`,
+    roleSelected: (name: string) => `✓ ${name}`,
+    roleAdd: (name: string) => `+ ${name}`,
+    jobBoardNotification: "🏢 招聘看板已在 **#hr** 開啟，請前往選擇你的團隊成員！",
+    // Cart confirm
+    cartConfirmTitle: "📋 確認選擇",
+    cartConfirmBody: (count: number, list: string) =>
+      `你選擇了 **${count}** 個角色：\n\n${list}`,
+    cartConfirmItem: (name: string, dept: string) => `• ${name} (${dept})`,
+    cartAdjustButton: "← 重新選擇",
+    cartContinueButton: "繼續設定細節 →",
+    // Role detail
+    roleDetailTitle: (name: string) => `🧑‍💼 ${name} 設定`,
+    roleDetailBody: (dept: string, en: string) =>
+      `**部門**: ${dept}\n**英文名**: ${en}\n\n要雇用幾位？（同一個角色可以有多個實例）`,
+    roleDetailFooter: (i: number, total: number) => `角色 ${i} / ${total}`,
+    nextRoleButton: "下一位 →",
+    finishButton: "完成設定 ✨",
+    doneLabel: "✓ 完成",
+    // Team ready
+    teamReadyTitle: "✨ 團隊就緒！",
+    teamReadyBody: (lines: string) =>
+      `太好了！你的 AI 辦公室已經組建完成，以下是你的新團隊：\n\n${lines}\n\n` +
+      "前往 **#general** 跟我說你想做什麼，我會分配任務給最合適的成員！",
+    teamReadyFooter: (office: string) => `${office} • Powered by Claude Code`,
+    finishNotification: (count: number) =>
+      `✨ **招聘完成！** 你的團隊已組建好了。\n\n` +
+      `雇用了 **${count}** 個角色，詳情請看 **#hr**。\n\n` +
+      `現在告訴我你想做什麼，我會分配給最合適的成員！`,
+    // Recovery
+    recoveryMessage:
+      "🔄 *（Bot 剛剛重啟）繼續你的 onboarding 流程 — 請告訴我你的辦公室主要做什麼？*",
+    // Footer
+    officeFooter: (office: string) => `${office} • AI Office`,
+  },
+
+  en: {
+    // Step 1
+    welcomeTitle: "👋 Hi! I'm your AI Office Leader",
+    welcomeDescription:
+      "Nice to meet you! Before we get started, I'd like to take a few minutes to learn about your office so I can recommend the best team members for you.\n\n" +
+      "The whole hiring process only takes a few minutes, and once complete you can get straight to work.",
+    startButton: "👋 Start Hiring!",
+    // Step 2
+    askCompany:
+      "👍 Great!\n\nWhat does this office mainly do? (e.g. software development, e-commerce, marketing consultancy...)\n\nJust describe it here, no need to be formal 😊",
+    // Step 3
+    suggestionsTitle: "🔍 Got it! Here are my suggestions",
+    suggestionsBody: (roleList: string) =>
+      `Based on your description, I suggest starting with these core roles:\n\n${roleList}\n\n` +
+      "On the job board you can freely choose from all available roles and add more at any time.",
+    roleListItem: (name: string, dept: string) => `• **${name}** (${dept})`,
+    toJobBoardButton: "🏢 Go to Job Board #hr",
+    // Job board
+    jobBoardTitle: "🏢 Job Board",
+    jobBoardDescription: (count: number, list: string) =>
+      `Select the roles you want to hire — multiple selections allowed. Confirm to proceed.\n\n**Currently selected (${count})**\n${list}`,
+    jobBoardNoRoles: "_No roles selected yet_",
+    jobBoardContent: "📋 **Job Board** — Choose your team members",
+    jobBoardFooter: (page: number, total: number) => `Page ${page} / ${total}`,
+    prevPage: "◀ Prev",
+    nextPage: "▶ Next",
+    confirmButton: (count: number) => `✅ Confirm (${count})`,
+    roleSelected: (name: string) => `✓ ${name}`,
+    roleAdd: (name: string) => `+ ${name}`,
+    jobBoardNotification: "🏢 The job board is open in **#hr** — head over to choose your team!",
+    // Cart confirm
+    cartConfirmTitle: "📋 Confirm Selection",
+    cartConfirmBody: (count: number, list: string) =>
+      `You selected **${count}** role(s):\n\n${list}`,
+    cartConfirmItem: (name: string, dept: string) => `• ${name} (${dept})`,
+    cartAdjustButton: "← Reselect",
+    cartContinueButton: "Continue to Details →",
+    // Role detail
+    roleDetailTitle: (name: string) => `🧑‍💼 Set up ${name}`,
+    roleDetailBody: (dept: string, en: string) =>
+      `**Department**: ${dept}\n**Role**: ${en}\n\nHow many do you want to hire? (The same role can have multiple instances)`,
+    roleDetailFooter: (i: number, total: number) => `Role ${i} / ${total}`,
+    nextRoleButton: "Next →",
+    finishButton: "Finish ✨",
+    doneLabel: "✓ Done",
+    // Team ready
+    teamReadyTitle: "✨ Team Ready!",
+    teamReadyBody: (lines: string) =>
+      `Your AI Office is fully staffed! Here's your new team:\n\n${lines}\n\n` +
+      "Head to **#general** and tell me what you want to do — I'll assign tasks to the best person!",
+    teamReadyFooter: (office: string) => `${office} • Powered by Claude Code`,
+    finishNotification: (count: number) =>
+      `✨ **Hiring complete!** Your team is ready.\n\n` +
+      `Hired **${count}** role(s) — see **#hr** for details.\n\n` +
+      `Now tell me what you'd like to do and I'll assign it to the right person!`,
+    // Recovery
+    recoveryMessage:
+      "🔄 *(Bot just restarted) Continuing your onboarding — please tell me what your office mainly does.*",
+    // Footer
+    officeFooter: (office: string) => `${office} • AI Office`,
+  },
+} as const;
+
+type StringsShape = typeof STRINGS["zh-TW"];
+
+function s(): StringsShape {
+  return STRINGS[lang()] as StringsShape;
+}
+
 // ── State management ──────────────────────────────────────────────────────────
 
 function loadState(): OnboardingState | null {
@@ -127,7 +287,7 @@ function getGeneralRoles(): RoleEntry[] {
 }
 
 function getAllHireableRoles(): RoleEntry[] {
-  // Show general + emerging roles on the job board; industry roles available via "雇用"
+  // Show general + emerging roles on the job board; industry roles available via "hire"
   return loadRoles().filter((r) => r.category === "general" || r.category === "emerging");
 }
 
@@ -145,15 +305,13 @@ const COLORS = {
 };
 
 function buildWelcomeEmbed(officeName: string): EmbedBuilder {
+  const str = s();
   return new EmbedBuilder()
-    .setTitle("👋 嗨！我是你的 AI Office Leader")
-    .setDescription(
-      "很高興認識你！在我們正式開始之前，我想花幾分鐘了解你的辦公室，這樣我才能為你推薦最適合的團隊成員。\n\n" +
-      "整個招聘流程只需要幾分鐘，完成後你就可以立刻開始工作了。"
-    )
+    .setTitle(str.welcomeTitle)
+    .setDescription(str.welcomeDescription)
     .setColor(COLORS.BLURPLE)
     .setTimestamp()
-    .setFooter({ text: `${officeName} • AI Office` });
+    .setFooter({ text: str.officeFooter(officeName) });
 }
 
 function buildJobBoardEmbed(
@@ -162,6 +320,7 @@ function buildJobBoardEmbed(
   page: number,
   pageSize: number
 ): { embed: EmbedBuilder; rows: ActionRowBuilder<ButtonBuilder>[] } {
+  const str = s();
   const total = roles.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const pageRoles = roles.slice(page * pageSize, (page + 1) * pageSize);
@@ -169,18 +328,15 @@ function buildJobBoardEmbed(
   const selectedList = selected.size > 0
     ? [...selected].map((id) => {
         const r = getRoleById(id);
-        return r ? `• ${r["zh-TW"]}` : `• ${id}`;
+        return r ? `• ${roleName(r)}` : `• ${id}`;
       }).join("\n")
-    : "_尚未選擇任何角色_";
+    : str.jobBoardNoRoles;
 
   const embed = new EmbedBuilder()
-    .setTitle("🏢 招聘看板")
-    .setDescription(
-      "選擇你想雇用的角色，可以多選。確認後進入細節設定。\n\n" +
-      `**目前已選 (${selected.size} 位)**\n${selectedList}`
-    )
+    .setTitle(str.jobBoardTitle)
+    .setDescription(str.jobBoardDescription(selected.size, selectedList))
     .setColor(COLORS.BLURPLE)
-    .setFooter({ text: `第 ${page + 1} 頁 / 共 ${totalPages} 頁` });
+    .setFooter({ text: str.jobBoardFooter(page + 1, totalPages) });
 
   const rows: ActionRowBuilder<ButtonBuilder>[] = [];
 
@@ -189,9 +345,10 @@ function buildJobBoardEmbed(
   let count = 0;
   for (const role of pageRoles) {
     const isSelected = selected.has(role.id);
+    const label = isSelected ? str.roleSelected(roleName(role)) : str.roleAdd(roleName(role));
     const btn = new ButtonBuilder()
       .setCustomId(`onboarding:role-toggle:${role.id}:${page}`)
-      .setLabel(isSelected ? `✓ ${role["zh-TW"]}` : `+ ${role["zh-TW"]}`)
+      .setLabel(label)
       .setStyle(isSelected ? ButtonStyle.Success : ButtonStyle.Secondary);
     row.addComponents(btn);
     count++;
@@ -209,12 +366,12 @@ function buildJobBoardEmbed(
     navRow.addComponents(
       new ButtonBuilder()
         .setCustomId(`onboarding:page:${page - 1}`)
-        .setLabel("◀ 上頁")
+        .setLabel(str.prevPage)
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(page <= 0),
       new ButtonBuilder()
         .setCustomId(`onboarding:page:${page + 1}`)
-        .setLabel("▶ 下頁")
+        .setLabel(str.nextPage)
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(page >= totalPages - 1)
     );
@@ -223,7 +380,7 @@ function buildJobBoardEmbed(
   navRow.addComponents(
     new ButtonBuilder()
       .setCustomId("onboarding:cart-confirm")
-      .setLabel(`✅ 確認選擇 (${selected.size})`)
+      .setLabel(str.confirmButton(selected.size))
       .setStyle(ButtonStyle.Primary)
       .setDisabled(selected.size === 0)
   );
@@ -238,15 +395,12 @@ function buildRoleDetailEmbed(
   index: number,
   total: number
 ): { embed: EmbedBuilder; row: ActionRowBuilder<ButtonBuilder> } {
+  const str = s();
   const embed = new EmbedBuilder()
-    .setTitle(`🧑‍💼 ${role["zh-TW"]} 設定`)
-    .setDescription(
-      `**部門**: ${role.department}\n` +
-      `**英文名**: ${role.en}\n\n` +
-      "要雇用幾位？（同一個角色可以有多個實例）"
-    )
+    .setTitle(str.roleDetailTitle(roleName(role)))
+    .setDescription(str.roleDetailBody(role.department, role.en))
     .setColor(COLORS.GOLD)
-    .setFooter({ text: `角色 ${index + 1} / ${total}` });
+    .setFooter({ text: str.roleDetailFooter(index + 1, total) });
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -263,7 +417,7 @@ function buildRoleDetailEmbed(
       .setStyle(currentCount === 3 ? ButtonStyle.Primary : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId("onboarding:role-detail-next")
-      .setLabel(index + 1 < total ? "下一位 →" : "完成設定 ✨")
+      .setLabel(index + 1 < total ? str.nextRoleButton : str.finishButton)
       .setStyle(ButtonStyle.Success)
   );
 
@@ -274,22 +428,19 @@ function buildTeamReadyEmbed(
   roleDetails: Record<string, number>,
   officeName: string
 ): EmbedBuilder {
+  const str = s();
   const lines = Object.entries(roleDetails).map(([id, count]) => {
     const r = getRoleById(id);
-    const name = r ? r["zh-TW"] : id;
+    const name = r ? roleName(r) : id;
     return `• ${name} × ${count}`;
   });
 
   return new EmbedBuilder()
-    .setTitle("✨ 團隊就緒！")
-    .setDescription(
-      "太好了！你的 AI 辦公室已經組建完成，以下是你的新團隊：\n\n" +
-      lines.join("\n") +
-      "\n\n前往 **#general** 跟我說你想做什麼，我會分配任務給最合適的成員！"
-    )
+    .setTitle(str.teamReadyTitle)
+    .setDescription(str.teamReadyBody(lines.join("\n")))
     .setColor(COLORS.GREEN)
     .setTimestamp()
-    .setFooter({ text: `${officeName} • Powered by Claude Code` });
+    .setFooter({ text: str.teamReadyFooter(officeName) });
 }
 
 // ── Active roles writer ───────────────────────────────────────────────────────
@@ -332,7 +483,6 @@ function disableAllButtons(
   return rows.map((row) => {
     const newRow = new ActionRowBuilder<ButtonBuilder>();
     for (const btn of row.components) {
-      // btn.toJSON() returns the full APIButtonComponent (not Partial)
       newRow.addComponents(ButtonBuilder.from(btn.toJSON()).setDisabled(true));
     }
     return newRow;
@@ -372,6 +522,7 @@ export async function handleUserMessage(message: Message): Promise<boolean> {
   const description = message.content.trim();
   if (!description) return false;
 
+  const str = s();
   const channel = message.channel as TextChannel;
   const officeName = loadOfficeName();
 
@@ -390,16 +541,13 @@ export async function handleUserMessage(message: Message): Promise<boolean> {
 
   // Suggest some general roles based on the description
   const generalRoles = getGeneralRoles().slice(0, 6);
-  const roleList = generalRoles.map((r) => `• **${r["zh-TW"]}**（${r.department}）`).join("\n");
+  const roleList = generalRoles.map((r) => str.roleListItem(roleName(r), r.department)).join("\n");
 
   const embed = new EmbedBuilder()
-    .setTitle("🔍 了解了！以下是我的建議")
-    .setDescription(
-      `根據你的描述，我建議先從這些基礎角色開始：\n\n${roleList}\n\n` +
-      "前往招聘看板後，你可以從所有角色中自由選擇。之後也可以隨時新增更多角色。"
-    )
+    .setTitle(str.suggestionsTitle)
+    .setDescription(str.suggestionsBody(roleList))
     .setColor(COLORS.BLURPLE)
-    .setFooter({ text: `${officeName} • AI Office` });
+    .setFooter({ text: str.officeFooter(officeName) });
 
   state.suggestedRoles = generalRoles.map((r) => r.id);
   saveState(state);
@@ -407,7 +555,7 @@ export async function handleUserMessage(message: Message): Promise<boolean> {
   const confirmBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId("onboarding:to-job-board")
-      .setLabel("🏢 前往招聘看板 #hr")
+      .setLabel(str.toJobBoardButton)
       .setStyle(ButtonStyle.Primary)
   );
 
@@ -431,6 +579,7 @@ export async function startOnboarding(): Promise<void> {
     return;
   }
 
+  const str = s();
   const officeName = loadOfficeName();
   const state = defaultState();
   state.step = "step-1-welcome";
@@ -452,7 +601,7 @@ export async function startOnboarding(): Promise<void> {
     const startBtn = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId("onboarding:start")
-        .setLabel("👋 開始招聘！")
+        .setLabel(str.startButton)
         .setStyle(ButtonStyle.Primary)
     );
     const msg = await channel.send({ components: [startBtn] });
@@ -475,15 +624,10 @@ export async function recoverOnboardingState(): Promise<void> {
 
   console.log("[Onboarding] Recovering onboarding at step:", state.step);
 
-  // Interaction handlers are re-registered by registerOnboardingInteractionHandler(),
-  // so state recovery just needs to ensure we're listening again.
-  // If waiting for text, post a reminder in #general.
   if (state.step === "awaiting-company-description") {
     try {
       const channel = await findTextChannel("general");
-      await channel.send(
-        "🔄 *（Bot 剛剛重啟）繼續你的 onboarding 流程 — 請告訴我你的辦公室主要做什麼？*"
-      );
+      await channel.send(s().recoveryMessage);
     } catch {
       // Non-fatal
     }
@@ -567,13 +711,14 @@ export function registerOnboardingInteractionHandler(externalClient?: Client): v
 async function handleStart(
   interaction: { message: { edit: (opts: MessageEditOptions) => Promise<unknown> } },
   state: OnboardingState,
-  officeName: string
+  _officeName: string
 ): Promise<void> {
+  const str = s();
   // Disable the start button
   const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId("onboarding:start")
-      .setLabel("👋 開始招聘！")
+      .setLabel(str.startButton)
       .setStyle(ButtonStyle.Primary)
       .setDisabled(true)
   );
@@ -583,9 +728,7 @@ async function handleStart(
   saveState(state);
 
   const channel = await findTextChannel("general");
-  await channel.send(
-    "👍 太好了！\n\n請問這間辦公室主要是做什麼的？（例如：軟體開發公司、電商、行銷顧問...）\n\n直接在這裡描述就可以，不需要很正式 😊"
-  );
+  await channel.send(str.askCompany);
 }
 
 async function handleToJobBoard(
@@ -593,11 +736,12 @@ async function handleToJobBoard(
   state: OnboardingState,
   officeName: string
 ): Promise<void> {
+  const str = s();
   // Disable the button on the general message
   const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId("onboarding:to-job-board")
-      .setLabel("🏢 前往招聘看板 #hr")
+      .setLabel(str.toJobBoardButton)
       .setStyle(ButtonStyle.Primary)
       .setDisabled(true)
   );
@@ -614,7 +758,7 @@ async function handleToJobBoard(
   try {
     const hrChannel = await findTextChannel("hr");
     const hrMsg = await hrChannel.send({
-      content: "📋 **招聘看板** — 選擇你想加入團隊的角色",
+      content: str.jobBoardContent,
       embeds: [embed],
       components: rows,
     });
@@ -623,7 +767,7 @@ async function handleToJobBoard(
 
     // Notify in general that #hr is ready
     const generalChannel = await findTextChannel("general");
-    await generalChannel.send("🏢 招聘看板已在 **#hr** 開啟，請前往選擇你的團隊成員！");
+    await generalChannel.send(str.jobBoardNotification);
   } catch (err) {
     console.error("[Onboarding] Failed to create job board:", err);
   }
@@ -681,6 +825,8 @@ async function handleCartConfirm(
 ): Promise<void> {
   if (state.selectedRoles.length === 0) return;
 
+  const str = s();
+
   // Disable the job board
   const allRoles = getAllHireableRoles();
   const selected = new Set(state.selectedRoles);
@@ -696,23 +842,23 @@ async function handleCartConfirm(
   // Show confirmation in #hr
   const selectedList = state.selectedRoles.map((id) => {
     const r = getRoleById(id);
-    return r ? `• ${r["zh-TW"]} (${r.department})` : `• ${id}`;
+    return r ? str.cartConfirmItem(roleName(r), r.department) : `• ${id}`;
   }).join("\n");
 
   const confirmEmbed = new EmbedBuilder()
-    .setTitle("📋 確認選擇")
-    .setDescription(`你選擇了 **${state.selectedRoles.length}** 個角色：\n\n${selectedList}`)
+    .setTitle(str.cartConfirmTitle)
+    .setDescription(str.cartConfirmBody(state.selectedRoles.length, selectedList))
     .setColor(COLORS.GOLD)
-    .setFooter({ text: `${officeName} • AI Office` });
+    .setFooter({ text: str.officeFooter(officeName) });
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId("onboarding:cart-adjust")
-      .setLabel("← 重新選擇")
+      .setLabel(str.cartAdjustButton)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId("onboarding:role-detail-next")
-      .setLabel("繼續設定細節 →")
+      .setLabel(str.cartContinueButton)
       .setStyle(ButtonStyle.Primary)
   );
 
@@ -724,16 +870,17 @@ async function handleCartAdjust(
   interaction: { message: { edit: (opts: MessageEditOptions) => Promise<unknown> } },
   state: OnboardingState
 ): Promise<void> {
+  const str = s();
   // Disable this confirmation message's buttons
   const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId("onboarding:cart-adjust")
-      .setLabel("← 重新選擇")
+      .setLabel(str.cartAdjustButton)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(true),
     new ButtonBuilder()
       .setCustomId("onboarding:role-detail-next")
-      .setLabel("繼續設定細節 →")
+      .setLabel(str.cartContinueButton)
       .setStyle(ButtonStyle.Primary)
       .setDisabled(true)
   );
@@ -749,7 +896,7 @@ async function handleCartAdjust(
 
   const hrChannel = await findTextChannel("hr");
   const newMsg = await hrChannel.send({
-    content: "📋 **招聘看板** — 選擇你想加入團隊的角色",
+    content: str.jobBoardContent,
     embeds: [embed],
     components: rows,
   });
@@ -786,6 +933,7 @@ async function handleRoleDetailNext(
   state: OnboardingState,
   officeName: string
 ): Promise<void> {
+  const str = s();
   const currentRoleId = state.selectedRoles[state.currentRoleIndex];
 
   // If coming from step-4-confirming (first call), initialize details
@@ -812,7 +960,7 @@ async function handleRoleDetailNext(
   const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId("onboarding:role-detail-next")
-      .setLabel("✓ 完成")
+      .setLabel(str.doneLabel)
       .setStyle(ButtonStyle.Success)
       .setDisabled(true)
   );
@@ -847,6 +995,7 @@ async function handleRoleDetailNext(
 }
 
 async function handleFinish(state: OnboardingState, officeName: string): Promise<void> {
+  const str = s();
   state.step = "completed";
   saveState(state);
 
@@ -870,11 +1019,7 @@ async function handleFinish(state: OnboardingState, officeName: string): Promise
 
   // Notify in #general
   const generalChannel = await findTextChannel("general");
-  await generalChannel.send(
-    `✨ **招聘完成！** 你的團隊已組建好了。\n\n` +
-    `雇用了 **${state.selectedRoles.length}** 個角色，詳情請看 **#hr**。\n\n` +
-    `現在告訴我你想做什麼，我會分配給最合適的成員！`
-  );
+  await generalChannel.send(str.finishNotification(state.selectedRoles.length));
 
   console.log("[Onboarding] Onboarding completed. Team:", Object.keys(details).join(", "));
 }
