@@ -218,7 +218,7 @@ cmd_restore() {
   fi
 
   # 運行狀態檔案
-  local state_files=("approvals.json" "sessions.json" ".onboarded" "missed-briefs.json" "revoked-tokens.json")
+  local state_files=("approvals.json" "sessions.json" ".onboarded" "missed-briefs.json" "revoked-tokens.json" "onboarding-state.yaml" "company-profile.yaml")
   for f in "${state_files[@]}"; do
     if [ -f "$state_dir/$f" ]; then
       rm -f "$state_dir/$f"
