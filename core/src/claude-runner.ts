@@ -9,13 +9,18 @@
 import fs from "node:fs";
 import { spawn } from "node:child_process";
 
+// 2-hour absolute cap — safety net for truly hung processes.
+// Long-running tasks (multi-step, sub-agents) should not be killed by a wall-clock timer.
+const ABSOLUTE_MAX_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+
 export interface ClaudeRunnerConfig {
   projectDir: string;
   mcpConfigPath: string;
   allowedTools: string[];
   model?: string;
   resumeSessionId?: string; // if set, pass --resume <id> to claude
-  timeoutMs?: number;       // if set, kill the process after this many ms and reject
+  timeoutMs?: number;       // if set, cap is min(timeoutMs, ABSOLUTE_MAX_TIMEOUT_MS)
+  onToolUse?: (toolName: string) => void; // called each time a tool_use event is seen
 }
 
 export interface ClaudeRunResult {
@@ -34,8 +39,10 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<C
       args.push("--model", config.model);
     }
 
-    // Always request JSON output so we can extract session_id
-    args.push("--output-format", "json");
+    // stream-json emits one JSON event per line in real-time, letting us
+    // observe tool calls as they happen. --verbose includes full tool I/O.
+    args.push("--output-format", "stream-json");
+    args.push("--verbose");
 
     if (config.resumeSessionId) {
       args.push("--resume", config.resumeSessionId);
@@ -63,27 +70,62 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<C
       stdio: ["ignore", "pipe", "pipe"],
     });
 
-    let rawOutput = "";
+    let stdoutBuf = "";   // partial line buffer
+    let finalResult = ""; // from type=result event
+    let finalSessionId = "";
     let stderrOutput = "";
     let timedOut = false;
 
-    // Optional timeout: kill the process if it runs too long
+    // Always enforce absolute cap; caller may pass a shorter timeoutMs (e.g. heartbeat audit).
+    const effectiveTimeout = config.timeoutMs && config.timeoutMs > 0
+      ? Math.min(config.timeoutMs, ABSOLUTE_MAX_TIMEOUT_MS)
+      : ABSOLUTE_MAX_TIMEOUT_MS;
+
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-    if (config.timeoutMs && config.timeoutMs > 0) {
-      timeoutHandle = setTimeout(() => {
-        timedOut = true;
-        const timeoutSec = Math.round(config.timeoutMs! / 1000);
-        console.error(`[ClaudeRunner] Timeout after ${timeoutSec}s — killing claude process`);
-        proc.kill("SIGTERM");
-        // Force-kill after a further 5 s if SIGTERM is ignored
-        setTimeout(() => {
-          try { proc.kill("SIGKILL"); } catch { /* already dead */ }
-        }, 5_000).unref();
-      }, config.timeoutMs);
-    }
+    timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      const timeoutSec = Math.round(effectiveTimeout / 1000);
+      console.error(`[ClaudeRunner] Timeout after ${timeoutSec}s — killing claude process`);
+      proc.kill("SIGTERM");
+      // Force-kill after a further 5 s if SIGTERM is ignored
+      setTimeout(() => {
+        try { proc.kill("SIGKILL"); } catch { /* already dead */ }
+      }, 5_000).unref();
+    }, effectiveTimeout);
 
     proc.stdout.on("data", (data: Buffer) => {
-      rawOutput += data.toString();
+      stdoutBuf += data.toString();
+      // Process all complete lines
+      const lines = stdoutBuf.split("\n");
+      stdoutBuf = lines.pop() ?? ""; // keep incomplete last chunk
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const event = JSON.parse(trimmed);
+          // Extract final result + session_id
+          if (event.type === "result") {
+            finalResult = typeof event.result === "string" ? event.result : "";
+            finalSessionId = typeof event.session_id === "string" ? event.session_id : "";
+          }
+          // Fire onToolUse callback for tool_use events inside assistant messages
+          if (event.type === "assistant" && config.onToolUse) {
+            const content: unknown[] = event.message?.content ?? [];
+            for (const block of content) {
+              if (
+                typeof block === "object" && block !== null &&
+                (block as Record<string, unknown>).type === "tool_use"
+              ) {
+                const name = (block as Record<string, unknown>).name;
+                if (typeof name === "string") config.onToolUse(name);
+              }
+            }
+          }
+        } catch {
+          // Non-JSON line (shouldn't happen with stream-json, but be safe)
+          console.error("[ClaudeRunner] Failed to parse stream line:", trimmed.substring(0, 100));
+        }
+      }
     });
 
     proc.stderr.on("data", (data: Buffer) => {
@@ -98,26 +140,16 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<C
     });
 
     proc.on("close", (code) => {
-      if (timeoutHandle) clearTimeout(timeoutHandle);
+      clearTimeout(timeoutHandle);
 
       if (timedOut) {
-        const timeoutSec = Math.round((config.timeoutMs ?? 0) / 1000);
+        const timeoutSec = Math.round(effectiveTimeout / 1000);
         reject(new Error(`TIMEOUT: claude process did not complete within ${timeoutSec}s`));
         return;
       }
 
       if (code === 0) {
-        const trimmed = rawOutput.trim();
-        try {
-          const parsed = JSON.parse(trimmed);
-          resolve({
-            output: typeof parsed.result === "string" ? parsed.result : trimmed,
-            sessionId: typeof parsed.session_id === "string" ? parsed.session_id : "",
-          });
-        } catch {
-          // JSON parse failed — return raw output with empty sessionId
-          resolve({ output: trimmed, sessionId: "" });
-        }
+        resolve({ output: finalResult, sessionId: finalSessionId });
       } else {
         const isAuthError = /auth|login|401|unauthorized|unauthenticated|token|credential/i.test(stderrOutput);
         if (isAuthError) {

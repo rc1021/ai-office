@@ -365,6 +365,20 @@ const TOOLS = [
     },
   },
   {
+    name: "edit_message",
+    description: "Edit an existing message in a channel. Use to update a progress indicator without flooding the channel.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent_id: AGENT_ID_PROP,
+        channel_name: { type: "string", description: "Channel where the message is" },
+        message_id: { type: "string", description: "ID of the message to edit" },
+        content: { type: "string", description: "New message content" },
+      },
+      required: ["agent_id", "channel_name", "message_id", "content"],
+    },
+  },
+  {
     name: "create_thread",
     description: "Create a thread from an existing message in a channel.",
     inputSchema: {
@@ -779,6 +793,19 @@ export function createMcpServer(): Server {
             `Time: ${msg.timestamp}\n` +
             `Content:\n${msg.content}`
           );
+        }
+
+        case "edit_message": {
+          const input = z.object({
+            agent_id: z.string(),
+            channel_name: z.string(),
+            message_id: z.string(),
+            content: z.string().min(1).max(2000),
+          }).parse(args);
+          const channel = await findTextChannel(input.channel_name);
+          const msg = await channel.messages.fetch(input.message_id);
+          await msg.edit(input.content);
+          return makeTextContent(`Message ${input.message_id} updated.`);
         }
 
         // ── Threads ──────────────────────────────────────────────────────────

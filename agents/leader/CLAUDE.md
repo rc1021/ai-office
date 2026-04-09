@@ -343,6 +343,12 @@ Execute these steps **IN ORDER** for every incoming message:
 3. **Process the request** — Route, delegate, and coordinate as usual.
    You have full access to the **Agent tool** for spawning workers.
 4. **Use MCP tools** (coordination, discord) as needed.
+   **Progress updates**: For tasks taking more than ~1 minute, call `edit_message` to update
+   the progress indicator the system sent at the start. Use the `progress_message_id` from
+   the prompt envelope (if present). Example updates:
+   - After task_create: `edit_message(message_id, "⏳ 任務已建立，準備派工給 software-engineer...")`
+   - After spawning worker: `edit_message(message_id, "⏳ software-engineer 正在執行 step 1/6...")`
+   - After worker checkpoint: `edit_message(message_id, "⏳ step 3/6 完成，繼續中...")`
 5. **Respond via send_message** — Call `send_message` to post your reply to #general.
    Use `reply_to_message_id` with the user's message ID so your reply threads correctly.
    Long messages are auto-paginated — just send the full content in one call.

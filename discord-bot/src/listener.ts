@@ -384,9 +384,21 @@ async function handleMessage(message: Message): Promise<void> {
   // Resolve session key and attach existing session ID for --resume
   const sessionKey = `channel:${message.channelId}:${message.author.id}`;
   const existingSessionId = sessionStore.get(sessionKey);
+
+  // onToolUse: fired immediately on each tool_use event from stream-json stdout.
+  // Updates the progress message in real-time, faster than the 2-min interval fallback.
+  const onToolUse = async (toolName: string): Promise<void> => {
+    if (!progressMsg) return;
+    const elapsed = Math.round((Date.now() - startTime) / 60_000);
+    const elapsedStr = elapsed > 0 ? ` (${elapsed} 分鐘)` : "";
+    try {
+      await progressMsg.edit(`⏳ 處理中${elapsedStr} — ${toolName}`);
+    } catch { /* non-fatal */ }
+  };
+
   const sessionConfig = existingSessionId
-    ? { ...leaderClaudeConfig, resumeSessionId: existingSessionId }
-    : leaderClaudeConfig;
+    ? { ...leaderClaudeConfig, resumeSessionId: existingSessionId, onToolUse }
+    : { ...leaderClaudeConfig, onToolUse };
 
   const progressTimer = setInterval(async () => {
     if (!progressMsg) return;

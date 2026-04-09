@@ -278,10 +278,15 @@ export function taskResume(params: {
   if (params.task_id) {
     task = getTask(params.task_id);
   } else {
-    // Find the most recent incomplete task assigned to this agent
+    // Find the most recent incomplete task assigned to this agent.
+    // Also includes tasks marked failed by heartbeat timeout (recoverable).
     const row = db.prepare(`
       SELECT * FROM tasks
-      WHERE assigned_to = ? AND status IN ('assigned', 'in_progress', 'checkpoint')
+      WHERE assigned_to = ?
+        AND (
+          status IN ('assigned', 'in_progress', 'checkpoint')
+          OR (status = 'failed' AND context_summary LIKE 'interrupted by heartbeat%')
+        )
       ORDER BY updated_at DESC LIMIT 1
     `).get(params.agent_id) as RawTaskRow | undefined;
     if (row) task = rowToTask(row);

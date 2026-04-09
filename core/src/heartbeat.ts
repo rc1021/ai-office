@@ -226,7 +226,9 @@ export class HeartbeatScheduler {
 
       if (staleTasks.length > 0) {
         const failStmt = db.prepare(
-          "UPDATE tasks SET status = 'failed', updated_at = datetime('now') WHERE id = ?"
+          `UPDATE tasks SET status = 'failed',
+            context_summary = 'interrupted by heartbeat timeout (10 min stale)',
+            updated_at = datetime('now') WHERE id = ?`
         );
         const autoCompleteStmt = db.prepare(
           "UPDATE tasks SET status = 'completed', updated_at = datetime('now') WHERE id = ?"
@@ -237,6 +239,15 @@ export class HeartbeatScheduler {
         const getAgentStatus = db.prepare(
           "SELECT status FROM agents WHERE agent_id = ?"
         );
+        const getTraceId = db.prepare(
+          "SELECT trace_id FROM tasks WHERE id = ?"
+        );
+        const appendAuditStmt = db.prepare(`
+          INSERT INTO audit_log (agent_id, trace_id, action, detail, prev_hash, hash)
+          SELECT 'heartbeat', ?, ?, ?,
+            COALESCE((SELECT hash FROM audit_log ORDER BY id DESC LIMIT 1), ''),
+            lower(hex(randomblob(16)))
+        `);
 
         const failedTasks: string[] = [];
         const autoCompletedTasks: string[] = [];
@@ -251,11 +262,16 @@ export class HeartbeatScheduler {
             agentIsIdle = agent?.status === "idle";
           }
 
+          const traceRow = getTraceId.get(task.id) as { trace_id: string } | undefined;
+          const traceId = traceRow?.trace_id ?? "";
+
           if (agentIsIdle) {
             autoCompleteStmt.run(task.id);
             if (task.assigned_to) {
               freeAgentStmt.run(task.assigned_to, task.id);
             }
+            appendAuditStmt.run(traceId, "task.auto_completed",
+              `Stale task auto-completed (agent idle): "${task.title}" (${task.id})`);
             autoCompletedTasks.push(task.title);
             console.log(`[Heartbeat] Auto-completed stale task (agent idle): "${task.title}" (${task.id})`);
           } else {
@@ -263,6 +279,8 @@ export class HeartbeatScheduler {
             if (task.assigned_to) {
               freeAgentStmt.run(task.assigned_to, task.id);
             }
+            appendAuditStmt.run(traceId, "task.timeout_failed",
+              `Task interrupted by heartbeat (10 min stale): "${task.title}" (${task.id})`);
             failedTasks.push(task.title);
             console.log(`[Heartbeat] Marked stale task as failed: "${task.title}" (${task.id})`);
           }
