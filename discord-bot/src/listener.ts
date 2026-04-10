@@ -197,7 +197,8 @@ function getToolBubbleText(toolName: string): string {
     toolName === "request_approval_escalation" ||
     toolName === "mcp__ai-office-coordination__request_approval_escalation"
   ) return "🙋 請求審核";
-  return `🔧 ${toolName}`;
+  const label = toolName.replace(/[-_]+/g, ' ').trim().replace(/\b\w/g, c => c.toUpperCase());
+  return `🔧 ${label}`;
 }
 
 /**
