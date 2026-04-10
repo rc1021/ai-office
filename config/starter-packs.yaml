@@ -12,6 +12,7 @@ starter_packs:
       en: "Just you and the Leader. Great for exploring AI Office."
       zh-TW: "只有你和 Leader。適合初次探索 AI Office。"
       ja: "あなたとLeaderだけ。AI Officeの探索に最適。"
+    keywords: [solo, individual, personal, 個人, 獨立, 自由工作者, freelancer, creator, 創作者]
     roles: []
 
   dev-team:
@@ -23,6 +24,7 @@ starter_packs:
       en: "PM + Software Engineer for building software projects."
       zh-TW: "PM + 軟體工程師，適合軟體開發專案。"
       ja: "PM + ソフトウェアエンジニア。ソフトウェア開発向け。"
+    keywords: [software, development, coding, programming, 軟體, 開發, 程式, app, application, web, website, SaaS, 網頁, 應用程式, tech, 科技, backend, frontend]
     roles: [pm, software-engineer]
 
   startup-mvp:
@@ -34,6 +36,7 @@ starter_packs:
       en: "PM + Engineer + Research Analyst for rapid prototyping."
       zh-TW: "PM + 工程師 + 研究分析師，適合快速原型開發。"
       ja: "PM + エンジニア + リサーチアナリスト。高速プロトタイピング向け。"
+    keywords: [startup, 新創, mvp, prototype, 原型, venture, 創業, 早期, early-stage, product, 產品, innovation, 創新]
     roles: [pm, software-engineer, research-analyst]
 
   research-lab:
@@ -45,6 +48,7 @@ starter_packs:
       en: "Research Analyst for deep research and data analysis."
       zh-TW: "研究分析師，適合深度研究與資料分析。"
       ja: "リサーチアナリスト。深い研究とデータ分析向け。"
+    keywords: [research, analysis, 研究, 分析, data, 資料, 數據, academia, 學術, science, 科學, lab, 實驗室, report, 報告]
     roles: [research-analyst]
 
   full-dev-team:
@@ -56,6 +60,7 @@ starter_packs:
       en: "Complete software development team with QA and DevOps."
       zh-TW: "含 QA 和 DevOps 的完整開發團隊。"
       ja: "QAとDevOpsを含む完全な開発チーム。"
+    keywords: [devops, qa, testing, 測試, deploy, 部署, cloud, 雲端, infrastructure, full-stack, 全端, enterprise, 企業, platform, 平台]
     roles: [pm, software-engineer, qa-engineer, devops-engineer, ui-ux-designer]
 
   marketing-team:
@@ -67,6 +72,7 @@ starter_packs:
       en: "Marketing Manager + Content Writer + Community Manager."
       zh-TW: "行銷經理 + 內容寫手 + 社群經理。"
       ja: "マーケティングマネージャー + コンテンツライター + コミュニティマネージャー。"
+    keywords: [marketing, 行銷, content, 內容, social media, 社群, community, brand, 品牌, advertising, 廣告, SEO, PR, 公關, campaign, 活動]
     roles: [marketing-manager, content-writer, community-manager]
 
   finance-office:
@@ -78,6 +84,7 @@ starter_packs:
       en: "Accountant + Financial Analyst for bookkeeping and forecasting."
       zh-TW: "會計 + 財務分析師，適合記帳與預測。"
       ja: "会計 + 財務アナリスト。簿記と予測向け。"
+    keywords: [finance, 財務, 金融, accounting, 會計, bookkeeping, 記帳, financial, 財務分析, investment, 投資, tax, 稅務, budget, 預算, audit, 稽核]
     roles: [accountant, financial-analyst]
 
   ecommerce-shop:
@@ -89,6 +96,7 @@ starter_packs:
       en: "Product Manager + Marketing + Content + Customer Service."
       zh-TW: "產品經理 + 行銷 + 內容 + 客服。"
       ja: "プロダクトマネージャー + マーケティング + コンテンツ + カスタマーサービス。"
+    keywords: [ecommerce, e-commerce, 電商, shop, 商店, store, 網店, retail, 零售, online shop, 線上購物, product, 產品, customer service, 客服, 銷售, sales]
     roles: [product-manager, marketing-manager, content-writer, customer-service-rep]
 
   legal-firm:
@@ -100,6 +108,7 @@ starter_packs:
       en: "Legal Advisor + Admin Assistant for legal operations."
       zh-TW: "法務顧問 + 行政助理，適合法律事務。"
       ja: "法務アドバイザー + アシスタント。法務オペレーション向け。"
+    keywords: [legal, 法律, law, 法務, contract, 合約, compliance, 合規, litigation, 訴訟, attorney, lawyer, 律師, firm, 事務所, regulation, 法規]
     roles: [legal-advisor, admin-assistant]
 
 # ─── Advanced Packs ──────────────────────────────────────────────────────────

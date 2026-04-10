@@ -40,6 +40,7 @@ const STATE_PATH = path.join(PROJECT_DIR, ".ai-office", "state", "onboarding-sta
 const COMPANY_PROFILE_PATH = path.join(PROJECT_DIR, ".ai-office", "state", "company-profile.yaml");
 const ACTIVE_ROLES_PATH = path.join(PROJECT_DIR, "config", "active-roles.yaml");
 const ROLE_INDEX_PATH = path.join(PROJECT_DIR, "roles", "role-index.yaml");
+const STARTER_PACKS_PATH = path.join(PROJECT_DIR, "config", "starter-packs.yaml");
 const ONBOARDED_FLAG = path.join(PROJECT_DIR, ".ai-office", "state", ".onboarded");
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -66,6 +67,7 @@ interface OnboardingState {
   jobBoardMessageId?: string;
   generalMessageId?: string;
   hrMessageId?: string;
+  hrPersistentMenuId?: string; // Message ID of the persistent rehire menu in #hr
 }
 
 interface RoleEntry {
@@ -134,7 +136,7 @@ const STRINGS = {
     confirmButton: (count: number) => `✅ 確認選擇 (${count})`,
     roleSelected: (name: string) => `✓ ${name}`,
     roleAdd: (name: string) => `+ ${name}`,
-    jobBoardNotification: "🏢 招聘看板已在 **#hr** 開啟，請前往選擇你的團隊成員！",
+    jobBoardNotification: (hrId: string) => `🏢 招聘看板已在 <#${hrId}> 開啟，請前往選擇你的團隊成員！`,
     // Cart confirm
     cartConfirmTitle: "📋 確認選擇",
     cartConfirmBody: (count: number, list: string) =>
@@ -152,14 +154,23 @@ const STRINGS = {
     doneLabel: "✓ 完成",
     // Team ready
     teamReadyTitle: "✨ 團隊就緒！",
-    teamReadyBody: (lines: string) =>
+    teamReadyBody: (lines: string, generalId?: string) =>
       `太好了！你的 AI 辦公室已經組建完成，以下是你的新團隊：\n\n${lines}\n\n` +
-      "前往 **#general** 跟我說你想做什麼，我會分配任務給最合適的成員！",
+      `前往 ${generalId ? `<#${generalId}>` : "**#general**"} 跟我說你想做什麼，我會分配任務給最合適的成員！`,
     teamReadyFooter: (office: string) => `${office} • Powered by Claude Code`,
-    finishNotification: (count: number) =>
+    finishNotification: (count: number, hrId?: string) =>
       `✨ **招聘完成！** 你的團隊已組建好了。\n\n` +
-      `雇用了 **${count}** 個角色，詳情請看 **#hr**。\n\n` +
+      `雇用了 **${count}** 個角色，詳情請看 ${hrId ? `<#${hrId}>` : "**#hr**"}。\n\n` +
       `現在告訴我你想做什麼，我會分配給最合適的成員！`,
+    // Rehire menu
+    rehireMenuTitle: "➕ 追加招聘",
+    rehireMenuDescription: "想調整你的團隊嗎？點擊下方按鈕重新進入招聘流程。",
+    rehireAddButton: "➕ 追加招聘",
+    rehireResetButton: "🔄 重新選擇",
+    rehireResetConfirmTitle: "🔄 重新選擇確認",
+    rehireResetConfirmDescription: "這將清空目前所有已選角色，重新開始招聘。確定要繼續嗎？",
+    rehireResetConfirmButton: "確定重新選擇",
+    rehireResetCancelButton: "取消",
     // Recovery
     recoveryMessage:
       "🔄 *（Bot 剛剛重啟）繼續你的 onboarding 流程 — 請告訴我你的辦公室主要做什麼？*",
@@ -196,7 +207,7 @@ const STRINGS = {
     confirmButton: (count: number) => `✅ Confirm (${count})`,
     roleSelected: (name: string) => `✓ ${name}`,
     roleAdd: (name: string) => `+ ${name}`,
-    jobBoardNotification: "🏢 The job board is open in **#hr** — head over to choose your team!",
+    jobBoardNotification: (hrId: string) => `🏢 The job board is open in <#${hrId}> — head over to choose your team!`,
     // Cart confirm
     cartConfirmTitle: "📋 Confirm Selection",
     cartConfirmBody: (count: number, list: string) =>
@@ -214,14 +225,23 @@ const STRINGS = {
     doneLabel: "✓ Done",
     // Team ready
     teamReadyTitle: "✨ Team Ready!",
-    teamReadyBody: (lines: string) =>
+    teamReadyBody: (lines: string, generalId?: string) =>
       `Your AI Office is fully staffed! Here's your new team:\n\n${lines}\n\n` +
-      "Head to **#general** and tell me what you want to do — I'll assign tasks to the best person!",
+      `Head to ${generalId ? `<#${generalId}>` : "**#general**"} and tell me what you want to do — I'll assign tasks to the best person!`,
     teamReadyFooter: (office: string) => `${office} • Powered by Claude Code`,
-    finishNotification: (count: number) =>
+    finishNotification: (count: number, hrId?: string) =>
       `✨ **Hiring complete!** Your team is ready.\n\n` +
-      `Hired **${count}** role(s) — see **#hr** for details.\n\n` +
+      `Hired **${count}** role(s) — see ${hrId ? `<#${hrId}>` : "**#hr**"} for details.\n\n` +
       `Now tell me what you'd like to do and I'll assign it to the right person!`,
+    // Rehire menu
+    rehireMenuTitle: "➕ Hire More",
+    rehireMenuDescription: "Want to adjust your team? Click a button below to re-open the hiring flow.",
+    rehireAddButton: "➕ Add More",
+    rehireResetButton: "🔄 Start Over",
+    rehireResetConfirmTitle: "🔄 Confirm Reset",
+    rehireResetConfirmDescription: "This will clear all currently selected roles and restart the hiring flow. Are you sure?",
+    rehireResetConfirmButton: "Confirm Reset",
+    rehireResetCancelButton: "Cancel",
     // Recovery
     recoveryMessage:
       "🔄 *(Bot just restarted) Continuing your onboarding — please tell me what your office mainly does.*",
@@ -293,6 +313,55 @@ function getAllHireableRoles(): RoleEntry[] {
 
 function getRoleById(id: string): RoleEntry | undefined {
   return loadRoles().find((r) => r.id === id);
+}
+
+/**
+ * Suggest up to 6 roles based on a free-text company description.
+ * Matches the description against starter-pack keywords; returns the
+ * roles from the best-matching pack. Falls back to general roles if no
+ * pack matches.
+ */
+function suggestRolesFromDescription(description: string): RoleEntry[] {
+  const MAX_SUGGESTIONS = 6;
+
+  try {
+    const raw = fs.readFileSync(STARTER_PACKS_PATH, "utf-8");
+    const doc = yaml.load(raw) as {
+      starter_packs: Record<string, { keywords?: string[]; roles: string[] }>;
+    };
+    const packs = doc.starter_packs ?? {};
+    const lower = description.toLowerCase();
+
+    let bestPackId: string | null = null;
+    let bestScore = 0;
+
+    for (const [packId, pack] of Object.entries(packs)) {
+      if (!pack.keywords || pack.keywords.length === 0) continue;
+      let score = 0;
+      for (const kw of pack.keywords) {
+        if (lower.includes(kw.toLowerCase())) score++;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestPackId = packId;
+      }
+    }
+
+    if (bestPackId && bestScore > 0) {
+      const roleIds = packs[bestPackId].roles ?? [];
+      const matched = roleIds
+        .map((id) => getRoleById(id))
+        .filter((r): r is RoleEntry => r !== undefined);
+      if (matched.length > 0) {
+        return matched.slice(0, MAX_SUGGESTIONS);
+      }
+    }
+  } catch (err) {
+    console.warn("[Onboarding] Failed to load starter-packs for suggestions:", err);
+  }
+
+  // Fallback: return first N general roles
+  return getGeneralRoles().slice(0, MAX_SUGGESTIONS);
 }
 
 // ── Embed builders ────────────────────────────────────────────────────────────
@@ -426,7 +495,8 @@ function buildRoleDetailEmbed(
 
 function buildTeamReadyEmbed(
   roleDetails: Record<string, number>,
-  officeName: string
+  officeName: string,
+  generalChannelId?: string
 ): EmbedBuilder {
   const str = s();
   const lines = Object.entries(roleDetails).map(([id, count]) => {
@@ -437,7 +507,7 @@ function buildTeamReadyEmbed(
 
   return new EmbedBuilder()
     .setTitle(str.teamReadyTitle)
-    .setDescription(str.teamReadyBody(lines.join("\n")))
+    .setDescription(str.teamReadyBody(lines.join("\n"), generalChannelId))
     .setColor(COLORS.GREEN)
     .setTimestamp()
     .setFooter({ text: str.teamReadyFooter(officeName) });
@@ -539,8 +609,8 @@ export async function handleUserMessage(message: Message): Promise<boolean> {
     "utf-8"
   );
 
-  // Suggest some general roles based on the description
-  const generalRoles = getGeneralRoles().slice(0, 6);
+  // Suggest roles dynamically based on the description
+  const generalRoles = suggestRolesFromDescription(description);
   const roleList = generalRoles.map((r) => str.roleListItem(roleName(r), r.department)).join("\n");
 
   const embed = new EmbedBuilder()
@@ -695,6 +765,12 @@ export function registerOnboardingInteractionHandler(externalClient?: Client): v
         case "role-detail-next":
           await handleRoleDetailNext(interaction, state, officeName);
           break;
+        case "rehire-add":
+          await handleRehire(interaction, state, "add", officeName);
+          break;
+        case "rehire-reset":
+          await handleRehire(interaction, state, "reset", officeName);
+          break;
         default:
           console.warn("[Onboarding] Unknown action:", action);
       }
@@ -767,7 +843,7 @@ async function handleToJobBoard(
 
     // Notify in general that #hr is ready
     const generalChannel = await findTextChannel("general");
-    await generalChannel.send(str.jobBoardNotification);
+    await generalChannel.send(str.jobBoardNotification(hrChannel.id));
   } catch (err) {
     console.error("[Onboarding] Failed to create job board:", err);
   }
@@ -1013,13 +1089,100 @@ async function handleFinish(state: OnboardingState, officeName: string): Promise
   console.log("[Onboarding] Created .onboarded flag");
 
   // Send team ready embed to #hr
-  const embed = buildTeamReadyEmbed(details, officeName);
   const hrChannel = await findTextChannel("hr");
+  const generalChannel = await findTextChannel("general");
+  const embed = buildTeamReadyEmbed(details, officeName, generalChannel.id);
   await hrChannel.send({ embeds: [embed] });
 
+  // Send persistent rehire menu to #hr
+  const persistentMsg = await sendPersistentRehireMenu(hrChannel);
+  if (persistentMsg) {
+    state.hrPersistentMenuId = persistentMsg.id;
+    saveState(state);
+  }
+
   // Notify in #general
-  const generalChannel = await findTextChannel("general");
-  await generalChannel.send(str.finishNotification(state.selectedRoles.length));
+  await generalChannel.send(str.finishNotification(state.selectedRoles.length, hrChannel.id));
 
   console.log("[Onboarding] Onboarding completed. Team:", Object.keys(details).join(", "));
+}
+
+/**
+ * Handle the "rehire-add" and "rehire-reset" button actions from the
+ * persistent rehire menu in #hr.
+ *
+ * - "add"  → keep existing active-roles, re-open job board to add more
+ * - "reset" → clear active-roles.yaml + reset state, re-open full job board
+ */
+async function handleRehire(
+  interaction: { message: { edit: (opts: MessageEditOptions) => Promise<unknown> } },
+  state: OnboardingState,
+  mode: "add" | "reset",
+  officeName: string
+): Promise<void> {
+  const str = s();
+
+  if (mode === "reset") {
+    // Clear existing role selections
+    state.selectedRoles = [];
+    state.roleDetails = {};
+    state.currentRoleIndex = 0;
+    // Reset active-roles.yaml to only contain leader
+    writeActiveRoles({});
+    console.log("[Onboarding] Rehire reset: cleared active roles");
+  }
+
+  // Re-open the job board
+  state.step = "step-4-job-board";
+  state.jobBoardPage = 0;
+  saveState(state);
+
+  const allRoles = getAllHireableRoles();
+  const selected = new Set(state.selectedRoles);
+  const { embed, rows } = buildJobBoardEmbed(allRoles, selected, 0, ROLES_PER_PAGE);
+
+  try {
+    const hrChannel = await findTextChannel("hr");
+    const hrMsg = await hrChannel.send({
+      content: str.jobBoardContent,
+      embeds: [embed],
+      components: rows,
+    });
+    state.hrMessageId = hrMsg.id;
+    saveState(state);
+    console.log("[Onboarding] Rehire job board opened (mode:", mode, ")");
+  } catch (err) {
+    console.error("[Onboarding] Failed to open rehire job board:", err);
+  }
+}
+
+/**
+ * Send (or re-send) the persistent rehire menu embed to #hr.
+ * Returns the sent message so caller can store its ID.
+ */
+async function sendPersistentRehireMenu(hrChannel: TextChannel): Promise<import("discord.js").Message | null> {
+  const str = s();
+  try {
+    const embed = new EmbedBuilder()
+      .setTitle(str.rehireMenuTitle)
+      .setDescription(str.rehireMenuDescription)
+      .setColor(COLORS.BLURPLE);
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId("onboarding:rehire-add")
+        .setLabel(str.rehireAddButton)
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId("onboarding:rehire-reset")
+        .setLabel(str.rehireResetButton)
+        .setStyle(ButtonStyle.Danger)
+    );
+
+    const msg = await hrChannel.send({ embeds: [embed], components: [row] });
+    return msg;
+  } catch (err) {
+    console.error("[Onboarding] Failed to send persistent rehire menu:", err);
+    return null;
+  }
 }
