@@ -23,9 +23,8 @@ function formatMessage(msg: Message): ChannelMessage {
 }
 
 const DISCORD_MAX_LENGTH = 2000;
-const FOOTER_RESERVE_NO_LABEL = 10;  // "\n-# -99" ≈ 7 chars + margin
-const FOOTER_RESERVE_WITH_LABEL = 60; // "\n-# -99 <label>" up to 60 chars
-const SESSION_FOOTER_RESERVE = 25; // "\n-# ⌘ `a1b2c3d4`" ≈ 18 chars + margin
+const FOOTER_RESERVE_NO_LABEL = 10;  // "\n-# 99/99" ≈ 8 chars + margin
+const FOOTER_RESERVE_WITH_LABEL = 60; // "\n-# 99/99 <label> • a1b2c3d4" up to 60 chars
 
 /**
  * Split text into chunks that fit within Discord's 2000-char limit.
@@ -59,24 +58,24 @@ export async function sendMessage(
   // when --resume is active). Shows on the last page so users can easily --resume.
   const rawSessionId = process.env.AI_OFFICE_SESSION_ID ?? "";
   const shortSessionId = rawSessionId ? rawSessionId.replace(/-/g, "").substring(0, 8) : "";
-  const sessionFooter = shortSessionId ? `\n-# ⌘ ${shortSessionId}` : "";
 
   const effectiveMax = DISCORD_MAX_LENGTH
-    - (pageLabel !== undefined ? FOOTER_RESERVE_WITH_LABEL : FOOTER_RESERVE_NO_LABEL)
-    - (shortSessionId ? SESSION_FOOTER_RESERVE : 0);
+    - (pageLabel !== undefined || shortSessionId ? FOOTER_RESERVE_WITH_LABEL : FOOTER_RESERVE_NO_LABEL);
   const chunks = splitContent(content, effectiveMax);
   const total = chunks.length;
   let lastMsgId = "";
 
   for (let i = 0; i < chunks.length; i++) {
     let pageContent = chunks[i];
-    if (total > 1) {
-      const label = pageLabel ? ` ${pageLabel}` : '';
-      pageContent += `\n-# -${i + 1}${label}`;
-    }
-    // Append session footer to the last page only
-    if (i === total - 1 && sessionFooter) {
-      pageContent += sessionFooter;
+    const label = pageLabel ? ` ${pageLabel}` : '';
+    const isLast = i === total - 1;
+
+    if (total > 1 && isLast && shortSessionId) {
+      pageContent += `\n-# ${i + 1}/${total}${label} • ${shortSessionId}`;
+    } else if (total > 1) {
+      pageContent += `\n-# ${i + 1}/${total}${label}`;
+    } else if (shortSessionId) {
+      pageContent += `\n-# ${shortSessionId}`;
     }
     const options: MessageCreateOptions = { content: pageContent };
     if (replyToMessageId && lastMsgId === "") {
