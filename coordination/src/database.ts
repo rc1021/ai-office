@@ -233,10 +233,12 @@ const migrations: Migration[] = [
     version: 5,
     description: "Add preview_artifact_path to approvals for batch preview lists",
     up: (db) => {
-      db.exec(`
-        ALTER TABLE approvals ADD COLUMN preview_artifact_path TEXT;
-        UPDATE schema_meta SET value = '5' WHERE key = 'version';
-      `);
+      // Idempotent: skip ADD COLUMN if the column already exists (partial migration recovery)
+      const cols = db.prepare("PRAGMA table_info(approvals)").all() as Array<{ name: string }>;
+      if (!cols.some((c) => c.name === "preview_artifact_path")) {
+        db.exec("ALTER TABLE approvals ADD COLUMN preview_artifact_path TEXT;");
+      }
+      db.exec("UPDATE schema_meta SET value = '5' WHERE key = 'version';");
     },
   },
 ];

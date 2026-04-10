@@ -220,12 +220,19 @@ cmd_restore() {
   local brainstorm_dir="$PROJECT_DIR/.ai-office/brainstorm"
   local logs_dir="$PROJECT_DIR/.ai-office/logs"
 
-  # coordination DB (含 WAL 檔)
+  # coordination DB (含 WAL 檔) — state/ 正確位置
   if [ -f "$state_dir/coordination.db" ]; then
     rm -f "$state_dir/coordination.db" "$state_dir/coordination.db-shm" "$state_dir/coordination.db-wal"
     ok "已清除 coordination.db"
   else
     info "coordination.db 不存在(跳過)"
+  fi
+
+  # 清除根目錄遺留的 coordination.db (舊版本錯誤路徑殘留)
+  local root_db="$PROJECT_DIR/.ai-office/coordination.db"
+  if [ -f "$root_db" ]; then
+    rm -f "$root_db" "${root_db}-shm" "${root_db}-wal"
+    ok "已清除遺留的 .ai-office/coordination.db (根目錄殘留)"
   fi
 
   # 運行狀態檔案
