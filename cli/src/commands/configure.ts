@@ -13,6 +13,8 @@ type ConfigKey =
   | 'max-workers'
   | 'discord-token'
   | 'guild-id'
+  | 'client-id'
+  | 'owner-user-id'
   | 'ngrok-mode'
   | 'ngrok-token'
   | 'pixel-user'
@@ -35,6 +37,8 @@ const CONFIG_ENTRIES: ConfigEntry[] = [
   { key: 'max-workers',    label: 'max-workers',    file: 'config/office.yaml', isInt: true },
   { key: 'discord-token',  label: 'discord-token',  file: 'discord-bot/.env',   secret: true },
   { key: 'guild-id',       label: 'guild-id',       file: 'discord-bot/.env' },
+  { key: 'client-id',      label: 'client-id',      file: 'discord-bot/.env' },
+  { key: 'owner-user-id',  label: 'owner-user-id',  file: 'discord-bot/.env' },
   { key: 'ngrok-mode',     label: 'ngrok-mode',     file: 'pixel-office/.env',  allowed: ['internal', 'external', 'custom', 'disabled'] },
   { key: 'ngrok-token',    label: 'ngrok-token',    file: 'pixel-office/.env',  secret: true },
   { key: 'pixel-user',     label: 'pixel-user',     file: 'pixel-office/.env' },
@@ -89,6 +93,10 @@ function getCurrentValue(projectDir: string, key: ConfigKey): string {
       return readEnvField(path.join(projectDir, 'discord-bot', '.env'), 'DISCORD_BOT_TOKEN');
     case 'guild-id':
       return readEnvField(path.join(projectDir, 'discord-bot', '.env'), 'DISCORD_GUILD_ID');
+    case 'client-id':
+      return readEnvField(path.join(projectDir, 'discord-bot', '.env'), 'DISCORD_CLIENT_ID');
+    case 'owner-user-id':
+      return readEnvField(path.join(projectDir, 'discord-bot', '.env'), 'DISCORD_OWNER_USER_ID');
     case 'ngrok-mode':
       return readEnvField(path.join(projectDir, 'pixel-office', '.env'), 'NGROK_MODE');
     case 'ngrok-token':
@@ -208,6 +216,12 @@ function applyValue(projectDir: string, key: ConfigKey, value: string): void {
     case 'guild-id':
       updateEnvField(discordEnvPath, 'DISCORD_GUILD_ID', value);
       updateMcpJsonField(mcpJsonPath, 'DISCORD_GUILD_ID', value);
+      break;
+    case 'client-id':
+      updateEnvField(discordEnvPath, 'DISCORD_CLIENT_ID', value);
+      break;
+    case 'owner-user-id':
+      updateEnvField(discordEnvPath, 'DISCORD_OWNER_USER_ID', value);
       break;
     case 'ngrok-mode':
       updateEnvField(pixelEnvPath, 'NGROK_MODE', value);

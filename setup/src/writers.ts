@@ -7,6 +7,8 @@ export interface SetupConfig {
   timezone: string;
   discordToken: string;
   guildId: string;
+  discordClientId?: string;
+  ownerUserId?: string;
   maxWorkers: number;
   starterPack: string;
   starterRoles: string[];
@@ -58,7 +60,13 @@ export function writeOfficeYaml(projectRoot: string, config: SetupConfig): void 
  */
 export function writeDiscordEnv(projectRoot: string, config: SetupConfig): void {
   const envPath = path.join(projectRoot, "discord-bot", ".env");
-  const content = `DISCORD_BOT_TOKEN=${config.discordToken}\nDISCORD_GUILD_ID=${config.guildId}\n`;
+  let content = `DISCORD_BOT_TOKEN=${config.discordToken}\nDISCORD_GUILD_ID=${config.guildId}\n`;
+  if (config.discordClientId) {
+    content += `DISCORD_CLIENT_ID=${config.discordClientId}\n`;
+  }
+  if (config.ownerUserId) {
+    content += `DISCORD_OWNER_USER_ID=${config.ownerUserId}\n`;
+  }
   fs.writeFileSync(envPath, content, "utf-8");
   console.log("  [OK] discord-bot/.env");
 }

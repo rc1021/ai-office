@@ -95,6 +95,23 @@ const i18n: Record<string, Record<Lang, string>> = {
   "prompt.industry":    { "zh-TW": "選擇行業：",         en: "Choose an industry:",         ja: "業界を選択：" },
   "prompt.team":        { "zh-TW": "選擇團隊類型：",      en: "Choose a team type:",         ja: "チームタイプを選択：" },
   "back":               { "zh-TW": "[B] 返回上一步",     en: "[B] Go back",                 ja: "[B] 前に戻る" },
+
+  "discord.step4b":     { "zh-TW": "4b. 記下「General Information」頁籤中的 Application ID",
+                          en:      "4b. Note the Application ID on the 'General Information' tab",
+                          ja:      "4b.「General Information」タブの Application ID をメモ" },
+  "prompt.client_id":   { "zh-TW": "Application ID（/office 指令必須）",
+                          en:      "Application ID (required for /office command)",
+                          ja:      "Application ID（/office コマンドに必要）" },
+  "prompt.owner_id":    { "zh-TW": "你的 Discord User ID（可選：限制 /office 操作者）",
+                          en:      "Your Discord User ID (optional: restrict /office access)",
+                          ja:      "あなたの Discord User ID（任意：/office 操作者を制限）" },
+  "hint.owner_id":      { "zh-TW": "（Discord 設定 → 開發者模式 → 右鍵自己的名字 → 複製 User ID）",
+                          en:      "(Discord settings → Developer Mode → right-click your name → Copy User ID)",
+                          ja:      "（Discord設定 → 開発者モード → 自分の名前を右クリック → User IDをコピー）" },
+  "warn.no_client_id":  { "zh-TW": "[提示] 未提供 Application ID，稍後可執行 'office configure client-id' 設定",
+                          en:      "[INFO] No Application ID provided. Run 'office configure client-id' later",
+                          ja:      "[情報] Application ID未入力。後で 'office configure client-id' で設定できます" },
+  "sum.client_id":      { "zh-TW": "Application ID", en: "Application ID", ja: "Application ID" },
 };
 
 let currentLang: Lang = "zh-TW";
@@ -274,6 +291,17 @@ async function main(): Promise<void> {
     guildId = await ask(t("prompt.guild"), guildId);
   }
 
+  // Application ID for /office slash command
+  console.log(`\n  ${t("discord.step4b")}`);
+  const discordClientId = await ask(t("prompt.client_id"));
+  if (!discordClientId) {
+    console.log(`  ${t("warn.no_client_id")}\n`);
+  }
+
+  // Owner User ID (optional)
+  console.log(`\n  ${t("hint.owner_id")}`);
+  const ownerUserId = await ask(t("prompt.owner_id"));
+
   // 5. Role selection → moved to Discord onboarding
   //    The interactive hiring board in #hr lets users choose roles after first launch.
   const packId = "";
@@ -345,6 +373,8 @@ async function main(): Promise<void> {
     timezone,
     discordToken: discordToken || "YOUR_TOKEN_HERE",
     guildId: guildId || "YOUR_GUILD_ID_HERE",
+    discordClientId: discordClientId || "",
+    ownerUserId: ownerUserId || "",
     maxWorkers,
     starterPack: packId,
     starterRoles: packData.roles,
@@ -362,6 +392,7 @@ async function main(): Promise<void> {
   console.log(`  ${t("sum.timezone")}:     ${config.timezone}`);
   console.log(`  ${t("sum.discord")}:      ${discordToken ? t("sum.token_ok") : t("sum.token_later")}`);
   console.log(`  ${t("sum.guild")}:        ${guildId || t("sum.token_later")}`);
+  console.log(`  ${t("sum.client_id")}:  ${discordClientId || t("sum.token_later")}`);
   console.log(`  ${t("sum.starter")}:      Discord onboarding (roles selected interactively in #hr)`);
   console.log(`  ${t("sum.workers")}:      ${config.maxWorkers}`);
   const ngrokSummary = config.ngrokMode === "internal"
