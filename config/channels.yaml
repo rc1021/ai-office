@@ -19,3 +19,6 @@ categories:
       - name: hr
         topic: "Hiring board — recruit new team members"
         throttle: none
+      - name: memo
+        topic: "Memos & notes"
+        throttle: none

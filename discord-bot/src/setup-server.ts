@@ -13,6 +13,7 @@ const SERVER_STRUCTURE = [
       { name: "alerts", topic: "Critical alerts requiring attention" },
       { name: "daily-brief", topic: "Daily office summary" },
       { name: "hr", topic: "Hiring board — recruit new team members" },
+      { name: "memo", topic: "Memos & notes" },
     ],
   },
 ];

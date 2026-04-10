@@ -35,6 +35,9 @@ import {
   isAwaitingUserInput,
   handleUserMessage as onboardingHandleUserMessage,
 } from "./onboarding-manager.js";
+import { handleOfficeCommand } from "./interactions/officeCommand.js";
+import { handleOfficeInteraction } from "./interactions/officeInteractionHandler.js";
+import { registerOfficeCommands } from "./registerCommands.js";
 import type { ApprovalRequest } from "./types.js";
 import { setDiscordClient, getDiscordClient } from "./discord-client.js";
 import { DiscordChatAdapter } from "./discord-adapter.js";
@@ -173,6 +176,29 @@ const processedMessageIds = new Set<string>();
 // Per-user processing lock: prevents two claude -p processes from running on the
 // same session simultaneously (would corrupt --resume session state).
 const userProcessing = new Set<string>();
+
+/**
+ * Map a tool name to a Pixel Office bubble text for the progress message.
+ * Matches the tool→bubble mapping table in design_pixel_office_rewrite.md.
+ */
+function getToolBubbleText(toolName: string): string {
+  if (toolName === "task_create" || toolName === "mcp__ai-office-coordination__task_create") return "📋 建立任務";
+  if (toolName === "Agent") return "🤖 派工中";
+  if (toolName === "mcp__ai-office-discord__send_message") return "💬 回覆用戶";
+  if (toolName === "task_checkpoint" || toolName === "mcp__ai-office-coordination__task_checkpoint") return "✅ 完成一步!";
+  if (toolName === "report_status" || toolName === "mcp__ai-office-coordination__report_status") return "📡 報告狀態";
+  if (toolName === "list_agents" || toolName === "mcp__ai-office-coordination__list_agents") return "👥 確認成員";
+  if (toolName === "Read" || toolName === "Glob" || toolName === "Grep") return "📂 讀取文件";
+  if (toolName === "Edit" || toolName === "Write") return "✏️ 修改程式";
+  if (toolName === "Bash") return "⚙️ 執行指令";
+  if (toolName === "task_resume" || toolName === "mcp__ai-office-coordination__task_resume") return "🔄 接續任務";
+  if (toolName === "publish_artifact" || toolName === "mcp__ai-office-coordination__publish_artifact") return "📦 發布成果";
+  if (
+    toolName === "request_approval_escalation" ||
+    toolName === "mcp__ai-office-coordination__request_approval_escalation"
+  ) return "🙋 請求審核";
+  return `🔧 ${toolName}`;
+}
 
 /**
  * Called once after office config is loaded to set the concurrency limit.
@@ -388,12 +414,15 @@ async function handleMessage(message: Message): Promise<void> {
 
   // onToolUse: fired immediately on each tool_use event from stream-json stdout.
   // Updates the progress message in real-time, faster than the 2-min interval fallback.
+  let lastToolName = "";
   const onToolUse = async (toolName: string): Promise<void> => {
+    lastToolName = toolName;
     if (!progressMsg) return;
     const elapsed = Math.round((Date.now() - startTime) / 60_000);
     const elapsedStr = elapsed > 0 ? ` (${elapsed} 分鐘)` : "";
+    const bubbleText = getToolBubbleText(toolName);
     try {
-      await progressMsg.edit(`⏳ 處理中${elapsedStr} — ${toolName}`);
+      await progressMsg.edit(`⏳ 處理中${elapsedStr} — ${bubbleText}`);
     } catch { /* non-fatal */ }
   };
 
@@ -404,8 +433,9 @@ async function handleMessage(message: Message): Promise<void> {
   const progressTimer = setInterval(async () => {
     if (!progressMsg) return;
     const elapsed = Math.round((Date.now() - startTime) / 60_000);
-    const lastAction = queryLastAuditAction();
-    const detail = lastAction ? ` — ${lastAction}` : "";
+    const detail = lastToolName
+      ? ` — ${getToolBubbleText(lastToolName)}`
+      : (() => { const a = queryLastAuditAction(); return a ? ` — ${a}` : ""; })();
     try {
       await progressMsg.edit(`⏳ 處理中 (${elapsed} 分鐘)${detail}`);
     } catch { /* message may have been deleted */ }
@@ -711,6 +741,32 @@ async function main(): Promise<void> {
     enqueueApprovalTrigger(approval);
   });
 
+  // ── /office slash command + office:* button/select interactions ────────────
+  client.on(Events.InteractionCreate, async (interaction) => {
+    // Slash command: /office
+    if (interaction.isChatInputCommand() && interaction.commandName === "office") {
+      try {
+        await handleOfficeCommand(interaction);
+      } catch (err) {
+        console.error("[Listener] handleOfficeCommand error:", err);
+      }
+      return;
+    }
+
+    // Buttons and select menus with office:* customId
+    const isOfficeInteraction =
+      (interaction.isButton() || interaction.isStringSelectMenu()) &&
+      interaction.customId.startsWith("office:");
+
+    if (isOfficeInteraction) {
+      try {
+        await handleOfficeInteraction(interaction);
+      } catch (err) {
+        console.error("[Listener] handleOfficeInteraction error:", err);
+      }
+    }
+  });
+
   // Subsystem instances
   let heartbeat: HeartbeatScheduler | null = null;
 
@@ -757,6 +813,15 @@ async function main(): Promise<void> {
       console.log("[Listener] HeartbeatScheduler started");
 
       sessionStore.start();
+
+      // Auto-register /office slash command
+      const botToken = process.env.DISCORD_BOT_TOKEN ?? "";
+      const guildId = process.env.DISCORD_GUILD_ID ?? "";
+      if (botToken && guildId) {
+        registerOfficeCommands(botToken, guildId).catch(err =>
+          console.warn("[Listener] registerOfficeCommands error:", err)
+        );
+      }
     } catch (err) {
       console.error("[Listener] Failed to start subsystems:", err);
     }

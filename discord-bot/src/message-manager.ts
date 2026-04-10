@@ -23,9 +23,9 @@ function formatMessage(msg: Message): ChannelMessage {
 }
 
 const DISCORD_MAX_LENGTH = 2000;
-const FOOTER_RESERVE_NO_LABEL = 20;
-const FOOTER_RESERVE_WITH_LABEL = 70;
-const SESSION_FOOTER_RESERVE = 25; // "\n-# ↩ `a1b2c3d4`" ≈ 18 chars + margin
+const FOOTER_RESERVE_NO_LABEL = 10;  // "\n-# -99" ≈ 7 chars + margin
+const FOOTER_RESERVE_WITH_LABEL = 60; // "\n-# -99 <label>" up to 60 chars
+const SESSION_FOOTER_RESERVE = 25; // "\n-# ⌘ `a1b2c3d4`" ≈ 18 chars + margin
 
 /**
  * Split text into chunks that fit within Discord's 2000-char limit.
@@ -71,8 +71,8 @@ export async function sendMessage(
   for (let i = 0; i < chunks.length; i++) {
     let pageContent = chunks[i];
     if (total > 1) {
-      const label = pageLabel ? `${pageLabel}` : '';
-      pageContent += `\n${label}（第 ${i + 1}/${total} 頁）`;
+      const label = pageLabel ? ` ${pageLabel}` : '';
+      pageContent += `\n-# -${i + 1}${label}`;
     }
     // Append session footer to the last page only
     if (i === total - 1 && sessionFooter) {
