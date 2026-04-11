@@ -1,5 +1,7 @@
 # AI Office — Architecture
 
+> 視覺化架構圖：[`docs/architecture.km.svg`](./architecture.km.svg)（KityMinder 格式，可直接用 [KityMinder](https://github.com/fex-team/kityminder) 或 [百度腦圖](https://naotu.baidu.com/) 開啟）
+
 ## 1. System Overview
 
 ```
