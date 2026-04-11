@@ -40,6 +40,10 @@ import { handleOfficeInteraction } from "./interactions/officeInteractionHandler
 import { registerOfficeCommands } from "./registerCommands.js";
 import type { ApprovalRequest } from "./types.js";
 import { setDiscordClient, getDiscordClient } from "./discord-client.js";
+import {
+  handleVoiceStateUpdate,
+  setVoiceTranscriptCallback,
+} from "./voice-listener.js";
 import { DiscordChatAdapter } from "./discord-adapter.js";
 import {
   loadOfficeConfig,
@@ -754,6 +758,7 @@ async function main(): Promise<void> {
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildMessageReactions,
+      GatewayIntentBits.GuildVoiceStates, // required for voice channel listeners
     ],
     partials: [Partials.Channel, Partials.Message, Partials.Reaction],
   });
@@ -855,6 +860,50 @@ async function main(): Promise<void> {
     enqueueMessage(message).catch((err) => {
       console.error("[Listener] Unhandled error in enqueueMessage:", err);
     });
+  });
+
+  // ── Voice channel → local Whisper STT ────────────────────────────────────
+  client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+    handleVoiceStateUpdate(oldState, newState);
+  });
+
+  // When a voice utterance is transcribed, run it through the Leader pipeline
+  setVoiceTranscriptCallback(async (userId, displayName, text) => {
+    const dc = getDiscordClient();
+    if (!dc) return;
+
+    const generalChannel = dc.channels.cache.find(
+      (ch) => ch.isTextBased() && "name" in ch && ch.name === GENERAL_CHANNEL
+    ) as TextChannel | undefined;
+    if (!generalChannel) return;
+
+    // Post a progress indicator so the user knows we received their voice
+    const progressMsg = await generalChannel.send(`🎙️ *${displayName}：「${text}」*\n⏳ 處理中…`).catch(() => undefined);
+
+    const prompt = buildPrompt(displayName, text, "voice", "", [], workerModel, progressMsg?.id);
+    const startTime = Date.now();
+    let sendMessageCalled = false;
+    const onToolUse = async (toolName: string) => {
+      if (toolName === "mcp__ai-office-discord__send_message" || toolName === "mcp__ai-office-discord__send_embed") {
+        sendMessageCalled = true;
+      }
+    };
+
+    try {
+      const result = await runClaude(prompt, { ...leaderClaudeConfig, onToolUse });
+      const out = result.output ?? "";
+      const looksUnsent = !sendMessageCalled && out.length > 40 && !/Message sent|BUFFERED/i.test(out);
+      if (looksUnsent) {
+        const truncated = out.length > 1800 ? out.slice(0, 1800) + "…" : out;
+        await generalChannel.send(truncated).catch(() => undefined);
+      }
+    } catch (err) {
+      console.error("[VoiceListener] runClaude error:", err);
+    } finally {
+      try { await progressMsg?.delete(); } catch { /* non-fatal */ }
+    }
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    console.log(`[VoiceListener] Voice message processed in ${elapsed}s`);
   });
 
   client.on(Events.Error, (error) => {
