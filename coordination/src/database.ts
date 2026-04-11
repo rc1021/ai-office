@@ -241,6 +241,35 @@ const migrations: Migration[] = [
       db.exec("UPDATE schema_meta SET value = '5' WHERE key = 'version';");
     },
   },
+  {
+    version: 6,
+    description: "Scheduled jobs table — interval/daily/weekly recurring task triggers",
+    up: (db) => {
+      db.exec(`
+        -- Scheduled jobs: heartbeat fires job.fired event to Leader inbox when next_run_at <= now
+        CREATE TABLE IF NOT EXISTS jobs (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          schedule_type TEXT NOT NULL CHECK(schedule_type IN ('interval','daily','weekly')),
+          -- interval: {"minutes": N}
+          -- daily:    {"hour": H, "minute": M}  (UTC)
+          -- weekly:   {"weekday": 0-6, "hour": H, "minute": M}  (UTC, 0=Sunday)
+          schedule_config TEXT NOT NULL DEFAULT '{}',
+          -- task_template: {title, description, priority?, risk_level?, assigned_to?}
+          task_template TEXT NOT NULL DEFAULT '{}',
+          enabled INTEGER NOT NULL DEFAULT 1,
+          last_run_at TEXT,
+          next_run_at TEXT NOT NULL,
+          created_by TEXT NOT NULL DEFAULT 'leader',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_jobs_next_run ON jobs(next_run_at, enabled);
+
+        UPDATE schema_meta SET value = '6' WHERE key = 'version';
+      `);
+    },
+  },
 ];
 
 function migrate(db: Database.Database): void {

@@ -13,6 +13,7 @@ import {
   validateNumeric, crossVerify, reportAnomaly, pipelineGate,
 } from "./tools/validation-tools.js";
 import { resolveRisk, requestApprovalEscalation } from "./tools/approval-tools.js";
+import { jobCreate, jobList, jobUpdate, jobDelete } from "./tools/job-tools.js";
 import { initAuth, enforceIdentity, enforceClearance } from "./auth.js";
 
 // ── Resolve workspace path ──
@@ -377,6 +378,97 @@ server.tool(
   async (params) => ({
     content: [{ type: "text" as const, text: JSON.stringify(resolveRisk(params.operation, params.scope, params.agent_role_id, params.batch_count), null, 2) }],
   })
+);
+
+// ════════════════════════════════════════
+// Job Scheduling Tools
+// ════════════════════════════════════════
+
+server.tool(
+  "job_create",
+  "Create a recurring scheduled job that fires a task at a fixed interval, daily, or weekly",
+  {
+    agent_id: z.string().describe("Agent creating the job (must be leader)"),
+    name: z.string().describe("Human-readable job name"),
+    schedule_type: z.enum(["interval", "daily", "weekly"]),
+    schedule_config: z.record(z.unknown()).describe(
+      "interval: {minutes: N} | daily: {hour: H, minute: M} (UTC) | weekly: {weekday: 0-6, hour: H, minute: M} (UTC, 0=Sun)"
+    ),
+    task_template: z.object({
+      title: z.string(),
+      description: z.string().optional(),
+      priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
+      risk_level: z.enum(["GREEN", "YELLOW", "RED"]).optional(),
+      assigned_to: z.string().optional(),
+    }).describe("Task fields used when Leader creates a task on job.fired"),
+    enabled: z.boolean().optional().describe("Default true"),
+  },
+  async (params) => {
+    enforceIdentity(params.agent_id);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(jobCreate({
+        ...params,
+        schedule_config: params.schedule_config as object,
+        task_template: params.task_template,
+      }), null, 2) }],
+    };
+  }
+);
+
+server.tool(
+  "job_list",
+  "List scheduled jobs",
+  {
+    enabled: z.boolean().optional().describe("Filter by enabled status"),
+    limit: z.number().optional().describe("Max jobs to return (default 50)"),
+  },
+  async (params) => ({
+    content: [{ type: "text" as const, text: JSON.stringify(jobList(params), null, 2) }],
+  })
+);
+
+server.tool(
+  "job_update",
+  "Enable/disable a job, change its schedule config, or update its task template",
+  {
+    job_id: z.string(),
+    agent_id: z.string().describe("Agent making the update (must be leader)"),
+    name: z.string().optional(),
+    enabled: z.boolean().optional(),
+    schedule_config: z.record(z.unknown()).optional(),
+    task_template: z.object({
+      title: z.string(),
+      description: z.string().optional(),
+      priority: z.enum(["low", "normal", "high", "urgent"]).optional(),
+      risk_level: z.enum(["GREEN", "YELLOW", "RED"]).optional(),
+      assigned_to: z.string().optional(),
+    }).optional(),
+  },
+  async (params) => {
+    enforceIdentity(params.agent_id);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(jobUpdate({
+        ...params,
+        schedule_config: params.schedule_config as object | undefined,
+        task_template: params.task_template as object | undefined,
+      }), null, 2) }],
+    };
+  }
+);
+
+server.tool(
+  "job_delete",
+  "Delete a scheduled job permanently",
+  {
+    job_id: z.string(),
+    agent_id: z.string().describe("Agent deleting the job (must be leader)"),
+  },
+  async (params) => {
+    enforceIdentity(params.agent_id);
+    return {
+      content: [{ type: "text" as const, text: JSON.stringify(jobDelete(params), null, 2) }],
+    };
+  }
 );
 
 // ════════════════════════════════════════

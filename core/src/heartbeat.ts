@@ -28,6 +28,7 @@ export class HeartbeatScheduler {
   private auditClaudeConfig: ClaudeRunnerConfig;
   private adapter: ChatAdapter;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
+  private jobTimer: ReturnType<typeof setInterval> | null = null;
   private dailyTimeout: ReturnType<typeof setTimeout> | null = null;
   private running = false;
   private dailyBriefHour: number;
@@ -76,8 +77,14 @@ export class HeartbeatScheduler {
     // Schedule daily brief
     this.scheduleDailyBrief();
 
+    // Job scheduler: tick every 1 minute, run immediately on start
+    this.tickJobs().catch((err) => console.error("[Heartbeat] tickJobs initial error:", err));
+    this.jobTimer = setInterval(() => {
+      this.tickJobs().catch((err) => console.error("[Heartbeat] tickJobs error:", err));
+    }, 1 * 60 * 1000);
+
     const timeStr = `${String(this.dailyBriefHour).padStart(2, "0")}:${String(this.dailyBriefMinute).padStart(2, "0")}`;
-    console.log(`[Heartbeat] Started — health/1min, daily-brief@${timeStr} ${this.timezone}`);
+    console.log(`[Heartbeat] Started — health/1min, jobs/1min, daily-brief@${timeStr} ${this.timezone}`);
   }
 
   stop(): void {
@@ -85,6 +92,10 @@ export class HeartbeatScheduler {
     if (this.healthTimer) {
       clearInterval(this.healthTimer);
       this.healthTimer = null;
+    }
+    if (this.jobTimer) {
+      clearInterval(this.jobTimer);
+      this.jobTimer = null;
     }
     if (this.dailyTimeout) {
       clearTimeout(this.dailyTimeout);
@@ -551,6 +562,108 @@ export class HeartbeatScheduler {
       }
     } catch {
       // No processes on port or lsof not available — safe to proceed
+    }
+  }
+
+  // ── Job Scheduler (every 1 min) ──────────────────────────────────────────
+
+  /**
+   * Compute the next scheduled run time from the previous scheduled time.
+   * Anchors to the scheduled time (not actual run time) to prevent drift.
+   * For interval jobs that are way behind, skips missed windows.
+   */
+  private computeNextRunAt(scheduleType: string, scheduleConfigStr: string, prevNextRunAt: string): string {
+    const config = JSON.parse(scheduleConfigStr) as Record<string, number>;
+    const prevMs = new Date(prevNextRunAt).getTime();
+    const now = Date.now();
+
+    if (scheduleType === "interval") {
+      const intervalMs = (config.minutes ?? 60) * 60_000;
+      let next = prevMs + intervalMs;
+      // Skip missed windows to avoid burst on restart
+      while (next <= now) next += intervalMs;
+      return new Date(next).toISOString();
+    }
+
+    if (scheduleType === "daily") {
+      // Add exactly 24h — initial next_run_at was set to the correct UTC time on create
+      return new Date(prevMs + 24 * 60 * 60_000).toISOString();
+    }
+
+    if (scheduleType === "weekly") {
+      return new Date(prevMs + 7 * 24 * 60 * 60_000).toISOString();
+    }
+
+    return new Date(now + 60 * 60_000).toISOString();
+  }
+
+  private async tickJobs(): Promise<void> {
+    const dbPath = path.join(this.statePath, "coordination.db");
+    if (!fs.existsSync(dbPath)) return;
+
+    interface JobRow {
+      id: string;
+      name: string;
+      schedule_type: string;
+      schedule_config: string;
+      task_template: string;
+      enabled: number;
+      last_run_at: string | null;
+      next_run_at: string;
+    }
+
+    try {
+      const Database = (await import("better-sqlite3")).default;
+      const db = new Database(dbPath, { readonly: false });
+      db.pragma("busy_timeout = 5000");
+
+      // Atomically claim all due jobs: read + update in one transaction
+      const firedJobs = db.transaction((): JobRow[] => {
+        const nowIso = new Date().toISOString();
+        const due = db.prepare(
+          "SELECT * FROM jobs WHERE enabled = 1 AND next_run_at <= ?"
+        ).all(nowIso) as JobRow[];
+
+        const claimed: JobRow[] = [];
+        for (const job of due) {
+          const nextRunAt = this.computeNextRunAt(job.schedule_type, job.schedule_config, job.next_run_at);
+          // WHERE guard: prevent double-fire if another process already updated last_run_at
+          const changed = db.prepare(`
+            UPDATE jobs SET last_run_at = ?, next_run_at = ?, updated_at = datetime('now')
+            WHERE id = ? AND (last_run_at IS NULL OR last_run_at < ?)
+          `).run(nowIso, nextRunAt, job.id, nowIso).changes;
+          if (changed > 0) claimed.push(job);
+        }
+        return claimed;
+      }).immediate();
+
+      // Publish job.fired events outside the transaction
+      for (const job of firedJobs) {
+        const eventId = `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+        const payload = JSON.stringify({
+          job_id: job.id,
+          job_name: job.name,
+          task_template: JSON.parse(job.task_template),
+          scheduled_at: job.next_run_at,
+          fired_at: new Date().toISOString(),
+        });
+
+        // Write event to bus
+        db.prepare(
+          "INSERT INTO events (id, type, source_agent, target_agents, payload, trace_id) VALUES (?, 'job.fired', 'heartbeat', 'leader', ?, '')"
+        ).run(eventId, payload);
+
+        // Route to Leader's inbox
+        db.prepare(
+          "INSERT INTO inbox (agent_id, event_id, event_type, payload) VALUES ('leader', ?, 'job.fired', ?)"
+        ).run(eventId, payload);
+
+        console.log(`[Heartbeat] Job fired: "${job.name}" (${job.id})`);
+      }
+
+      db.close();
+    } catch (err) {
+      console.error("[Heartbeat] tickJobs error:", err);
     }
   }
 
