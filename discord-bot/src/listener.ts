@@ -429,9 +429,14 @@ async function handleMessage(message: Message): Promise<void> {
 
   // onToolUse: fired immediately on each tool_use event from stream-json stdout.
   // Updates the progress message in real-time, faster than the 2-min interval fallback.
+  // Also tracks whether send_message/send_embed was called (Layer 2: fallback guard).
   let lastToolName = "";
+  let sendMessageCalled = false;
   const onToolUse = async (toolName: string): Promise<void> => {
     lastToolName = toolName;
+    if (toolName === "mcp__ai-office-discord__send_message" || toolName === "mcp__ai-office-discord__send_embed") {
+      sendMessageCalled = true;
+    }
     if (!progressMsg) return;
     const elapsed = Math.round((Date.now() - startTime) / 60_000);
     const elapsedStr = elapsed > 0 ? ` (${elapsed} 分鐘)` : "";
@@ -471,20 +476,20 @@ async function handleMessage(message: Message): Promise<void> {
     }
 
     // Fallback guard: fires only when the Leader genuinely forgot to call send_message.
-    // With the corrected prompt, a successful send_message run produces output like
-    // "Message sent to Discord." (< 40 chars, contains "Message sent") — both conditions
-    // prevent this block from triggering. It only fires when result.output contains the
-    // actual reply content (long prose), meaning the Leader skipped the MCP call.
+    // Layer 2: sendMessageCalled (tracked via onToolUse) is the primary signal.
+    // Layer 1: fallback is now silent — no warning prefix shown to users; logged internally only.
     const out = result.output ?? "";
     const looksLikeUnsentReply =
-      out.length > 40 &&
+      !sendMessageCalled &&        // primary: onToolUse confirmed no send_message was called
+      out.length > 40 &&           // secondary: output is substantive prose, not empty/ack
       !/Message sent|BUFFERED/i.test(out);
 
     if (looksLikeUnsentReply) {
-      console.warn("[Listener] Leader output looks like an unsent reply — forwarding to Discord as fallback");
+      console.warn("[Listener] Fallback: Leader did not call send_message — routing output silently");
       const truncated = out.length > 1800 ? out.substring(0, 1800) + "…" : out;
+      // Send without warning prefix (Layer 1: silent fallback), with reply threading
       await channel
-        .send(`⚠️ *(fallback — Leader reply not sent via MCP)*\n\n${truncated}`)
+        .send({ content: truncated, reply: { messageReference: message.id } })
         .catch((e) => console.error("[Listener] Failed to send fallback:", e));
     }
   } catch (err) {
@@ -588,7 +593,8 @@ function buildApprovalPrompt(approval: ApprovalRequest, workerModelOverride?: st
     "4. If REJECTED: acknowledge and inform the user via send_message.\n" +
     "5. Call publish_event with type 'approval.processed', include approval_id, decision (approved/rejected), and reasoning.\n" +
     "6. Call report_status with status 'idle' when done.\n" +
-    `\nDefault worker model: ${modelHint}.\n`
+    `\nDefault worker model: ${modelHint}.\n` +
+    "\n⚠️ FINAL REMINDER: After ALL work is done, call send_message to post your response to Discord. Output ONLY 'Message sent to Discord.' as your last text.\n"
   );
 }
 
@@ -639,7 +645,10 @@ function buildPrompt(
     `\nDefault worker model: ${modelHint}.\n` +
     (progressMessageId
       ? `Progress message ID (call edit_message with channel_name "general" to update it): ${progressMessageId}\n`
-      : "")
+      : "") +
+    // Layer 3: trailing reminder — LLM recency bias means end-of-prompt is closer
+    // to response generation than the opening constraint.
+    "\n⚠️ FINAL REMINDER: After ALL work is done, call send_message to post your reply to Discord. Output ONLY 'Message sent to Discord.' as your last text.\n"
   );
 }
 
