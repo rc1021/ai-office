@@ -6,37 +6,45 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Copy project files
+# Copy package files for all modules
 COPY package*.json ./
+COPY core/package*.json ./core/
 COPY discord-bot/package*.json ./discord-bot/
 COPY coordination/package*.json ./coordination/
 COPY orchestrator/package*.json ./orchestrator/
 COPY pixel-office/package*.json ./pixel-office/
 COPY setup/package*.json ./setup/
+COPY cli/package*.json ./cli/
 
 # Install dependencies
-RUN cd discord-bot && npm ci --silent && cd .. \
+RUN cd core && npm ci --silent && cd .. \
+ && cd discord-bot && npm ci --silent && cd .. \
  && cd coordination && npm ci --silent && cd .. \
  && cd orchestrator && npm ci --silent && cd .. \
  && cd pixel-office && npm ci --silent && cd .. \
- && cd setup && npm ci --silent
+ && cd setup && npm ci --silent && cd .. \
+ && cd cli && npm ci --silent
 
 # Copy source
+COPY core/ ./core/
 COPY discord-bot/ ./discord-bot/
 COPY coordination/ ./coordination/
 COPY orchestrator/ ./orchestrator/
 COPY pixel-office/ ./pixel-office/
 COPY setup/ ./setup/
+COPY cli/ ./cli/
 COPY config/ ./config/
 COPY roles/ ./roles/
 COPY agents/ ./agents/
 COPY CLAUDE.md ./
 
-# Build all TypeScript
-RUN cd discord-bot && npm run build \
+# Build all TypeScript (core first — discord-bot depends on it via file:)
+RUN cd core && npm run build \
+ && cd ../discord-bot && npm run build \
  && cd ../coordination && npm run build \
  && cd ../orchestrator && npm run build \
  && cd ../setup && npm run build \
+ && cd ../cli && npm run build \
  && cd ../pixel-office && npm run build:server
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
@@ -45,6 +53,10 @@ FROM node:22-alpine AS runtime
 WORKDIR /app
 
 # Copy built artifacts
+COPY --from=builder /app/core/dist ./core/dist/
+COPY --from=builder /app/core/node_modules ./core/node_modules/
+COPY --from=builder /app/core/package.json ./core/
+
 COPY --from=builder /app/discord-bot/dist ./discord-bot/dist/
 COPY --from=builder /app/discord-bot/node_modules ./discord-bot/node_modules/
 COPY --from=builder /app/discord-bot/package.json ./discord-bot/
@@ -64,6 +76,10 @@ COPY --from=builder /app/pixel-office/package.json ./pixel-office/
 COPY --from=builder /app/setup/dist ./setup/dist/
 COPY --from=builder /app/setup/node_modules ./setup/node_modules/
 COPY --from=builder /app/setup/package.json ./setup/
+
+COPY --from=builder /app/cli/dist ./cli/dist/
+COPY --from=builder /app/cli/node_modules ./cli/node_modules/
+COPY --from=builder /app/cli/package.json ./cli/
 
 # Copy config and templates
 COPY --from=builder /app/config ./config/

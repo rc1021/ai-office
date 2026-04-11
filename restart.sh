@@ -13,6 +13,12 @@ if [ ! -f "CLAUDE.md" ] || [ ! -d "config" ] || [ ! -d "discord-bot" ]; then
   exit 1
 fi
 
+# Node.js required to start the listener
+if ! command -v node &>/dev/null; then
+  echo "  [FAIL] Node.js not found. Run ./setup.sh first."
+  exit 1
+fi
+
 PROJECT_DIR="$(pwd)"
 
 # ── Stop running processes ──────────────────────────────────────────────────

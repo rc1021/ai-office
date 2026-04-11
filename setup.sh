@@ -12,6 +12,23 @@ echo "    AI Office — Setup"
 echo "  ==================================="
 echo ""
 
+# ── OS Detection ──────────────────────────────────────────────────────────────
+
+detect_os() {
+  case "${OSTYPE:-}" in
+    darwin*)  echo "macOS" ;;
+    linux*)
+      if grep -qi microsoft /proc/version 2>/dev/null; then
+        echo "WSL"
+      else
+        echo "Linux"
+      fi ;;
+    msys*|cygwin*|win32*) echo "Windows" ;;
+    *)        echo "Unknown" ;;
+  esac
+}
+OS=$(detect_os)
+
 # ── Download if needed ───────────────────────────────────────────────────────
 
 if [ -f "CLAUDE.md" ] && [ -d "config" ] && [ -d "discord-bot" ]; then
@@ -43,48 +60,96 @@ echo "[1/4] Checking prerequisites..."
 
 # Node.js
 if ! command -v node &>/dev/null; then
-  echo "  [FAIL] Node.js not found. Install Node.js >= 22: https://nodejs.org"
+  echo ""
+  echo "  [FAIL] Node.js 22+ not found."
+  echo ""
+  echo "  Install Node.js for your platform:"
+  case "$OS" in
+    macOS)
+      echo "    brew install node@22          (Homebrew)"
+      echo "    or: nvm install 22            (https://nvm.sh)"
+      ;;
+    Linux|WSL)
+      echo "    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -"
+      echo "    sudo apt-get install -y nodejs"
+      echo "    or: nvm install 22            (https://nvm.sh)"
+      ;;
+    Windows)
+      echo "    winget install OpenJS.NodeJS.LTS"
+      echo "    or download: https://nodejs.org/en/download"
+      echo "    (recommended: run this script via Git Bash or WSL)"
+      ;;
+    *)
+      echo "    https://nodejs.org/en/download"
+      echo "    or: nvm install 22            (https://nvm.sh)"
+      ;;
+  esac
+  echo ""
+  echo "  After installing, re-run: bash setup.sh"
+  echo ""
   exit 1
 fi
 
 NODE_VERSION=$(node -v | sed 's/v//' | cut -d. -f1)
 if [ "$NODE_VERSION" -lt 22 ]; then
   echo "  [WARN] Node.js v$NODE_VERSION detected. Recommended: >= 22"
+  echo "         Upgrade: nvm install 22 && nvm use 22"
 else
   echo "  [OK] Node.js $(node -v)"
 fi
 
 # npm
 if ! command -v npm &>/dev/null; then
-  echo "  [FAIL] npm not found."
+  echo ""
+  echo "  [FAIL] npm not found. It should ship with Node.js."
+  echo "  Try reinstalling Node.js: https://nodejs.org"
+  echo ""
   exit 1
 fi
 echo "  [OK] npm $(npm -v)"
 
 # curl (needed for downloads)
 if ! command -v curl &>/dev/null; then
+  echo ""
   echo "  [FAIL] curl not found."
+  case "$OS" in
+    macOS)   echo "  Install: brew install curl" ;;
+    Linux|WSL) echo "  Install: sudo apt-get install -y curl" ;;
+    Windows) echo "  curl is built into Windows 10+. Try running from Git Bash." ;;
+  esac
+  echo ""
   exit 1
 fi
 echo "  [OK] curl"
 
-# Claude Code
+# Claude Code (required for Leader agent)
 if command -v claude &>/dev/null; then
-  echo "  [OK] Claude Code installed"
+  echo "  [OK] Claude Code $(claude --version 2>/dev/null | head -1 || echo 'installed')"
 else
-  echo "  [WARN] Claude Code not found. Install: https://docs.anthropic.com/en/docs/claude-code"
+  echo ""
+  echo "  [FAIL] Claude Code not found. It is required to run the Leader agent."
+  echo ""
+  echo "  Install Claude Code:"
+  echo "    npm install -g @anthropic-ai/claude-code"
+  echo "    then: claude login"
+  echo ""
+  echo "  Docs: https://docs.anthropic.com/en/docs/claude-code"
+  echo ""
+  echo "  After installing, re-run: bash setup.sh"
+  echo ""
+  exit 1
 fi
 
 # Docker (optional)
 if command -v docker &>/dev/null; then
   echo "  [OK] Docker $(docker --version | awk '{print $3}' | tr -d ',')"
 else
-  echo "  [SKIP] Docker not found (optional)"
+  echo "  [SKIP] Docker not found (optional — needed only for containerized deployment)"
 fi
 
 # ngrok (optional)
 if command -v ngrok &>/dev/null; then
-  echo "  [OK] ngrok $(ngrok version | awk '{print $3}')"
+  echo "  [OK] ngrok $(ngrok version 2>/dev/null | awk '{print $3}' || echo 'installed')"
 else
   echo "  [SKIP] ngrok not found (optional — for remote Pixel Office access)"
 fi

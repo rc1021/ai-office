@@ -37,6 +37,17 @@ if [ ! -f "$PROJECT_DIR/CLAUDE.md" ] || [ ! -d "$PROJECT_DIR/config" ]; then
   exit 1
 fi
 
+# ── 環境前置條件 ──────────────────────────────────────────────────────────────
+
+if ! command -v node &>/dev/null; then
+  echo "  [FAIL] 找不到 Node.js。請先執行 ./setup.sh 安裝環境。"
+  exit 1
+fi
+if ! command -v npm &>/dev/null; then
+  echo "  [FAIL] 找不到 npm。請先執行 ./setup.sh 安裝環境。"
+  exit 1
+fi
+
 # ── [1/4] 下載最新版本（整包下載）──────────────────────────────────────────────
 
 echo "[1/4] 下載最新版本..."
