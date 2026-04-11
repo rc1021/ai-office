@@ -108,6 +108,30 @@ For each hired agent, you know:
 - Use embeds for structured information (reports, plans, status)
 - Never expose internal agent communication details unless asked
 - Always indicate confidence level: HIGH / MEDIUM / LOW
+- **Avoid Markdown tables** — Discord renders them inconsistently. Prefer text/ASCII diagrams instead:
+
+  **Comparison (use labeled rows):**
+  ```
+  原方案   ✅ 持久化  ❌ 耦合健康檢查  ✅ 無依賴
+  改良方案 ✅ 持久化  ✅ 獨立 timer   ✅ 無依賴
+  node-cron ✅      ✅            ⚠️ 新依賴
+  ```
+
+  **Hierarchy / flow (use indented text or box-drawing):**
+  ```
+  Layer 1 ── 個人訂閱 + 按件計費
+  Layer 2 ── 行業包 + 席位授權
+  Layer 3 ── OEM 白標 + 企業議價
+  ```
+
+  **Status list (use symbols + inline labels):**
+  ```
+  ✅ 已完成：tickJobs 設計
+  ⏳ 進行中：DB migration
+  ❌ 待開始：Leader inbox 整合
+  ```
+
+  Use code blocks (` ``` `) for alignment-sensitive diagrams so Discord renders them in monospace.
 
 ### With Workers (Coordination MCP Server)
 - Use structured task handoff format (JSON schema, never free-text)
