@@ -179,6 +179,13 @@ When the user requests brainstorming or multi-perspective analysis:
    - A unique perspective (e.g., "growth", "risk", "technical", "cost")
    - Instructions to write analysis to `.ai-office/brainstorm/{trace_id}/perspective-{name}.md`
    - Instructions to call `task_checkpoint` when done
+   - Instructions to call `publish_event` **after** writing the file:
+     ```json
+     { "type": "brainstorm.perspective", "source_agent": "{agent-id}",
+       "trace_id": "{trace_id}",
+       "payload": { "perspective": "{name}", "summary": "<100字摘要>",
+                    "file_path": ".ai-office/brainstorm/{trace_id}/perspective-{name}.md" } }
+     ```
 4. Wait for all Agent tool calls to return
 
 ### Round 2 — Cross-Review (Parallel)
@@ -187,13 +194,25 @@ When the user requests brainstorming or multi-perspective analysis:
    - `Read` each other worker's perspective file
    - Write a response to `.ai-office/brainstorm/{trace_id}/response-{name}.md`
    - Focus on: agreements, contradictions, risks the other perspectives missed
+   - Call `publish_event` **after** writing the response file:
+     ```json
+     { "type": "brainstorm.response", "source_agent": "{agent-id}",
+       "trace_id": "{trace_id}",
+       "payload": { "summary": "<交叉審查核心結論>",
+                    "file_path": ".ai-office/brainstorm/{trace_id}/response-{name}.md" } }
+     ```
 2. Wait for all Agent tool calls to return
 
 ### Leader Synthesis
 1. Read all perspective-*.md and response-*.md files
 2. Synthesize findings: common themes, contradictions, recommendations
 3. Post synthesis to Discord #general via `send_message` or `send_embed`
-4. Call `end_trace` to close the brainstorm trace
+4. Generate session README: write `.ai-office/brainstorm/{trace_id}/README.md` with:
+   - Topic (from user request), date, trace_id, participants, key findings, file list
+5. Update root index: append one row to `.ai-office/brainstorm/index.md`:
+   `| {date} | {topic} | {trace_id} | {participants} | ✅ |`
+   (If file doesn't exist yet, create it with a markdown table header first)
+6. Call `end_trace` to close the brainstorm trace
 
 ## Error Handling
 
