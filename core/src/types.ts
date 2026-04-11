@@ -13,6 +13,7 @@ export interface AgentProfile {
   clearance_level: number; // 0=PUBLIC, 1=INTERNAL, 2=CONFIDENTIAL, 3=RESTRICTED
   scopes: string[];
   denied_scopes: string[];
+  suggested_model?: "opus" | "sonnet" | "haiku"; // from role YAML; undefined = default to sonnet
 }
 
 // ─── OutputGate ──────────────────────────────────────────────────────────────

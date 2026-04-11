@@ -7,6 +7,11 @@ roles:
     zh-TW: "辦公室主管"
     department: management
     category: default
+  - id: assistant
+    en: "General Assistant"
+    zh-TW: "通用助理"
+    department: operations
+    category: default
   - id: academic-research-assistant
     en: "Academic Research Assistant"
     zh-TW: "學術研究助理"

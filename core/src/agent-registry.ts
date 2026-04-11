@@ -8,6 +8,7 @@ import { AgentProfile } from "./types.js";
 interface RoleTemplate {
   id: string;
   department: string;
+  suggested_model?: string;
   security: {
     clearance_level: number;
     scopes: string[];
@@ -103,6 +104,11 @@ export function resolveAgent(agentId: string): AgentProfile {
     };
   }
 
+  const validModels = new Set(["opus", "sonnet", "haiku"]);
+  const suggestedModel = validModels.has(template.suggested_model ?? "")
+    ? (template.suggested_model as "opus" | "sonnet" | "haiku")
+    : undefined;
+
   return {
     agent_id: agentId,
     role_id: roleId,
@@ -110,6 +116,7 @@ export function resolveAgent(agentId: string): AgentProfile {
     clearance_level: template.security.clearance_level,
     scopes: template.security.scopes,
     denied_scopes: template.security.denied_scopes ?? [],
+    suggested_model: suggestedModel,
   };
 }
 
