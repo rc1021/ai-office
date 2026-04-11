@@ -286,14 +286,29 @@ function enqueueApprovalTrigger(approval: ApprovalRequest): void {
 /**
  * Drain the queue up to maxConcurrent active jobs.
  * Each completed job calls processQueue() again to pick up the next item.
+ *
+ * Per-user ordering guarantee: messages from a locked user are SKIPPED (not dropped)
+ * so that other users' messages can still be processed. When the lock clears, the
+ * next processQueue() call will pick up the waiting message.
  */
 function processQueue(): void {
-  while (jobQueue.length > 0 && activeJobs < maxConcurrent) {
-    const job = jobQueue.shift()!;
+  let i = 0;
+  while (activeJobs < maxConcurrent && i < jobQueue.length) {
+    const job = jobQueue[i];
+    // Skip messages from users whose session is currently being processed.
+    // This preserves per-user ordering without dropping messages.
+    if (job.type === "message" && job.message) {
+      const lockKey = `channel:${job.message.channelId}:${job.message.author.id}`;
+      if (userProcessing.has(lockKey)) {
+        i++;
+        continue;
+      }
+    }
+    jobQueue.splice(i, 1); // dequeue this specific job
     activeJobs++;
     processJob(job).finally(() => {
       activeJobs--;
-      processQueue(); // try to pick up the next job
+      processQueue(); // try to pick up the next job (including any skipped ones)
     });
   }
 }
@@ -317,13 +332,12 @@ async function handleMessage(message: Message): Promise<void> {
   const channel = message.channel as TextChannel;
   const userLockKey = `channel:${message.channelId}:${message.author.id}`;
 
-  // Per-user lock: if this user already has a claude -p running, notify and skip.
+  // Per-user lock: if this user already has a claude -p running, re-enqueue instead
+  // of dropping. processQueue() should have skipped this job, but guard just in case.
   // Two processes sharing the same --resume session would corrupt session state.
   if (userProcessing.has(userLockKey)) {
-    console.log(`[Listener] User ${message.author.username} already processing — skipping concurrent message`);
-    await channel.send(
-      `⏳ 你的上一則訊息仍在處理中，請等待完成後再發送新訊息。`,
-    ).catch(() => { /* non-fatal */ });
+    console.warn(`[Listener] Per-user lock hit in handleMessage for ${message.author.username} — re-enqueueing (processQueue skipping logic may have missed this)`);
+    jobQueue.unshift({ type: "message", message });
     return;
   }
   userProcessing.add(userLockKey);
