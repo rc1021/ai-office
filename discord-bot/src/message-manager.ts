@@ -6,6 +6,7 @@ import {
   Collection,
   MessageCreateOptions,
 } from "discord.js";
+import path from "node:path";
 import { findTextChannel } from "./channel-manager.js";
 import { EmbedInput, ChannelMessage } from "./types.js";
 
@@ -231,5 +232,39 @@ export async function sendThreadMessage(
 
   const msg = await thread.send(content);
   console.log(`[MessageManager] Sent message to thread ${threadId}: ${content.substring(0, 60)}`);
+  return msg.id;
+}
+
+export async function addReaction(
+  channelName: string,
+  messageId: string,
+  emoji: string
+): Promise<void> {
+  const channel = await findTextChannel(channelName);
+  const message = await channel.messages.fetch(messageId);
+  await message.react(emoji);
+  console.log(`[MessageManager] Added reaction ${emoji} to message ${messageId} in #${channelName}`);
+}
+
+export async function sendFile(
+  channelName: string,
+  filePath: string,
+  filename?: string,
+  content?: string,
+  replyToMessageId?: string
+): Promise<string> {
+  const channel = await findTextChannel(channelName);
+  const safeName = filename ?? path.basename(filePath);
+  const options: MessageCreateOptions = {
+    files: [{ attachment: filePath, name: safeName }],
+  };
+  if (content) {
+    options.content = content;
+  }
+  if (replyToMessageId) {
+    options.reply = { messageReference: replyToMessageId, failIfNotExists: false };
+  }
+  const msg = await channel.send(options);
+  console.log(`[MessageManager] Sent file "${safeName}" to #${channelName}`);
   return msg.id;
 }

@@ -11,12 +11,14 @@ import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 import {
   createCategory,
   createChannel,
   listChannels,
   deleteChannel,
   findTextChannel,
+  createForumPost,
 } from "./channel-manager.js";
 import {
   sendMessage,
@@ -26,6 +28,8 @@ import {
   readNewMessages,
   createThread,
   sendThreadMessage,
+  addReaction,
+  sendFile,
 } from "./message-manager.js";
 import {
   createApproval,
@@ -185,6 +189,31 @@ const SendThreadMessageSchema = z.object({
   agent_id: AgentIdField,
   thread_id: z.string().min(1),
   content: z.string().min(1).max(2000),
+});
+
+const AddReactionSchema = z.object({
+  agent_id: AgentIdField,
+  channel_name: z.string().min(1),
+  message_id: z.string().min(1),
+  emoji: z.string().min(1).describe("Emoji to react with, e.g. '✅', '🗑️', '👍'"),
+});
+
+const CreateForumPostSchema = z.object({
+  agent_id: AgentIdField,
+  forum_channel_name: z.string().min(1).describe("Name of the Forum channel (without #)"),
+  title: z.string().min(1).max(100).describe("Title of the forum post (thread name)"),
+  content: z.string().min(1).max(2000).describe("Initial message content of the post"),
+  tags: z.array(z.string()).optional().describe("Tag names to apply (must match available tags on the forum channel)"),
+});
+
+const SendFileSchema = z.object({
+  agent_id: AgentIdField,
+  channel_name: z.string().min(1),
+  file_path: z.string().min(1).describe("Absolute path to the file on disk (must be within .ai-office workspace)"),
+  filename: z.string().optional().describe("Display name for the file (defaults to basename)"),
+  content: z.string().max(2000).optional().describe("Optional caption text"),
+  reply_to_message_id: z.string().optional(),
+  trace_id: z.string().optional(),
 });
 
 const CreateApprovalSchema = z.object({
@@ -404,6 +433,52 @@ const TOOLS = [
         content: { type: "string", description: "Message content" },
       },
       required: ["agent_id", "thread_id", "content"],
+    },
+  },
+  {
+    name: "send_file",
+    description: "Send a file attachment to a Discord channel. File must be within the .ai-office workspace directory.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent_id: AGENT_ID_PROP,
+        channel_name: { type: "string", description: "Target channel name (without #)" },
+        file_path: { type: "string", description: "Absolute path to the file on disk (must be within .ai-office workspace)" },
+        filename: { type: "string", description: "Display name for the file (defaults to the file's basename)" },
+        content: { type: "string", description: "Optional caption text (max 2000 chars)" },
+        reply_to_message_id: { type: "string", description: "Discord message ID to reply to" },
+        trace_id: { type: "string", description: "Trace ID for audit correlation" },
+      },
+      required: ["agent_id", "channel_name", "file_path"],
+    },
+  },
+  {
+    name: "create_forum_post",
+    description: "Create a new post (thread) in a Discord Forum channel, with optional tags.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent_id: AGENT_ID_PROP,
+        forum_channel_name: { type: "string", description: "Name of the Forum channel (without #)" },
+        title: { type: "string", description: "Post title (max 100 chars)" },
+        content: { type: "string", description: "Initial message content" },
+        tags: { type: "array", items: { type: "string" }, description: "Tag names to apply" },
+      },
+      required: ["agent_id", "forum_channel_name", "title", "content"],
+    },
+  },
+  {
+    name: "add_reaction",
+    description: "Add an emoji reaction to a message in a text channel. Use to mark notes as done (✅) or outdated (🗑️).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        agent_id: AGENT_ID_PROP,
+        channel_name: { type: "string", description: "Channel containing the message" },
+        message_id: { type: "string", description: "ID of the message to react to" },
+        emoji: { type: "string", description: "Emoji to react with, e.g. '✅', '🗑️', '👍'" },
+      },
+      required: ["agent_id", "channel_name", "message_id", "emoji"],
     },
   },
   {
@@ -846,6 +921,64 @@ export function createMcpServer(): Server {
           const messageId = await sendThreadMessage(input.thread_id, input.content);
           return makeTextContent(
             `Message sent to thread ${input.thread_id} (message ID: ${messageId}).`
+          );
+        }
+
+        case "send_file": {
+          const input = SendFileSchema.parse(args);
+
+          // Security: file must exist and be within an allowed directory.
+          // Allowed: (1) .ai-office/ workspace, (2) project's Claude memory directory.
+          const workspace = process.env.AI_OFFICE_WORKSPACE ?? path.join(process.cwd(), ".ai-office");
+          const resolved = path.resolve(input.file_path);
+          const workspaceResolved = path.resolve(workspace);
+          const projectKey = path.resolve(process.cwd()).replace(/\//g, "-");
+          const memoryDir = path.resolve(os.homedir(), ".claude", "projects", projectKey, "memory");
+          const inWorkspace = resolved.startsWith(workspaceResolved + path.sep) || resolved === workspaceResolved;
+          const inMemory = resolved.startsWith(memoryDir + path.sep) || resolved === memoryDir;
+          if (!inWorkspace && !inMemory) {
+            return makeErrorContent(`Security: file_path must be within the workspace (${workspaceResolved}) or project memory (${memoryDir})`);
+          }
+          if (!fs.existsSync(resolved)) {
+            return makeErrorContent(`File not found: ${resolved}`);
+          }
+
+          // OutputGate check
+          const gate = checkOutputGate(input.agent_id, input.channel_name, input.content ?? path.basename(resolved));
+          if (!gate.allowed) {
+            appendAuditEvent(input.agent_id, input.trace_id ?? "", "outputgate.denied", JSON.stringify({ channel: input.channel_name, reason: gate.reason }));
+            throw new GateError(gate.reason!);
+          }
+
+          const fileMessageId = await sendFile(
+            input.channel_name,
+            resolved,
+            input.filename,
+            input.content,
+            input.reply_to_message_id
+          );
+          appendAuditEvent(input.agent_id, input.trace_id ?? "", "discord.send_file", JSON.stringify({ channel: input.channel_name, file: path.basename(resolved) }));
+          return makeTextContent(`File "${path.basename(resolved)}" sent to #${input.channel_name} (message ID: ${fileMessageId}).`);
+        }
+
+        case "add_reaction": {
+          const input = AddReactionSchema.parse(args);
+          await addReaction(input.channel_name, input.message_id, input.emoji);
+          return makeTextContent(
+            `Reaction ${input.emoji} added to message ${input.message_id} in #${input.channel_name}.`
+          );
+        }
+
+        case "create_forum_post": {
+          const input = CreateForumPostSchema.parse(args);
+          const { threadId } = await createForumPost(
+            input.forum_channel_name,
+            input.title,
+            input.content,
+            input.tags
+          );
+          return makeTextContent(
+            `Forum post "${input.title}" created in #${input.forum_channel_name} (thread ID: ${threadId}).`
           );
         }
 
