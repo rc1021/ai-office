@@ -10,7 +10,10 @@
 import dotenv from "dotenv";
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
+import * as prism from "prism-media";
+import { whisper } from "whisper-node";
 import Database from "better-sqlite3";
 
 // Load .env from discord-bot/ directory (not cwd)
@@ -43,6 +46,7 @@ import { setDiscordClient, getDiscordClient } from "./discord-client.js";
 import {
   handleVoiceStateUpdate,
   setVoiceTranscriptCallback,
+  setWhisperLanguage,
 } from "./voice-listener.js";
 import { DiscordChatAdapter } from "./discord-adapter.js";
 import {
@@ -110,12 +114,30 @@ const ALLOWED_TOOLS = [
   "mcp__ai-office-discord__list_channels",
 ];
 
+// ── Static system prompt (identity + output constraint) ───────────────────────
+//
+// Split into static vs dynamic to achieve two goals:
+//   1. Pass via --system flag → Claude treats it as the system prompt (not user turn),
+//      enabling prompt caching across session turns.
+//   2. Keep injection surface minimal — dynamic content (username, message body) stays
+//      in the per-request payload; sanitization targets only that payload.
+//
+// ⚠️  The CRITICAL constraint appears here (before the user payload) AND as a FINAL
+// REMINDER at the end of the user payload (LLM recency bias). Both are intentional.
+const LEADER_SYSTEM_PROMPT =
+  "You are the AI Office Leader.\n" +
+  "\n" +
+  "⚠️  CRITICAL: Your text output (stdout / result field) is NEVER shown to the user.\n" +
+  "You MUST call the send_message MCP tool to post your reply to Discord.\n" +
+  "After calling send_message, your ONLY text output must be the single line: 'Message sent to Discord.'";
+
 // No per-message timeout — claude-runner enforces a 2-hour absolute cap.
 // Long tasks (multi-step, sub-agents) must not be killed by a wall-clock timer.
 const BASE_CLAUDE_CONFIG: ClaudeRunnerConfig = {
   projectDir: PROJECT_DIR,
   mcpConfigPath: MCP_CONFIG,
   allowedTools: ALLOWED_TOOLS,
+  systemPrompt: LEADER_SYSTEM_PROMPT,
 };
 
 // Will be set to include model once config is loaded in ClientReady
@@ -126,8 +148,9 @@ const sessionStore = new SessionStore(
   path.join(PROJECT_DIR, ".ai-office", "state", "sessions.json")
 );
 
+// Role identity ("You are the AI Office Leader.") is in LEADER_SYSTEM_PROMPT (--system).
 const STARTUP_CHECKLIST_PROMPT =
-  "You are the AI Office Leader. This is the first launch. " +
+  "This is the first launch. " +
   "Follow your Startup Checklist in agents/leader/CLAUDE.md: " +
   "initialize the orchestrator, report status, setup Discord server channels, " +
   "check for interrupted tasks. " +
@@ -175,6 +198,7 @@ const jobQueue: QueueJob[] = [];
 let activeJobs = 0;
 let maxConcurrent = 1; // default sequential; updated from config after ClientReady
 let workerModel = "sonnet"; // default worker model; updated from config after ClientReady
+let whisperLanguage = "zh"; // default; updated from office.yaml (language field) after ClientReady
 const processedMessageIds = new Set<string>();
 
 // Per-user processing lock: prevents two claude -p processes from running on the
@@ -236,11 +260,42 @@ function queryLastAuditAction(): string | null {
   }
 }
 
+// ── Write PCM buffer as 16kHz mono 16-bit WAV ────────────────────────────────
+
+function writePcmToWav(pcmChunks: Buffer[], outPath: string, sampleRate = 16000): void {
+  const pcm = Buffer.concat(pcmChunks);
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const dataSize = pcm.length;
+
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(dataSize, 40);
+
+  fs.writeFileSync(outPath, Buffer.concat([header, pcm]));
+}
+
 async function enqueueMessage(message: Message): Promise<void> {
   if (message.author.bot) return;
   if (!(message.channel instanceof TextChannel)) return;
   if (message.channel.name !== GENERAL_CHANNEL) return;
-  if (!message.content.trim()) return;
+  const hasAudioAttachment = message.attachments.some(
+    (a) => a.contentType?.startsWith("audio/")
+  );
+  if (!message.content.trim() && !hasAudioAttachment) return;
 
   // Dedup: Discord may fire MessageCreate multiple times
   if (processedMessageIds.has(message.id)) return;
@@ -413,6 +468,52 @@ async function handleMessage(message: Message): Promise<void> {
     }
   }
 
+  // 3b. Transcribe Discord native voice message (if present)
+  let voiceTranscript = "";
+  const voiceAttachment = message.attachments.find(
+    (a) => a.contentType?.startsWith("audio/")
+  );
+  if (voiceAttachment) {
+    try {
+      console.log(`[Listener] Transcribing voice message from ${message.author.username}...`);
+      const res = await fetch(voiceAttachment.url);
+      const rawBuffer = Buffer.from(await res.arrayBuffer());
+
+      // Save raw OGG to temp file, then convert to 16kHz mono WAV via ffmpeg.
+      // Discord voice messages are OGG/Opus containers — prism.opus.Decoder expects
+      // raw Opus frames, not the container, so ffmpeg is required here.
+      const tmpOgg = path.join(os.tmpdir(), `voice-msg-${message.id}.ogg`);
+      const tmpWav = path.join(os.tmpdir(), `voice-msg-${message.id}.wav`);
+      fs.writeFileSync(tmpOgg, rawBuffer);
+
+      const { spawnSync } = await import("node:child_process");
+      const ffmpeg = spawnSync("ffmpeg", [
+        "-i", tmpOgg,
+        "-ar", "16000",
+        "-ac", "1",
+        "-f", "wav",
+        tmpWav,
+        "-y",
+      ], { stdio: "pipe" });
+
+      try { fs.unlinkSync(tmpOgg); } catch { /* best effort */ }
+
+      if (ffmpeg.status === 0 && fs.existsSync(tmpWav)) {
+        const result = await whisper(tmpWav, {
+          modelName: "medium",
+          whisperOptions: { language: whisperLanguage },
+        });
+        voiceTranscript = (result ?? []).map((s: { speech: string }) => s.speech).join(" ").trim();
+        console.log(`[Listener] Voice message transcribed: "${voiceTranscript}"`);
+      } else {
+        console.error("[Listener] ffmpeg conversion failed:", ffmpeg.stderr?.toString());
+      }
+      try { fs.unlinkSync(tmpWav); } catch { /* best effort */ }
+    } catch (err) {
+      console.error("[Listener] Voice message transcription error:", err);
+    }
+  }
+
   // 4. Send progress message early so its ID can be included in the prompt.
   //    The Leader uses this ID to call edit_message for richer C-path updates.
   const startTime = Date.now();
@@ -425,7 +526,8 @@ async function handleMessage(message: Message): Promise<void> {
   // 5. Build prompt + run claude -p
   // Prefer server nickname > global display name > username
   const displayName = message.member?.displayName ?? message.author.displayName ?? message.author.username;
-  const prompt = buildPrompt(displayName, userContent, message.id, replyContext, savedAttachments, workerModel, progressMsg?.id);
+  const effectiveContent = userContent || (voiceTranscript ? `[語音訊息] ${voiceTranscript}` : "");
+  const prompt = buildPrompt(displayName, effectiveContent, message.id, replyContext, savedAttachments, workerModel, progressMsg?.id);
 
   // Resolve session key and attach existing session ID for --resume
   const sessionKey = `channel:${message.channelId}:${message.author.id}`;
@@ -561,20 +663,17 @@ async function handleApproval(approval: ApprovalRequest): Promise<void> {
   }
 }
 
+// Dynamic approval payload — static identity + CRITICAL constraint are in LEADER_SYSTEM_PROMPT.
 function buildApprovalPrompt(approval: ApprovalRequest, workerModelOverride?: string): string {
   const resolvedBy = approval.resolvedBy ?? "unknown";
   const resolvedAt = approval.resolvedAt ? approval.resolvedAt.toISOString() : "unknown";
   const modelHint = workerModelOverride ?? "sonnet";
 
   return (
-    "You are the AI Office Leader. An approval has been resolved in Discord.\n" +
+    // ── Channel context ──
+    "An approval has been resolved in Discord.\n" +
     "\n" +
-    // ── Critical constraint — enforced before CLAUDE.md is read ──
-    "⚠️  CRITICAL: Your text output (stdout / result field) is NEVER shown to the user.\n" +
-    "You MUST call the send_message MCP tool to post your response to Discord.\n" +
-    "After calling send_message, your ONLY text output must be the single line: 'Message sent to Discord.'\n" +
-    "\n" +
-    // ── Bootstrap steps + pointer to full procedure ──
+    // ── Bootstrap steps ──
     "1. Call report_status with status 'busy'.\n" +
     "2. Read agents/leader/CLAUDE.md — then follow its Listener Mode steps exactly.\n" +
     "\n" +
@@ -604,6 +703,16 @@ function buildApprovalPrompt(approval: ApprovalRequest, workerModelOverride?: st
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// ── Dynamic per-request payload (user message + runtime values) ───────────────
+//
+// PROMPT STRUCTURE NOTE
+// The static identity and CRITICAL constraint live in LEADER_SYSTEM_PROMPT (--system).
+// This function builds only the per-request payload that CLAUDE.md cannot know:
+//   - The channel context ("A user has sent you a message in #general")
+//   - Bootstrap steps that include runtime values (reply_to_message_id, progressMessageId)
+//   - The user's message content
+//   - A trailing FINAL REMINDER to reinforce the send_message constraint
+//     (LLM recency bias — end-of-prompt is closer to response generation)
 function buildPrompt(
   username: string,
   content: string,
@@ -620,21 +729,11 @@ function buildPrompt(
   }
   const modelHint = workerModelOverride ?? "sonnet";
 
-  // ⚠️  PROMPT STRUCTURE NOTE
-  // Critical constraints are stated BEFORE "read CLAUDE.md" so they apply from the
-  // very first action, even if the Leader skips or delays the Read step.
-  // agents/leader/CLAUDE.md is the authoritative source for all detailed procedures;
-  // the prompt only carries what CLAUDE.md cannot statically define (runtime values)
-  // and the constraints that must be enforced before CLAUDE.md is read.
   return (
-    "You are the AI Office Leader. A user has sent you a message in Discord #general.\n" +
+    // ── Channel context (dynamic: varies by trigger type) ──
+    "A user has sent you a message in Discord #general.\n" +
     "\n" +
-    // ── Critical constraint — enforced before CLAUDE.md is read ──
-    "⚠️  CRITICAL: Your text output (stdout / result field) is NEVER shown to the user.\n" +
-    "You MUST call the send_message MCP tool to post your reply to Discord.\n" +
-    "After calling send_message, your ONLY text output must be the single line: 'Message sent to Discord.'\n" +
-    "\n" +
-    // ── Bootstrap steps (before CLAUDE.md) + pointer to full procedure ──
+    // ── Bootstrap steps + pointer to full procedure ──
     "1. Call report_status with status 'busy'.\n" +
     "2. Read agents/leader/CLAUDE.md — then follow its Listener Mode steps exactly.\n" +
     "   When calling send_message, use reply_to_message_id: " + messageId + ".\n" +
@@ -650,8 +749,7 @@ function buildPrompt(
     (progressMessageId
       ? `Progress message ID (call edit_message with channel_name "general" to update it): ${progressMessageId}\n`
       : "") +
-    // Layer 3: trailing reminder — LLM recency bias means end-of-prompt is closer
-    // to response generation than the opening constraint.
+    // Layer 3: trailing reminder — reinforces LEADER_SYSTEM_PROMPT constraint at end-of-prompt
     "\n⚠️ FINAL REMINDER: After ALL work is done, call send_message to post your reply to Discord. Output ONLY 'Message sent to Discord.' as your last text.\n"
   );
 }
@@ -814,6 +912,11 @@ async function main(): Promise<void> {
       leaderClaudeConfig = { ...BASE_CLAUDE_CONFIG, model: config.models.leader };
       workerModel = config.models.worker;
       console.log(`[Listener] Leader model: ${config.models.leader}, Worker model: ${config.models.worker}`);
+
+      // Set Whisper STT language from office.yaml (e.g. "zh-TW" → "zh", "en" → "en")
+      whisperLanguage = config.language.split("-")[0];
+      setWhisperLanguage(whisperLanguage);
+      console.log(`[Listener] Whisper language: ${whisperLanguage}`);
 
       // Recover orphan pending approvals from before daemon restart
       await recoverPendingApprovals(client).catch(err => console.warn('[Listener] recoverPendingApprovals failed:', err));

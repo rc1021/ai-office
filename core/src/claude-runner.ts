@@ -18,6 +18,7 @@ export interface ClaudeRunnerConfig {
   mcpConfigPath: string;
   allowedTools: string[];
   model?: string;
+  systemPrompt?: string;    // if set, passed via --system (static, cached portion of the prompt)
   resumeSessionId?: string; // if set, pass --resume <id> to claude
   timeoutMs?: number;       // if set, cap is min(timeoutMs, ABSOLUTE_MAX_TIMEOUT_MS)
   onToolUse?: (toolName: string) => void; // called each time a tool_use event is seen
@@ -34,6 +35,10 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<C
       "-p", prompt,
       "--dangerously-skip-permissions",
     ];
+
+    if (config.systemPrompt) {
+      args.push("--system", config.systemPrompt);
+    }
 
     if (config.model) {
       args.push("--model", config.model);
@@ -57,6 +62,9 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<C
       console.warn("[ClaudeRunner] .mcp.json not found at", config.mcpConfigPath, "— running without MCP tools");
     }
 
+    if (config.systemPrompt) {
+      console.log("[ClaudeRunner] System prompt (static):", config.systemPrompt.substring(0, 60) + "…");
+    }
     console.log("[ClaudeRunner] Spawning claude with prompt:", prompt.substring(0, 80));
 
     const proc = spawn("claude", args, {
