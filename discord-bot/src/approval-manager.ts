@@ -534,10 +534,21 @@ export function registerApprovalInteractionHandler(externalClient?: Client): voi
       return;
     }
 
-    const db = getApprovalDb();
-    const row = db
-      .prepare("SELECT * FROM approvals WHERE id = ?")
-      .get(approvalId) as ApprovalRow | undefined;
+    // Use a fresh readonly connection to avoid stale WAL index on the long-lived singleton.
+    // The listener process may have been running for hours since the singleton was created;
+    // a new connection always reads the latest WAL index from shared memory.
+    let row: ApprovalRow | undefined;
+    {
+      const freshDb = new Database(dbPath, { readonly: true });
+      try {
+        row = freshDb
+          .prepare("SELECT * FROM approvals WHERE id = ?")
+          .get(approvalId) as ApprovalRow | undefined;
+      } finally {
+        freshDb.close();
+      }
+    }
+    const db = getApprovalDb(); // write connection for transitionApproval below
 
     if (!row) {
       await interaction.editReply({
