@@ -2,6 +2,7 @@ import {
   ChannelType,
   CategoryChannel,
   TextChannel,
+  ForumChannel,
   Guild,
   PermissionsBitField,
 } from "discord.js";
@@ -176,6 +177,85 @@ export async function deleteChannel(channelName: string): Promise<string> {
 
   console.log(`[ChannelManager] Deleted channel/category: ${channelFullName} (${channelId})`);
   return channelFullName;
+}
+
+export async function createForumChannel(
+  categoryName: string,
+  channelName: string,
+  topic?: string,
+  tags?: string[]
+): Promise<ForumChannel> {
+  const guild = await getGuild();
+  const sanitizedName = validateChannelName(channelName);
+
+  const category = guild.channels.cache.find(
+    (ch) =>
+      ch.type === ChannelType.GuildCategory &&
+      ch.name.toLowerCase() === categoryName.toLowerCase()
+  ) as CategoryChannel | undefined;
+
+  if (!category) {
+    throw new Error(`Category "${categoryName}" not found. Create it first with create_category.`);
+  }
+
+  const existing = guild.channels.cache.find(
+    (ch) =>
+      ch.type === ChannelType.GuildForum &&
+      ch.name.toLowerCase() === sanitizedName.toLowerCase() &&
+      (ch as ForumChannel).parentId === category.id
+  ) as ForumChannel | undefined;
+
+  if (existing) {
+    console.log(`[ChannelManager] Forum channel #${sanitizedName} already exists in category "${categoryName}".`);
+    return existing;
+  }
+
+  const availableTags = (tags ?? []).map((name) => ({ name, moderated: false }));
+
+  const channel = await guild.channels.create({
+    name: sanitizedName,
+    type: ChannelType.GuildForum,
+    parent: category.id,
+    topic: topic ?? undefined,
+    availableTags,
+  });
+
+  console.log(`[ChannelManager] Created forum channel #${channel.name} in "${categoryName}" (${channel.id})`);
+  return channel;
+}
+
+export async function createForumPost(
+  forumChannelName: string,
+  title: string,
+  content: string,
+  tags?: string[]
+): Promise<{ threadId: string }> {
+  const guild = await getGuild();
+  const sanitizedName = forumChannelName.toLowerCase().replace(/^#/, "");
+
+  const forumChannel = guild.channels.cache.find(
+    (ch) =>
+      ch.type === ChannelType.GuildForum &&
+      ch.name.toLowerCase() === sanitizedName
+  ) as ForumChannel | undefined;
+
+  if (!forumChannel) {
+    throw new Error(`Forum channel "#${sanitizedName}" not found.`);
+  }
+
+  const tagIds = (tags ?? []).flatMap((tagName) => {
+    const tag = forumChannel.availableTags.find((t) => t.name === tagName);
+    return tag ? [tag.id] : [];
+  });
+
+  const thread = await forumChannel.threads.create({
+    name: title,
+    message: { content },
+    appliedTags: tagIds,
+  });
+
+  console.log(`[ChannelManager] Created forum post "${title}" in #${sanitizedName} (thread ID: ${thread.id})`);
+  return { threadId: thread.id };
 }
 
 export async function findTextChannel(channelName: string): Promise<TextChannel> {

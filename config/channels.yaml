@@ -22,3 +22,8 @@ categories:
       - name: memo
         topic: "Memos & notes"
         throttle: none
+      - name: notes-index
+        topic: "AI-generated index of memo notes — read only, maintained by Leader"
+        type: forum
+        tags: ["設計", "待辦", "想法", "bug", "待問", "已完成", "⏰ 待確認"]
+        throttle: none

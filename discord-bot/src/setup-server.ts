@@ -1,10 +1,17 @@
 import { ChannelType } from "discord.js";
 import { getDiscordClient } from "./discord-client.js";
-import { createCategory, createChannel } from "./channel-manager.js";
+import { createCategory, createChannel, createForumChannel } from "./channel-manager.js";
 import { ServerSetupResult } from "./types.js";
 
+interface ChannelConfig {
+  name: string;
+  topic?: string;
+  type?: "text" | "forum";
+  tags?: string[];
+}
+
 // Fixed AI Office server layout — only human-facing channels
-const SERVER_STRUCTURE = [
+const SERVER_STRUCTURE: { category: string; channels: ChannelConfig[] }[] = [
   {
     category: "AI OFFICE",
     channels: [
@@ -14,6 +21,12 @@ const SERVER_STRUCTURE = [
       { name: "daily-brief", topic: "Daily office summary" },
       { name: "hr", topic: "Hiring board — recruit new team members" },
       { name: "memo", topic: "Memos & notes" },
+      {
+        name: "notes-index",
+        topic: "AI-generated index of memo notes — read only, maintained by Leader",
+        type: "forum",
+        tags: ["設計", "待辦", "想法", "bug", "待問", "已完成", "⏰ 待確認"],
+      },
     ],
   },
 ];
@@ -31,7 +44,8 @@ async function categoryExists(guildId: string, categoryName: string): Promise<bo
 async function channelExists(
   guildId: string,
   categoryName: string,
-  channelName: string
+  channelName: string,
+  type: "text" | "forum" = "text"
 ): Promise<boolean> {
   const client = getDiscordClient();
   const guild = await client.guilds.fetch(guildId);
@@ -44,9 +58,11 @@ async function channelExists(
 
   if (!category) return false;
 
+  const discordType = type === "forum" ? ChannelType.GuildForum : ChannelType.GuildText;
+
   return guild.channels.cache.some(
     (ch) =>
-      ch.type === ChannelType.GuildText &&
+      ch.type === discordType &&
       ch.name.toLowerCase() === channelName.toLowerCase() &&
       (ch as { parentId?: string | null }).parentId === category.id
   );
@@ -84,9 +100,13 @@ export async function setupServer(): Promise<ServerSetupResult> {
     // Handle each channel
     for (const ch of section.channels) {
       try {
-        const chExists = await channelExists(guildId, section.category, ch.name);
+        const chType = ch.type ?? "text";
+        const chExists = await channelExists(guildId, section.category, ch.name, chType);
         if (chExists) {
           result.skipped.push(`[Channel] #${ch.name} in ${section.category}`);
+        } else if (chType === "forum") {
+          await createForumChannel(section.category, ch.name, ch.topic, ch.tags);
+          result.created.push(`[Forum] #${ch.name} in ${section.category}`);
         } else {
           await createChannel(section.category, ch.name, ch.topic);
           result.created.push(`[Channel] #${ch.name} in ${section.category}`);
