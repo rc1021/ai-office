@@ -1,3 +1,4 @@
+import { Cron } from "croner";
 import { getDb, appendAudit, generateId } from "../database.js";
 
 // ── Types ──
@@ -19,21 +20,22 @@ interface JobRow {
 // ── Helpers ──
 
 /**
- * Compute the initial next_run_at for a new job.
- * All times are in UTC; the Leader is responsible for converting
- * user-facing local times to UTC before calling job_create.
+ * Compute the initial next_run_at for a new dynamic job.
+ * All times are in UTC by default; pass timezone in config for cron-type jobs.
+ * The Leader is responsible for converting user-facing local times to UTC
+ * before calling job_create for interval/daily/weekly types.
  */
-function computeInitialNextRunAt(scheduleType: string, config: Record<string, number>): string {
+function computeInitialNextRunAt(scheduleType: string, config: Record<string, unknown>): string {
   const now = Date.now();
 
   if (scheduleType === "interval") {
-    const intervalMs = (config.minutes ?? 60) * 60_000;
+    const intervalMs = ((config.minutes as number) ?? 60) * 60_000;
     return new Date(now + intervalMs).toISOString();
   }
 
   if (scheduleType === "daily") {
-    const hour = config.hour ?? 8;
-    const minute = config.minute ?? 0;
+    const hour = (config.hour as number) ?? 8;
+    const minute = (config.minute as number) ?? 0;
     const d = new Date();
     d.setUTCHours(hour, minute, 0, 0);
     if (d.getTime() <= now) d.setUTCDate(d.getUTCDate() + 1);
@@ -41,9 +43,9 @@ function computeInitialNextRunAt(scheduleType: string, config: Record<string, nu
   }
 
   if (scheduleType === "weekly") {
-    const weekday = config.weekday ?? 1; // Monday
-    const hour = config.hour ?? 8;
-    const minute = config.minute ?? 0;
+    const weekday = (config.weekday as number) ?? 1; // Monday
+    const hour = (config.hour as number) ?? 8;
+    const minute = (config.minute as number) ?? 0;
     const d = new Date();
     d.setUTCHours(hour, minute, 0, 0);
     const currentDay = d.getUTCDay();
@@ -51,6 +53,18 @@ function computeInitialNextRunAt(scheduleType: string, config: Record<string, nu
     if (daysUntil === 0 && d.getTime() <= now) daysUntil = 7;
     d.setUTCDate(d.getUTCDate() + daysUntil);
     return d.toISOString();
+  }
+
+  // cron format: schedule_config = {cron: "* * * * *", timezone?: "..."}
+  if (scheduleType === "cron" || config.cron) {
+    try {
+      const cronExpr = config.cron as string;
+      const tz = (config.timezone as string | undefined) ?? "UTC";
+      const c = new Cron(cronExpr, { timezone: tz });
+      const next = c.nextRun();
+      c.stop();
+      if (next) return next.toISOString();
+    } catch { /* fall through to default */ }
   }
 
   return new Date(now + 60 * 60_000).toISOString();
@@ -84,7 +98,7 @@ export function jobCreate(params: {
 }): object {
   const db = getDb();
   const id = generateId("job");
-  const config = params.schedule_config as Record<string, number>;
+  const config = params.schedule_config as Record<string, unknown>;
   const nextRunAt = computeInitialNextRunAt(params.schedule_type, config);
   const scheduleConfigStr = JSON.stringify(params.schedule_config);
   const taskTemplateStr = JSON.stringify(params.task_template);
@@ -150,7 +164,7 @@ export function jobUpdate(params: {
     setClauses.push("schedule_config = ?");
     args.push(JSON.stringify(params.schedule_config));
     // Recompute next_run_at from new config
-    const newNext = computeInitialNextRunAt(job.schedule_type, params.schedule_config as Record<string, number>);
+    const newNext = computeInitialNextRunAt(job.schedule_type, params.schedule_config as Record<string, unknown>);
     setClauses.push("next_run_at = ?");
     args.push(newNext);
   }

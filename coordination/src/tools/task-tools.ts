@@ -371,6 +371,14 @@ export function taskList(params: {
   return rows.map(rowToTask);
 }
 
+// ── task_get ──
+
+export function taskGet(params: { task_id: string }): Task {
+  const task = getTask(params.task_id);
+  if (!task) throw new Error(`Task ${params.task_id} not found`);
+  return task;
+}
+
 // ── Helpers ──
 
 interface RawTaskRow {

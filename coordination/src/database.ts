@@ -270,6 +270,49 @@ const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 7,
+    description: "Add 'cron' to jobs schedule_type CHECK constraint — supports cron-expression dynamic jobs",
+    up: (db) => {
+      // SQLite does not support ALTER TABLE ... MODIFY COLUMN.
+      // Recreate the jobs table with the updated CHECK constraint.
+      db.exec(`
+        -- Rename old table
+        ALTER TABLE jobs RENAME TO jobs_v6;
+
+        -- Recreate with updated CHECK constraint (adds 'cron')
+        CREATE TABLE IF NOT EXISTS jobs (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          schedule_type TEXT NOT NULL CHECK(schedule_type IN ('interval','daily','weekly','cron')),
+          -- interval: {"minutes": N}
+          -- daily:    {"hour": H, "minute": M}  (UTC)
+          -- weekly:   {"weekday": 0-6, "hour": H, "minute": M}  (UTC, 0=Sunday)
+          -- cron:     {"cron": "* * * * *", "timezone": "Asia/Taipei"}
+          schedule_config TEXT NOT NULL DEFAULT '{}',
+          -- task_template: {title, description, priority?, risk_level?, assigned_to?}
+          task_template TEXT NOT NULL DEFAULT '{}',
+          enabled INTEGER NOT NULL DEFAULT 1,
+          last_run_at TEXT,
+          next_run_at TEXT NOT NULL,
+          created_by TEXT NOT NULL DEFAULT 'leader',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        -- Copy all existing rows
+        INSERT INTO jobs SELECT * FROM jobs_v6;
+
+        -- Drop old table
+        DROP TABLE jobs_v6;
+
+        -- Recreate index
+        CREATE INDEX IF NOT EXISTS idx_jobs_next_run ON jobs(next_run_at, enabled);
+
+        UPDATE schema_meta SET value = '7' WHERE key = 'version';
+      `);
+    },
+  },
 ];
 
 function migrate(db: Database.Database): void {

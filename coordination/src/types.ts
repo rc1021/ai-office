@@ -154,4 +154,4 @@ export interface CrossVerifyRequest {
 
 // ── Schema Version ──
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;

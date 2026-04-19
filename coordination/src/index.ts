@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import path from "node:path";
 import { initDatabase, initAuditChain } from "./database.js";
-import { taskCreate, taskUpdate, taskCheckpoint, taskResume, taskList } from "./tools/task-tools.js";
+import { taskCreate, taskUpdate, taskCheckpoint, taskResume, taskList, taskGet } from "./tools/task-tools.js";
 import { publishArtifact, checkInbox, publishGenericEvent } from "./tools/event-tools.js";
 import {
   reportStatus, listAgents, startTrace, endTrace, getTrace,
@@ -115,6 +115,15 @@ server.tool(
     limit: z.number().optional(),
   },
   async (params) => ({ content: [{ type: "text" as const, text: JSON.stringify(taskList(params), null, 2) }] })
+);
+
+server.tool(
+  "task_get",
+  "Get a single task by ID",
+  {
+    task_id: z.string().describe("Task ID to look up"),
+  },
+  async (params) => ({ content: [{ type: "text" as const, text: JSON.stringify(taskGet(params), null, 2) }] })
 );
 
 // ════════════════════════════════════════
@@ -386,13 +395,13 @@ server.tool(
 
 server.tool(
   "job_create",
-  "Create a recurring scheduled job that fires a task at a fixed interval, daily, or weekly",
+  "Create a recurring scheduled job that fires a task at a fixed interval, daily, weekly, or cron schedule",
   {
     agent_id: z.string().describe("Agent creating the job (must be leader)"),
     name: z.string().describe("Human-readable job name"),
-    schedule_type: z.enum(["interval", "daily", "weekly"]),
+    schedule_type: z.enum(["interval", "daily", "weekly", "cron"]),
     schedule_config: z.record(z.unknown()).describe(
-      "interval: {minutes: N} | daily: {hour: H, minute: M} (UTC) | weekly: {weekday: 0-6, hour: H, minute: M} (UTC, 0=Sun)"
+      "interval: {minutes: N} | daily: {hour: H, minute: M} (UTC) | weekly: {weekday: 0-6, hour: H, minute: M} (UTC, 0=Sun) | cron: {cron: '* * * * *', timezone: 'Asia/Taipei'}"
     ),
     task_template: z.object({
       title: z.string(),
@@ -435,7 +444,9 @@ server.tool(
     agent_id: z.string().describe("Agent making the update (must be leader)"),
     name: z.string().optional(),
     enabled: z.boolean().optional(),
-    schedule_config: z.record(z.unknown()).optional(),
+    schedule_config: z.record(z.unknown()).optional().describe(
+      "interval: {minutes: N} | daily: {hour: H, minute: M} (UTC) | weekly: {weekday: 0-6, hour: H, minute: M} (UTC, 0=Sun) | cron: {cron: '* * * * *', timezone: 'Asia/Taipei'}"
+    ),
     task_template: z.object({
       title: z.string(),
       description: z.string().optional(),
