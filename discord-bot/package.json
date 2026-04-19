@@ -10,7 +10,8 @@
     "listener": "node dist/listener.js",
     "dev": "npx tsc && node dist/index.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "postinstall": "if [ -d node_modules/whisper-node/lib/whisper.cpp ]; then cd node_modules/whisper-node/lib/whisper.cpp && make && ([ -f models/ggml-medium.bin ] || (cd models && bash download-ggml-model.sh medium)); fi"
   },
   "dependencies": {
     "@ai-office/core": "file:../core",

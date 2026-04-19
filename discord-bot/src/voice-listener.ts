@@ -7,7 +7,7 @@
  *   → PCM buffer → write temp .wav → whisper-node (local whisper.cpp)
  *   → transcribed text → onTranscript callback → runClaude pipeline
  *
- * STT: whisper-node (Node.js bindings for whisper.cpp), model: base, language: zh
+ * STT: whisper-node (Node.js bindings for whisper.cpp), model: medium, language: from office.yaml
  */
 
 import {
@@ -40,9 +40,14 @@ type WhisperSegment = { start: string; end: string; speech: string };
 
 let onTranscript: VoiceTranscriptCallback | null = null;
 const activeUsers = new Set<string>(); // prevent overlapping transcription for same user
+let whisperLanguage = "zh"; // default; updated from office.yaml via setWhisperLanguage()
 
 export function setVoiceTranscriptCallback(cb: VoiceTranscriptCallback): void {
   onTranscript = cb;
+}
+
+export function setWhisperLanguage(lang: string): void {
+  whisperLanguage = lang;
 }
 
 // ── voiceStateUpdate handler (called from listener.ts) ──
@@ -152,8 +157,8 @@ async function recordAndTranscribe(
 
     console.log(`[VoiceListener] Transcribing for ${displayName}...`);
     const result: WhisperSegment[] | undefined = await whisper(tmpWav, {
-      modelName: "base",
-      whisperOptions: { language: "zh" },
+      modelName: "medium",
+      whisperOptions: { language: whisperLanguage },
     });
 
     const text = (result ?? []).map((s) => s.speech).join(" ").trim();

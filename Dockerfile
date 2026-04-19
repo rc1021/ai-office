@@ -3,6 +3,7 @@
 
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM node:22-alpine AS builder
+RUN apk add --no-cache make gcc g++ python3
 
 WORKDIR /app
 
@@ -49,6 +50,9 @@ RUN cd core && npm run build \
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM node:22-alpine AS runtime
+
+# ffmpeg: required for Discord voice message OGG→WAV conversion (whisper STT)
+RUN apk add --no-cache ffmpeg
 
 WORKDIR /app
 
