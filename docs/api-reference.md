@@ -2,7 +2,7 @@
 
 This document covers the four API surfaces exposed by AI Office:
 
-1. **Coordination MCP Server** (`ai-office-coordination`) — 19 tools for task management, event bus, observability, and validation. Used by all agents.
+1. **Coordination MCP Server** (`ai-office-coordination`) — 23 tools for task management, job scheduling, event bus, observability, and validation. Used by all agents.
 2. **Discord MCP Server** (`ai-office-discord`) — 16 tools for channel management, messaging, threads, approvals, and admin. Used by agents to interact with Discord.
 3. **`office` CLI** — 10 commands for managing the AI Office runtime (start, stop, update, logs, etc.). Used by humans from the terminal.
 4. **Orchestrator CLI** — 6 commands for managing worker lifecycle and session state. Called by the Leader agent via shell.
@@ -99,6 +99,90 @@ List tasks with optional filters.
 | `limit` | number | no | Maximum number of tasks to return |
 
 **Returns:** Array of task records, sorted by `created_at` descending.
+
+---
+
+#### `task_get`
+
+Get a single task by ID.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | string | yes | Task ID to look up |
+
+**Returns:** Full task record, or an error if the task ID does not exist.
+
+---
+
+### Job Scheduling
+
+Recurring tasks that fire automatically via the heartbeat. The heartbeat checks for due jobs every minute and delivers a `job.fired` event to the Leader's inbox. All schedule times are in **UTC**.
+
+#### `job_create`
+
+Create a new recurring job.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | yes | Human-readable job name |
+| `schedule_type` | `interval` \| `daily` \| `weekly` | yes | Recurrence pattern |
+| `schedule_config` | object | yes | Schedule parameters (see below) |
+| `task_template` | object | yes | Task fields to create when fired (`title`, `description`, `assigned_to`, `priority`, `risk_level`) |
+| `enabled` | boolean | no | Whether the job is active (default: `true`) |
+| `agent_id` | string | yes | Caller agent ID |
+
+**`schedule_config` fields by type:**
+
+| `schedule_type` | Fields | Example |
+|----------------|--------|---------|
+| `interval` | `minutes` (number) | `{ minutes: 30 }` |
+| `daily` | `hour` (0–23 UTC), `minute` (0–59) | `{ hour: 1, minute: 0 }` → 09:00 Taipei |
+| `weekly` | `weekday` (0=Sun–6=Sat), `hour`, `minute` | `{ weekday: 1, hour: 1, minute: 0 }` → Monday 09:00 Taipei |
+
+**Returns:** `{ ok: true, id, name, schedule_type, next_run_at, enabled }`
+
+---
+
+#### `job_list`
+
+List all scheduled jobs.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `enabled` | boolean | no | Filter by enabled/disabled. Omit for all. |
+| `limit` | number | no | Max records to return (default: 50) |
+
+**Returns:** `{ jobs: JobRecord[], total: number }` — sorted by `next_run_at` ascending.
+
+---
+
+#### `job_update`
+
+Update an existing job's schedule, template, name, or enabled state.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `job_id` | string | yes | Job ID to update |
+| `agent_id` | string | yes | Caller agent ID |
+| `name` | string | no | New name |
+| `enabled` | boolean | no | Enable or disable the job |
+| `schedule_config` | object | no | New schedule parameters (recomputes `next_run_at`) |
+| `task_template` | object | no | New task template |
+
+**Returns:** `{ ok: true, job_id }`
+
+---
+
+#### `job_delete`
+
+Permanently delete a job.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `job_id` | string | yes | Job ID to delete |
+| `agent_id` | string | yes | Caller agent ID |
+
+**Returns:** `{ ok: true }`
 
 ---
 

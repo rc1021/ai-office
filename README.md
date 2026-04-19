@@ -2,7 +2,7 @@
 
 A multi-agent virtual office powered by Claude Code. "Hire" AI agents with specialized roles that collaborate via Discord to accomplish complex tasks under human supervision.
 
-**77 role templates** across 22 industries. **35 MCP tools**. **73 automated tests**. End-to-end verified.
+**77 role templates** across 22 industries. **37 MCP tools**. **73 automated tests**. End-to-end verified.
 
 ## Quick Start
 
@@ -70,6 +70,12 @@ This stops the listener and Pixel Office daemons. To also remove state/build/nod
 - **Discord Bot** — [create one here](https://discord.com/developers/applications)
   - Enable **MESSAGE CONTENT** intent
   - Invite the bot to your server with admin permissions
+- **Build tools** (for local Whisper STT compilation)
+  - macOS: `xcode-select --install`
+  - Ubuntu/Debian: `sudo apt-get install -y build-essential`
+- **ffmpeg** (for Discord voice message transcription)
+  - macOS: `brew install ffmpeg`
+  - Ubuntu/Debian: `sudo apt-get install -y ffmpeg`
 - **ngrok** (optional) — for remote Pixel Office access. [Install](https://ngrok.com/download)
 
 ## Architecture
@@ -94,8 +100,8 @@ User ──→ Discord #general
 | Module | Purpose | Tools |
 |--------|---------|-------|
 | `core/` | **Platform-agnostic core** — claude runner, heartbeat, config, auth | — |
-| `discord-bot/` | Discord adapter + MCP Server + **Listener Daemon** | 16 tools |
-| `coordination/` | Shared state, tasks, events, audit | 19 tools |
+| `discord-bot/` | Discord adapter + MCP Server + **Listener Daemon** | 20 tools |
+| `coordination/` | Shared state, tasks, jobs, events, audit | 23 tools |
 | `orchestrator/` | Agent lifecycle CLI | 6 commands |
 | `pixel-office/` | Real-time visualization (Phaser.js + ngrok) | — |
 | `setup/` | Configuration wizard (i18n) | — |
@@ -149,11 +155,77 @@ User: "研究蝦皮 API 的聊天功能"
 
 The listener daemon runs a background heartbeat subsystem (`core/`):
 
-- Every 1 min: check Pixel Office + DB health, auto-restart if needed, cleanup stale tasks, auto-audit completed tasks
+- Every 1 min: check Pixel Office + DB health, auto-restart if needed, cleanup stale tasks, auto-audit completed tasks, fire due scheduled jobs
 - Health alerts (anomalies, errors) → `#alerts`
 - Daily at 08:00 (configurable in `office.yaml`) → `#daily-brief`
 
 System events (task state changes, agent status, audit logs) are stored in the coordination DB and visible in the Pixel Office UI — they are not pushed to Discord channels.
+
+## Job Scheduling
+
+Recurring tasks can be scheduled to fire automatically without any user interaction. The heartbeat checks for due jobs every minute and delivers a `job.fired` event to the Leader's inbox.
+
+Three schedule types:
+
+```
+interval  — every N minutes  (e.g. health poll every 30 min)
+daily     — once per day at a fixed UTC hour  (e.g. daily standup at 09:00 Taipei → hour:1)
+weekly    — once per week on a weekday + UTC hour  (weekday: 1 = Monday)
+```
+
+**Create a job by telling the Leader in Discord:**
+
+```
+「每天早上九點幫我產生今日工作摘要」
+→ Leader calls job_create:
+    schedule_type: daily
+    schedule_config: { hour: 1, minute: 0 }   ← UTC (09:00 Taipei = 01:00 UTC)
+    task_template: { title: "Daily standup", assigned_to: "pm-1" }
+```
+
+Once created, the job fires at the scheduled time — no further input needed. The Leader routes each `job.fired` event to the assigned worker (or handles it directly).
+
+**Manage jobs via Discord:**
+
+```
+「查看所有排程工作」       → job_list
+「暫停每日簡報工作」       → job_update (enabled: false)
+「改成每 30 分鐘檢查一次」 → job_update (schedule_config: {minutes: 30})
+「刪除健康檢查工作」       → job_delete
+```
+
+All job operations are recorded in the audit trail.
+
+**Default jobs** (seeded from `config/jobs.yaml` on every startup, idempotent):
+
+```
+Memo channel daily indexing — daily at 22:00 UTC
+  Reads new messages from #memo since last cursor, classifies by topic,
+  creates/updates Forum posts in #notes-index with AI insights.
+```
+
+## Memo Auto-Indexing
+
+`#memo` is a free-form text channel for quick notes. The daily indexing job automatically organizes it into a structured **Forum channel** (`#notes-index`):
+
+```
+User writes anything in #memo
+  → Daily job fires at 22:00 UTC
+  → Leader reads new messages since last cursor
+  → Classifies each message by topic
+  → Creates/updates Forum posts in #notes-index with AI insights
+  → Adds ✅ reaction to #memo messages when user confirms completion
+```
+
+**Forum post tags:** 設計 / 待辦 / 想法 / bug / 待問 / 已完成
+
+**Completion workflow:**
+```
+Tell Leader "XXX is done"  →  Leader tags Forum post + adds ✅ to #memo message
+Press "Mark as Answered" in #notes-index Forum post  (do it yourself)
+```
+
+**Sunday aging review:** #memo messages older than 60 days with no reaction trigger a summary in `#general` with AI suggestions based on recent git log and completed tasks.
 
 ## Role Behavior System
 
@@ -180,6 +252,31 @@ Management commands:
 - **View logs**: `office logs`
 - **Stop**: `office stop`
 - **Start / Restart**: `office start` / `office restart`
+
+## Voice Input
+
+AI Office supports two voice input modes, both transcribed locally via **whisper.cpp** (no cloud API):
+
+**Voice Messages** (Discord mic icon → send as file)
+```
+User records voice message in Discord
+  → Listener downloads OGG → converts to WAV via ffmpeg
+  → Whisper transcribes → enters Leader pipeline
+```
+
+**Voice Channel** (real-time)
+```
+User joins a voice channel
+  → Bot auto-joins the same channel
+  → Listens per-user (1.5s silence trigger)
+  → Opus → PCM → WAV → Whisper transcribes
+  → Transcribed text enters Leader pipeline
+  → Bot leaves when channel is empty
+```
+
+- **Model**: `medium` (~1.5 GB, high accuracy, auto-downloaded on `npm install`)
+- **Language**: read from `config/office.yaml` → `office.language` (e.g. `zh-TW` → `zh`, `en` → `en`)
+- Transcription takes ~10–20 seconds with the medium model
 
 ## Pixel Office UI
 
@@ -279,6 +376,7 @@ docker compose run setup          # Configuration wizard
 |------|---------|
 | `config/office.yaml` | Office name, language, agent limits |
 | `config/channels.yaml` | Discord channel layout + throttle rules |
+| `config/jobs.yaml` | Default recurring jobs (seeded on startup) |
 | `config/starter-packs.yaml` | Pre-configured role combinations |
 | `config/active-roles.yaml` | Currently active roles (written by wizard) |
 | `.mcp.json` | MCP server config for Claude Code |

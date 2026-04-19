@@ -36,9 +36,50 @@ claude --version
 
 You will need a Discord bot token and the ID of the server (guild) where you want AI Office to operate. See [Section 3](#3-discord-bot-setup) for step-by-step bot creation instructions.
 
+### Build Tools (for Voice STT)
+
+The Voice STT feature uses whisper.cpp, which must be compiled from source during `npm install`. The following tools are required:
+
+```sh
+# macOS
+xcode-select --install   # installs make, gcc, clang
+
+# Ubuntu / Debian
+sudo apt-get install -y build-essential
+```
+
+After `npm install`, the `postinstall` script in `discord-bot/` compiles the binary automatically. If compilation fails (e.g. `make` not found), install the tools above and re-run `npm install` in `discord-bot/`.
+
+### ffmpeg (for Voice Messages)
+
+Required to convert Discord native voice messages (OGG/Opus) to WAV before transcription.
+
+```sh
+# macOS
+brew install ffmpeg
+
+# Ubuntu / Debian
+sudo apt-get install -y ffmpeg
+```
+
+### Whisper Model
+
+AI Office uses the **medium** Whisper model (~1.5 GB) as the default for high-accuracy speech recognition across multiple languages.
+
+The model is downloaded automatically during `npm install` in `discord-bot/` via the `postinstall` script — no manual step is required. If you need to re-download it manually:
+
+```sh
+cd discord-bot/node_modules/whisper-node/lib/whisper.cpp/models
+bash download-ggml-model.sh medium
+```
+
+The file (`ggml-medium.bin`) is excluded from git and lives only in `node_modules`.
+
+**Language**: The STT language is read automatically from `config/office.yaml` (`office.language`). For example, `zh-TW` → Whisper uses `zh`, `en` → `en`, `ja` → `ja`. No code changes are needed when changing the office language.
+
 ### Optional: Docker
 
-Docker is only needed if you want to run the Pixel Office UI or the setup wizard in a container. The core system runs entirely within Claude Code.
+Docker is only needed if you want to run the Pixel Office UI or the setup wizard in a container. The core agent system (Discord Listener + Claude agents) runs on the host machine.
 
 ---
 
@@ -222,17 +263,38 @@ The dev server supports hot-reload. Changes to Phaser.js scenes or the Express A
 
 ---
 
-## 7. Docker Alternative
+## 7. Docker
 
-If you prefer a containerized setup, Docker Compose handles the Pixel Office UI and the setup wizard.
+AI Office has a multi-stage `Dockerfile` and a `docker-compose.yaml`. Not all components are equal in Docker — here is what each tier supports:
 
-### Run the Pixel Office in Docker
+### What runs in Docker
+
+| Component | Docker support | Notes |
+|-----------|---------------|-------|
+| Pixel Office UI (port 3847) | ✅ Full | Default `CMD`, works out of the box |
+| Coordination MCP Server (SQLite) | ✅ Full | Pure Node.js, no external deps |
+| Discord Bot connection | ✅ With env vars | Needs `DISCORD_TOKEN` + `DISCORD_GUILD_ID` |
+| Voice STT (Whisper) | ✅ With model | ffmpeg in runtime image; `ggml-medium.bin` must exist before `docker build` |
+| Claude agent execution (`claude -p`) | ⚠️ Extra work | Needs `claude` binary + `ANTHROPIC_API_KEY` in container |
+| `office` CLI commands | ❌ Not applicable | Designed for host process management |
+
+### Three usage tiers
+
+**Tier A — Pixel Office only (current default)**
 
 ```sh
 docker compose up pixel-office
 ```
 
-The dashboard will be available at [http://localhost:3847](http://localhost:3847). Configuration files are mounted read-only from `./config`, and workspace data is stored in a named volume (`ai-office-data`).
+Dashboard at [http://localhost:3847](http://localhost:3847). Config files are mounted read-only from `./config`; workspace data persists in a named volume (`ai-office-data`).
+
+**Tier B — Pixel Office + Discord Bot**
+
+Start the supervisor (Discord listener) as an additional service in `docker-compose.yaml` and pass `DISCORD_TOKEN` / `DISCORD_GUILD_ID` as environment variables. Claude agents still run on the host.
+
+**Tier C — Full agent system in Docker**
+
+Requires installing the `claude` binary inside the image and mounting auth credentials (`ANTHROPIC_API_KEY` env var or `~/.claude/` volume). This is technically possible but not officially configured yet.
 
 ### Run the setup wizard in Docker
 
@@ -240,9 +302,13 @@ The dashboard will be available at [http://localhost:3847](http://localhost:3847
 docker compose run setup
 ```
 
-This runs the interactive wizard inside the container with your project directory mounted, so the generated config files land in the correct locations on your host.
+Runs the interactive wizard inside the container with the project directory mounted, so generated config files land in the correct locations on your host.
 
-> Note: The MCP servers (`discord-bot` and `coordination`) are **not** managed by Docker Compose. They are spawned automatically by Claude Code via `.mcp.json` when you run `claude` in the project directory.
+### Whisper model and Docker builds
+
+The `ggml-medium.bin` model file (~1.5 GB) lives in `node_modules` (excluded from git). It is downloaded automatically during `npm install` via the `postinstall` script. Before running `docker build`, ensure `npm install` has been run on the host at least once so the model exists — it will be copied from the builder stage into the runtime image via `COPY --from=builder`. If it is missing at build time, Voice STT will not work in the container.
+
+> **Note:** The MCP servers (`discord-bot`, `coordination`) are spawned automatically by Claude Code via `.mcp.json` when you run `claude` on the host. They are not managed by Docker Compose in the default configuration.
 
 ---
 

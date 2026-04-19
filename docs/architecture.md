@@ -269,7 +269,7 @@ Worker calls task_update (status: "completed", output_artifact: path)
 
 Leader reviews response:
   ├─ Parses confidence level (HIGH / MEDIUM / LOW)
-  ├─ Cross-checks via task_list to confirm status = completed
+  ├─ Cross-checks via task_get to confirm status = completed
   ├─ For LOW confidence or contradictions: escalates to user
   └─ For acceptable output: passes through OutputGate → Discord
 ```
