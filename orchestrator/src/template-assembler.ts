@@ -89,6 +89,9 @@ export function assembleWorkerClaude(
   const deptDir = path.join(root, ".ai-office", "departments", role.department);
   const sharedDir = path.join(root, ".ai-office", "shared");
 
+  // Resolve DEPT_MEMORY_PATH placeholder (needs deptDir, so done after computation)
+  assembled = assembled.replaceAll("{{DEPT_MEMORY_PATH}}", path.join(deptDir, "memory"));
+
   const workspaceSection = `
 ## Workspace Isolation
 

@@ -104,6 +104,34 @@ Your working directory and file access boundaries are defined at spawn time.
 - Place outputs intended for other departments in your outbox — the Leader will route them
 - Check `shared/inbox/{{AGENT_ID}}/` for input files from the Leader before starting work
 
+### 9. Role Memory
+
+Your department has a shared role memory file that persists across sessions:
+**`{{DEPT_MEMORY_PATH}}/ROLE_MEMORY.md`**
+
+**On startup** (after task_resume and check_inbox):
+- If the file exists, Read it — it contains accumulated context from prior sessions of your role
+
+**During/after task execution**, write to ROLE_MEMORY.md when you learn:
+- `feedback` — corrections or validated approaches specific to this role
+- `project` — ongoing project context, decisions, deadlines
+- `reference` — where to find key resources (URLs, file paths, systems)
+- `user` — preferences about how to work with this office's team
+
+Use the same frontmatter format as MEMORY.md:
+```yaml
+---
+name: Short title
+type: feedback | project | reference | user
+description: One-line summary
+---
+Content here
+```
+
+Keep ROLE_MEMORY.md as an index (under 100 lines). Store detailed content in separate files like `{{DEPT_MEMORY_PATH}}/topic-name.md` and add a pointer line in ROLE_MEMORY.md.
+
+**Do NOT** copy entries from the Leader's `~/.claude/projects/.../memory/MEMORY.md` — that is for the Leader only. Write only what is specific to your role and department.
+
 ## Structured Response Format
 
 When returning task results to the Leader:
