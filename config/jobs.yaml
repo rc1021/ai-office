@@ -1,0 +1,45 @@
+# Default scheduled jobs for AI Office
+# These run in-memory via croner — NOT seeded into SQLite DB.
+# YAML changes take effect on next restart (no DB migration needed).
+# schedule_config.timezone: "office" reads timezone from config/office.yaml.
+
+jobs:
+  - name: "Memo channel daily indexing"
+    schedule_config:
+      cron: "0 22 * * *"
+      timezone: "office"
+    enabled: true
+    task_template:
+      title: "Memo channel daily indexing"
+      description: >
+        Read new messages from #memo since last cursor
+        (.ai-office/state/notes-cursor.txt).
+        Classify each message by topic.
+        For each new topic create a Forum post in #notes-index via create_forum_post MCP tool
+        with the matching tag (設計/待辦/想法/bug/待問/已完成).
+        For existing topics append a reply to the existing thread via send_thread_message.
+        On Sundays also check for messages older than 60 days without any reaction and
+        post an aging-review summary in #general.
+        Update the cursor file after processing.
+        Use add_reaction ✅ on original memo messages when user confirms completion.
+      priority: low
+      risk_level: GREEN
+
+  - name: "Role memory dream consolidation"
+    schedule_config:
+      cron: "0 23 * * *"
+      timezone: "office"
+    enabled: true
+    task_template:
+      title: "Role memory dream consolidation"
+      description: >
+        Consolidate role memories across all active departments.
+        For each directory under .ai-office/departments/ that has a memory/ subdirectory:
+        1. Read ROLE_MEMORY.md (if it exists) and all .md files in that memory/ dir.
+        2. Prune entries older than 30 days that are marked as ephemeral or no longer relevant.
+        3. Merge duplicate entries about the same topic into a single authoritative entry.
+        4. Keep ROLE_MEMORY.md index under 100 lines — move detailed content to topic files.
+        5. Append a one-line entry to dream-log.md: "{date} — pruned: N, merged: M, total: T entries"
+        Skip any department with no ROLE_MEMORY.md (nothing to consolidate).
+      priority: low
+      risk_level: GREEN

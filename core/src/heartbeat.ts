@@ -11,6 +11,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn, execSync } from "node:child_process";
+import yaml from "js-yaml";
+import { Cron } from "croner";
 import type { ChatAdapter } from "./chat-adapter.js";
 import { runClaude } from "./claude-runner.js";
 import type { ClaudeRunnerConfig } from "./claude-runner.js";
@@ -30,6 +32,7 @@ export class HeartbeatScheduler {
   private healthTimer: ReturnType<typeof setInterval> | null = null;
   private jobTimer: ReturnType<typeof setInterval> | null = null;
   private dailyTimeout: ReturnType<typeof setTimeout> | null = null;
+  private yamlCronJobs: Cron[] = [];
   private running = false;
   private dailyBriefHour: number;
   private dailyBriefMinute: number;
@@ -77,11 +80,16 @@ export class HeartbeatScheduler {
     // Schedule daily brief
     this.scheduleDailyBrief();
 
-    // Job scheduler: tick every 1 minute, run immediately on start
+    // Job scheduler: tick every 1 minute for dynamic DB jobs, run immediately on start
     this.tickJobs().catch((err) => console.error("[Heartbeat] tickJobs initial error:", err));
     this.jobTimer = setInterval(() => {
       this.tickJobs().catch((err) => console.error("[Heartbeat] tickJobs error:", err));
     }, 1 * 60 * 1000);
+
+    // Schedule YAML jobs in-memory via croner (fire-and-forget)
+    this.initYamlJobs().catch((err) =>
+      console.error("[Heartbeat] initYamlJobs error:", err)
+    );
 
     const timeStr = `${String(this.dailyBriefHour).padStart(2, "0")}:${String(this.dailyBriefMinute).padStart(2, "0")}`;
     console.log(`[Heartbeat] Started — health/1min, jobs/1min, daily-brief@${timeStr} ${this.timezone}`);
@@ -101,6 +109,8 @@ export class HeartbeatScheduler {
       clearTimeout(this.dailyTimeout);
       this.dailyTimeout = null;
     }
+    for (const c of this.yamlCronJobs) c.stop();
+    this.yamlCronJobs = [];
     console.log("[Heartbeat] Stopped");
   }
 
@@ -437,7 +447,7 @@ export class HeartbeatScheduler {
       "3. Completeness — does the output address all requirements?\n" +
       "4. Security — any sensitive data leakage or vulnerabilities?\n\n" +
       "If the output artifact exists, Read it and review its contents.\n" +
-      "Call task_list to see the full task details.\n\n" +
+      "Call task_get to see the full task details.\n\n" +
       "After review, call publish_event with:\n" +
       "- type: 'audit.passed' if all checks pass\n" +
       "- type: 'audit.failed' + call report_anomaly if any check fails\n" +
@@ -565,20 +575,121 @@ export class HeartbeatScheduler {
     }
   }
 
-  // ── Job Scheduler (every 1 min) ──────────────────────────────────────────
+  // ── YAML Job Scheduler (croner, in-memory) ───────────────────────────────
 
   /**
-   * Compute the next scheduled run time from the previous scheduled time.
-   * Anchors to the scheduled time (not actual run time) to prevent drift.
-   * For interval jobs that are way behind, skips missed windows.
+   * Read config/jobs.yaml and schedule each enabled job using croner.
+   * YAML jobs are purely in-memory; they are NOT seeded into SQLite DB.
+   * When a job fires, it writes a job.fired event directly to the DB and
+   * immediately wakes up the Leader via runClaude().
    */
-  private computeNextRunAt(scheduleType: string, scheduleConfigStr: string, prevNextRunAt: string): string {
-    const config = JSON.parse(scheduleConfigStr) as Record<string, number>;
+  private async initYamlJobs(): Promise<void> {
+    const jobsConfigPath = path.join(this.projectDir, "config", "jobs.yaml");
+    if (!fs.existsSync(jobsConfigPath)) return;
+
+    const raw = yaml.load(fs.readFileSync(jobsConfigPath, "utf-8")) as {
+      jobs?: {
+        name: string;
+        schedule_config: { cron: string; timezone?: string };
+        enabled?: boolean;
+        task_template: Record<string, unknown>;
+      }[];
+    };
+    const jobs = raw?.jobs ?? [];
+
+    // Read office timezone for the "office" special value
+    let officeTz = "UTC";
+    try {
+      const officeConfig = yaml.load(
+        fs.readFileSync(path.join(this.projectDir, "config", "office.yaml"), "utf-8")
+      ) as { timezone?: string; office?: { timezone?: string } };
+      officeTz = officeConfig?.office?.timezone ?? officeConfig?.timezone ?? "UTC";
+    } catch { /* use UTC fallback */ }
+
+    const firedWindows = new Set<string>(); // "jobName|minuteWindow"
+
+    for (const job of jobs) {
+      if (job.enabled === false) continue;
+
+      const tz =
+        job.schedule_config.timezone === "office"
+          ? officeTz
+          : (job.schedule_config.timezone ?? "UTC");
+
+      const cron = new Cron(job.schedule_config.cron, { timezone: tz }, async () => {
+        // Deduplicate: prevent double-fire if process is restarted within the same cron window
+        const windowKey = `${job.name}|${Math.floor(Date.now() / 60000)}`;
+        if (firedWindows.has(windowKey)) return;
+        firedWindows.add(windowKey);
+        // Prune old keys (keep last 10)
+        if (firedWindows.size > 10) {
+          const oldest = [...firedWindows][0];
+          firedWindows.delete(oldest);
+        }
+        await this.fireYamlJob(job.name, job.task_template);
+      });
+      this.yamlCronJobs.push(cron);
+      console.log(`[Heartbeat] YAML job scheduled: "${job.name}" (${job.schedule_config.cron} ${tz})`);
+    }
+  }
+
+  /**
+   * Write a job.fired event + inbox entry for the Leader, then wake up the Leader.
+   */
+  private async fireYamlJob(name: string, taskTemplate: Record<string, unknown>): Promise<void> {
+    const dbPath = path.join(this.statePath, "coordination.db");
+    if (!fs.existsSync(dbPath)) return;
+
+    const eventId = `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const payload = JSON.stringify({
+      job_name: name,
+      task_template: taskTemplate,
+      fired_at: new Date().toISOString(),
+    });
+
+    try {
+      const Database = (await import("better-sqlite3")).default;
+      const db = new Database(dbPath, { readonly: false });
+      db.pragma("busy_timeout = 5000");
+      db.prepare(
+        "INSERT INTO events (id, type, source_agent, target_agents, payload, trace_id) VALUES (?, 'job.fired', 'heartbeat', 'leader', ?, '')"
+      ).run(eventId, payload);
+      db.prepare(
+        "INSERT INTO inbox (agent_id, event_id, event_type, payload) VALUES ('leader', ?, 'job.fired', ?)"
+      ).run(eventId, payload);
+      db.close();
+    } catch (err) {
+      console.error(`[Heartbeat] Failed to write job.fired event for "${name}":`, err);
+      return;
+    }
+
+    const jobPrompt =
+      `You are the AI Office Leader. A scheduled job has fired.\n` +
+      `Job: "${name}"\n` +
+      `Task template: ${JSON.stringify(taskTemplate)}\n` +
+      `Call check_inbox to get full details, then create and delegate the task immediately.\n` +
+      `After completing: call report_status idle. Do NOT send any message to Discord unless the task requires user notification.`;
+
+    const { resumeSessionId: _r, ...jobConfig } = this.claudeConfig;
+    runClaude(jobPrompt, jobConfig).catch((err) =>
+      console.error(`[Heartbeat] Job execution failed for "${name}":`, err)
+    );
+    console.log(`[Heartbeat] YAML job fired: "${name}"`);
+  }
+
+  // ── Dynamic Job Scheduler (DB-based, every 1 min) ────────────────────────
+
+  /**
+   * Compute the next scheduled run time for a dynamic DB job.
+   * Anchors to the scheduled time (not actual run time) to prevent drift.
+   */
+  private computeDynamicNextRunAt(scheduleType: string, scheduleConfigStr: string, prevNextRunAt: string): string {
+    const config = JSON.parse(scheduleConfigStr) as Record<string, number | string>;
     const prevMs = new Date(prevNextRunAt).getTime();
     const now = Date.now();
 
     if (scheduleType === "interval") {
-      const intervalMs = (config.minutes ?? 60) * 60_000;
+      const intervalMs = ((config.minutes as number) ?? 60) * 60_000;
       let next = prevMs + intervalMs;
       // Skip missed windows to avoid burst on restart
       while (next <= now) next += intervalMs;
@@ -592,6 +703,18 @@ export class HeartbeatScheduler {
 
     if (scheduleType === "weekly") {
       return new Date(prevMs + 7 * 24 * 60 * 60_000).toISOString();
+    }
+
+    if (scheduleType === "cron") {
+      // For dynamic cron jobs: use croner to compute next run
+      try {
+        const cronExpr = config.cron as string;
+        const tz = (config.timezone as string | undefined) ?? "UTC";
+        const c = new Cron(cronExpr, { timezone: tz });
+        const next = c.nextRun();
+        c.stop();
+        if (next) return next.toISOString();
+      } catch { /* fallback below */ }
     }
 
     return new Date(now + 60 * 60_000).toISOString();
@@ -617,7 +740,7 @@ export class HeartbeatScheduler {
       const db = new Database(dbPath, { readonly: false });
       db.pragma("busy_timeout = 5000");
 
-      // Atomically claim all due jobs: read + update in one transaction
+      // Atomically claim all due dynamic jobs: read + update in one transaction
       const firedJobs = db.transaction((): JobRow[] => {
         const nowIso = new Date().toISOString();
         const due = db.prepare(
@@ -626,7 +749,7 @@ export class HeartbeatScheduler {
 
         const claimed: JobRow[] = [];
         for (const job of due) {
-          const nextRunAt = this.computeNextRunAt(job.schedule_type, job.schedule_config, job.next_run_at);
+          const nextRunAt = this.computeDynamicNextRunAt(job.schedule_type, job.schedule_config, job.next_run_at);
           // WHERE guard: prevent double-fire if another process already updated last_run_at
           const changed = db.prepare(`
             UPDATE jobs SET last_run_at = ?, next_run_at = ?, updated_at = datetime('now')
@@ -658,10 +781,27 @@ export class HeartbeatScheduler {
           "INSERT INTO inbox (agent_id, event_id, event_type, payload) VALUES ('leader', ?, 'job.fired', ?)"
         ).run(eventId, payload);
 
-        console.log(`[Heartbeat] Job fired: "${job.name}" (${job.id})`);
+        console.log(`[Heartbeat] Dynamic job fired: "${job.name}" (${job.id})`);
       }
 
       db.close();
+
+      // Immediately wake up Leader for each fired dynamic job
+      for (const job of firedJobs) {
+        const taskTemplate = JSON.parse(job.task_template);
+        const jobPrompt =
+          `You are the AI Office Leader. A scheduled job has fired.\n` +
+          `Job: "${job.name}" (ID: ${job.id})\n` +
+          `Task template: ${JSON.stringify(taskTemplate)}\n` +
+          `Call check_inbox to get full details, then create and delegate the task immediately.\n` +
+          `After completing: call report_status idle. Do NOT send any message to Discord unless the task requires user notification.`;
+
+        // Fresh session — do not resume a previous user session
+        const { resumeSessionId: _r, ...jobConfig } = this.claudeConfig;
+        runClaude(jobPrompt, jobConfig).catch((err) =>
+          console.error(`[Heartbeat] Job execution failed for "${job.name}":`, err)
+        );
+      }
     } catch (err) {
       console.error("[Heartbeat] tickJobs error:", err);
     }
