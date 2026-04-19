@@ -61,6 +61,8 @@ export interface ApprovalRequest {
   idempotencyKey?: string | null;
   batchCount?: number | null;
   previewArtifactPath?: string | null;
+  originMessageId?: string | null;
+  originChannelName?: string | null;
 }
 
 export interface EmbedField {

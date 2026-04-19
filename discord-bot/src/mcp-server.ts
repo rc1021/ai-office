@@ -233,6 +233,8 @@ const CreateApprovalSchema = z.object({
   requesting_agent_id: z.string().optional(),
   timeout_seconds: z.number().optional(),
   idempotency_key: z.string().optional(),
+  origin_message_id: z.string().optional(),
+  origin_channel_name: z.string().optional(),
 });
 
 const CheckApprovalSchema = z.object({
@@ -511,6 +513,8 @@ const TOOLS = [
         requesting_agent_id: { type: "string" },
         timeout_seconds: { type: "number" },
         idempotency_key: { type: "string" },
+        origin_message_id: { type: "string", description: "Discord message ID of the user request that triggered this approval" },
+        origin_channel_name: { type: "string", description: "Channel name of the origin message (default: general)" },
       },
       required: ["agent_id", "channel_name", "action", "description", "risk_level"],
     },
@@ -1008,6 +1012,8 @@ export function createMcpServer(): Server {
             requestingAgentId: input.requesting_agent_id,
             timeoutSeconds: input.timeout_seconds,
             idempotencyKey: input.idempotency_key ?? null,
+            originMessageId: input.origin_message_id,
+            originChannelName: input.origin_channel_name,
           };
           let approval;
           if (input.batch_items && input.batch_items.length > 0) {

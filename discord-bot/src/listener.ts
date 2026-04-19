@@ -668,16 +668,17 @@ function buildApprovalPrompt(approval: ApprovalRequest, workerModelOverride?: st
   const resolvedBy = approval.resolvedBy ?? "unknown";
   const resolvedAt = approval.resolvedAt ? approval.resolvedAt.toISOString() : "unknown";
   const modelHint = workerModelOverride ?? "sonnet";
+  const replyLine = approval.originMessageId
+    ? `   When calling send_message, use channel_name: "${approval.originChannelName ?? "general"}" and reply_to_message_id: ${approval.originMessageId}.\n`
+    : "";
 
   return (
-    // ── Channel context ──
     "An approval has been resolved in Discord.\n" +
     "\n" +
-    // ── Bootstrap steps ──
     "1. Call report_status with status 'busy'.\n" +
     "2. Read agents/leader/CLAUDE.md — then follow its Listener Mode steps exactly.\n" +
+    replyLine +
     "\n" +
-    // ── Approval payload ──
     `Approval ID: ${approval.id}\n` +
     `Status: ${approval.status}\n` +
     `Action: ${approval.action}\n` +
@@ -685,17 +686,16 @@ function buildApprovalPrompt(approval: ApprovalRequest, workerModelOverride?: st
     `Risk Level: ${approval.riskLevel}\n` +
     `Resolved By: ${resolvedBy}\n` +
     `Resolved At: ${resolvedAt}\n` +
-    (approval.taskId ? `Related Task ID: ${approval.taskId} — call task_list to retrieve full task details.\n` : "") +
+    (approval.taskId ? `Related Task ID: ${approval.taskId} — call task_get(task_id) before acting.\n` : "") +
     (approval.traceId ? `Trace ID: ${approval.traceId}\n` : "") +
-    (approval.previewArtifactPath ? `Preview artifact: ${approval.previewArtifactPath} — Read this file before acting.\n` : "") +
+    (approval.previewArtifactPath ? `Preview artifact: ${approval.previewArtifactPath} — Read this file before acting if APPROVED.\n` : "") +
     "\n" +
-    "Steps:\n" +
-    "1. If a Task ID is provided, call task_list to get full task context.\n" +
-    "2. If a preview artifact is provided, Read it.\n" +
-    "3. If APPROVED: execute the action. Call start_trace before executing, end_trace after.\n" +
-    "4. If REJECTED: acknowledge and inform the user via send_message.\n" +
-    "5. Call publish_event with type 'approval.processed', include approval_id, decision (approved/rejected), and reasoning.\n" +
-    "6. Call report_status with status 'idle' when done.\n" +
+    "3. If APPROVED: execute the approved action following your standard routing and delegation\n" +
+    "   protocol in CLAUDE.md. If a Task ID is provided, call task_get first. If a preview\n" +
+    "   artifact is provided, Read it before executing.\n" +
+    "4. If REJECTED: notify the user via send_message.\n" +
+    "\n" +
+    "⚠️ CRITICAL: Do NOT call create_approval. Do NOT trigger new approval workflows.\n" +
     `\nDefault worker model: ${modelHint}.\n` +
     "\n⚠️ FINAL REMINDER: After ALL work is done, call send_message to post your response to Discord. Output ONLY 'Message sent to Discord.' as your last text.\n"
   );

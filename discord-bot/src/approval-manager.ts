@@ -76,6 +76,14 @@ export function initApprovalsDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_approvals_idempotency ON approvals(idempotency_key);
   `);
 
+  // Migration: add origin columns for existing DBs (safe to run multiple times)
+  try {
+    approvalDb.exec(`ALTER TABLE approvals ADD COLUMN origin_message_id TEXT`);
+  } catch { /* column already exists */ }
+  try {
+    approvalDb.exec(`ALTER TABLE approvals ADD COLUMN origin_channel_name TEXT`);
+  } catch { /* column already exists */ }
+
   return approvalDb;
 }
 
@@ -196,6 +204,8 @@ interface ApprovalRow {
   created_at: string;
   resolved_at: string | null;
   resolved_by: string | null;
+  origin_message_id: string | null;
+  origin_channel_name: string | null;
 }
 
 function rowToApproval(row: ApprovalRow): ApprovalRequest {
@@ -218,6 +228,8 @@ function rowToApproval(row: ApprovalRow): ApprovalRequest {
     idempotencyKey: row.idempotency_key,
     batchCount: row.batch_count,
     previewArtifactPath: row.preview_artifact_path ?? null,
+    originMessageId: row.origin_message_id ?? null,
+    originChannelName: row.origin_channel_name ?? null,
   };
 }
 
@@ -260,6 +272,8 @@ export async function createApproval(
     idempotencyKey?: string | null;
     batchCount?: number | null;
     previewArtifactPath?: string | null;
+    originMessageId?: string | null;
+    originChannelName?: string | null;
   }
 ): Promise<ApprovalRequest> {
   const db = getApprovalDb();
@@ -278,6 +292,8 @@ export async function createApproval(
   const idempotencyKey = options?.idempotencyKey ?? null;
   const batchCount = options?.batchCount ?? null;
   const previewArtifactPath = options?.previewArtifactPath ?? null;
+  const originMessageId = options?.originMessageId ?? null;
+  const originChannelName = options?.originChannelName ?? null;
 
   // Idempotency: if a key is provided and already exists, return that approval
   if (idempotencyKey) {
@@ -295,8 +311,8 @@ export async function createApproval(
     INSERT INTO approvals
       (id, trace_id, task_id, requesting_agent_id, channel_name, action, description,
        risk_level, status, timeout_seconds, deadline_at, message_id, idempotency_key, batch_count,
-       preview_artifact_path, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, NULL, ?, ?, ?, datetime('now'))
+       preview_artifact_path, origin_message_id, origin_channel_name, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, NULL, ?, ?, ?, ?, ?, datetime('now'))
   `).run(
     approvalId,
     traceId,
@@ -310,7 +326,9 @@ export async function createApproval(
     deadlineAt ? deadlineAt.toISOString() : null,
     idempotencyKey,
     batchCount,
-    previewArtifactPath
+    previewArtifactPath,
+    originMessageId,
+    originChannelName
   );
 
   const approval: ApprovalRequest = {
@@ -332,6 +350,8 @@ export async function createApproval(
     idempotencyKey,
     batchCount,
     previewArtifactPath,
+    originMessageId,
+    originChannelName,
   };
 
   const embed = buildApprovalEmbed(approval);
@@ -534,44 +554,57 @@ export function registerApprovalInteractionHandler(externalClient?: Client): voi
       return;
     }
 
-    // Use a fresh readonly connection to avoid stale WAL index on the long-lived singleton.
-    // The listener process may have been running for hours since the singleton was created;
-    // a new connection always reads the latest WAL index from shared memory.
-    let row: ApprovalRow | undefined;
-    {
-      const freshDb = new Database(dbPath, { readonly: true });
-      try {
-        row = freshDb
-          .prepare("SELECT * FROM approvals WHERE id = ?")
-          .get(approvalId) as ApprovalRow | undefined;
-      } finally {
-        freshDb.close();
-      }
-    }
-    const db = getApprovalDb(); // write connection for transitionApproval below
-
-    if (!row) {
-      await interaction.editReply({
-        content: `Approval \`${approvalId}\` not found or expired.`,
-      });
-      return;
-    }
-
-    if (action === "preview") {
-      if (row.preview_artifact_path) {
+    // Wrap ALL business logic after deferReply in a try/catch.
+    // If any step throws, we must still call editReply — otherwise the deferred
+    // reply stays empty (a visible blank message in the channel) forever.
+    try {
+      // Use a fresh readonly connection to avoid stale WAL index on the long-lived singleton.
+      // The listener process may have been running for hours since the singleton was created;
+      // a new connection always reads the latest WAL index from shared memory.
+      let row: ApprovalRow | undefined;
+      {
+        const freshDb = new Database(dbPath, { readonly: true });
         try {
-          const raw = fs.readFileSync(row.preview_artifact_path, "utf-8");
-          const items = JSON.parse(raw) as Array<{ id: string; label: string; detail?: string; reversible: boolean }>;
-          const lines = items.map((item, i) => {
-            const detail = item.detail ? ` — ${item.detail}` : "";
-            return `${i + 1}. ${item.label}${detail}`;
-          });
-          let content = `**Batch Preview** (${items.length} items total):\n` + lines.join("\n");
-          if (content.length > 1800) {
-            content = content.slice(0, 1800) + "\n...and more";
+          row = freshDb
+            .prepare("SELECT * FROM approvals WHERE id = ?")
+            .get(approvalId) as ApprovalRow | undefined;
+        } finally {
+          freshDb.close();
+        }
+      }
+      const db = getApprovalDb(); // write connection for transitionApproval below
+
+      if (!row) {
+        await interaction.editReply({
+          content: `Approval \`${approvalId}\` not found or expired.`,
+        });
+        return;
+      }
+
+      if (action === "preview") {
+        if (row.preview_artifact_path) {
+          try {
+            const raw = fs.readFileSync(row.preview_artifact_path, "utf-8");
+            const items = JSON.parse(raw) as Array<{ id: string; label: string; detail?: string; reversible: boolean }>;
+            const lines = items.map((item, i) => {
+              const detail = item.detail ? ` — ${item.detail}` : "";
+              return `${i + 1}. ${item.label}${detail}`;
+            });
+            let content = `**Batch Preview** (${items.length} items total):\n` + lines.join("\n");
+            if (content.length > 1800) {
+              content = content.slice(0, 1800) + "\n...and more";
+            }
+            await interaction.editReply({ content });
+          } catch {
+            await interaction.editReply({
+              content:
+                `**Preview for Approval \`${approvalId}\`**\n` +
+                `**Action:** ${row.action}\n` +
+                `**Description:** ${row.description}\n` +
+                `**Risk:** ${getRiskEmoji(row.risk_level as RiskLevel)} ${row.risk_level}`,
+            });
           }
-          await interaction.editReply({ content });
-        } catch {
+        } else {
           await interaction.editReply({
             content:
               `**Preview for Approval \`${approvalId}\`**\n` +
@@ -580,65 +613,68 @@ export function registerApprovalInteractionHandler(externalClient?: Client): voi
               `**Risk:** ${getRiskEmoji(row.risk_level as RiskLevel)} ${row.risk_level}`,
           });
         }
-      } else {
+        return;
+      }
+
+      if (row.status !== "PENDING") {
         await interaction.editReply({
-          content:
-            `**Preview for Approval \`${approvalId}\`**\n` +
-            `**Action:** ${row.action}\n` +
-            `**Description:** ${row.description}\n` +
-            `**Risk:** ${getRiskEmoji(row.risk_level as RiskLevel)} ${row.risk_level}`,
+          content: `This approval has already been ${row.status.toLowerCase()}.`,
         });
+        return;
       }
-      return;
-    }
 
-    if (row.status !== "PENDING") {
+      const newStatus: ApprovalStatus = action === "approve" ? "APPROVED" : "REJECTED";
+
+      // Atomic transition: prevents double-click race condition
+      // Only succeeds if approval is still PENDING at the moment of the UPDATE
+      const transitioned = transitionApproval(
+        db,
+        approvalId,
+        "PENDING",
+        newStatus,
+        interaction.user.id  // Discord snowflake user ID (not mutable username)
+      );
+
+      if (!transitioned) {
+        await interaction.editReply({
+          content: `This approval was already resolved by someone else.`,
+        });
+        return;
+      }
+
+      const updatedApproval = checkApproval(approvalId);
+
+      // Notify listener so it can trigger a Leader session to act on the decision
+      if (onApprovalResolved) {
+        try {
+          onApprovalResolved(updatedApproval);
+        } catch (err) {
+          console.error("[ApprovalManager] Callback error:", err);
+        }
+      }
+
+      const emoji = newStatus === "APPROVED" ? "✅" : "❌";
       await interaction.editReply({
-        content: `This approval has already been ${row.status.toLowerCase()}.`,
+        content: `${emoji} Approval \`${approvalId}\` has been **${newStatus}** by <@${interaction.user.id}>.`,
       });
-      return;
-    }
 
-    const newStatus: ApprovalStatus = action === "approve" ? "APPROVED" : "REJECTED";
+      await updateApprovalMessageById(approvalId, row.channel_name, row.message_id);
 
-    // Atomic transition: prevents double-click race condition
-    // Only succeeds if approval is still PENDING at the moment of the UPDATE
-    const transitioned = transitionApproval(
-      db,
-      approvalId,
-      "PENDING",
-      newStatus,
-      interaction.user.id  // Discord snowflake user ID (not mutable username)
-    );
-
-    if (!transitioned) {
-      await interaction.editReply({
-        content: `This approval was already resolved by someone else.`,
-      });
-      return;
-    }
-
-    const updatedApproval = checkApproval(approvalId);
-
-    // Notify listener so it can trigger a Leader session to act on the decision
-    if (onApprovalResolved) {
+      console.log(
+        `[ApprovalManager] Approval ${approvalId} ${newStatus} by ${interaction.user.id} (${interaction.user.username})`
+      );
+    } catch (err) {
+      // Safety net: if anything above threw, ensure the deferred reply is resolved
+      // so Discord doesn't leave an empty/blank message in the channel.
+      console.error("[ApprovalManager] Unhandled error in interaction handler:", err);
       try {
-        onApprovalResolved(updatedApproval);
-      } catch (err) {
-        console.error("[ApprovalManager] Callback error:", err);
+        await interaction.editReply({
+          content: "❌ An error occurred while processing this approval. Please try again.",
+        });
+      } catch (editErr) {
+        console.error("[ApprovalManager] Failed to send error reply:", editErr);
       }
     }
-
-    const emoji = newStatus === "APPROVED" ? "✅" : "❌";
-    await interaction.editReply({
-      content: `${emoji} Approval \`${approvalId}\` has been **${newStatus}** by <@${interaction.user.id}>.`,
-    });
-
-    await updateApprovalMessageById(approvalId, row.channel_name, row.message_id);
-
-    console.log(
-      `[ApprovalManager] Approval ${approvalId} ${newStatus} by ${interaction.user.id} (${interaction.user.username})`
-    );
   });
 
   console.log("[ApprovalManager] Interaction handler registered.");
