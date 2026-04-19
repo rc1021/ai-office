@@ -18,7 +18,7 @@ export interface ClaudeRunnerConfig {
   mcpConfigPath: string;
   allowedTools: string[];
   model?: string;
-  systemPrompt?: string;    // if set, passed via --system (static, cached portion of the prompt)
+  systemPrompt?: string;    // if set, passed via --system-prompt (static, cached portion of the prompt)
   resumeSessionId?: string; // if set, pass --resume <id> to claude
   timeoutMs?: number;       // if set, cap is min(timeoutMs, ABSOLUTE_MAX_TIMEOUT_MS)
   onToolUse?: (toolName: string) => void; // called each time a tool_use event is seen
@@ -37,7 +37,7 @@ export function runClaude(prompt: string, config: ClaudeRunnerConfig): Promise<C
     ];
 
     if (config.systemPrompt) {
-      args.push("--system", config.systemPrompt);
+      args.push("--system-prompt", config.systemPrompt);
     }
 
     if (config.model) {
